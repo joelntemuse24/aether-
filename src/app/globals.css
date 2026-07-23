@@ -1,0 +1,147 @@
+@import "tailwindcss";
+@import "highlight.js/styles/github.css";
+
+/* ─── Design tokens (Claude-like cream aesthetic) ─── */
+:root {
+  --canvas: #faf9f5;
+  --elevated: #f5f0e8;
+  --elevated-deep: #efe9de;
+  --surface: #ffffff;
+  --border: #e5e0d6;
+  --border-subtle: rgba(120, 100, 75, 0.12);
+  --accent: #c96442;
+  --accent-hover: #b5573a;
+  --accent-muted: rgba(201, 100, 66, 0.12);
+  --text: #141413;
+  --text-secondary: #1a1a18;
+  --muted: #6c6a64;
+  --muted-soft: #8e8b82;
+  --danger: #b42318;
+
+  --background: var(--canvas);
+  --foreground: var(--text);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-canvas: var(--canvas);
+  --color-elevated: var(--elevated);
+  --color-elevated-deep: var(--elevated-deep);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-muted-fg: var(--muted);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  /* Reading font is applied via CSS var — never Tailwind font-serif */
+  --font-reading: var(--font-newsreader);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Optical sizing for Newsreader when available */
+.font-reading,
+[class*="font-newsreader"],
+[style*="--font-newsreader"] {
+  font-optical-sizing: auto;
+}
+
+/* Assistant markdown body rhythm */
+.prose-aether {
+  font-optical-sizing: auto;
+}
+
+.prose-aether p {
+  line-height: 1.65;
+  letter-spacing: -0.01em;
+}
+
+/* Code highlighting on cream canvas */
+.hljs {
+  background: transparent !important;
+  color: inherit;
+}
+
+/* Scrollbars — thin, warm */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 100, 75, 0.25) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(120, 100, 75, 0.22);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Selection color matches cream + accent */
+::selection {
+  background: rgba(201, 100, 66, 0.18);
+}
+
+/* Focus rings */
+:focus-visible {
+  outline: 2px solid rgba(201, 100, 66, 0.35);
+  outline-offset: 2px;
+}
+
+/* assistant-ui streaming caret */
+.aui-md-running::after {
+  content: "▋";
+  margin-left: 1px;
+  animation: pulse 1s ease-in-out infinite;
+  color: var(--accent);
+}
+
+/* Hide number input spinners if any */
+input[type="number"]::-webkit-inner-spin-button {
+  appearance: none;
+}
