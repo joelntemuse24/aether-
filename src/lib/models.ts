@@ -7,6 +7,102 @@ export type ModelOption = {
   description?: string;
 };
 
+// ─── Live model fetching from OpenRouter public API ───
+
+const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
+const CACHE_KEY = "aether:models-cache:v1";
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+type OpenRouterModel = {
+  id: string;
+  name: string;
+  description?: string;
+  context_length?: number;
+  pricing?: { prompt?: string; completion?: string };
+};
+
+type ModelCache = {
+  timestamp: number;
+  models: ModelOption[];
+};
+
+// Providers we show in the picker (filters out niche/roleplay models)
+const FEATURED_PREFIXES = [
+  "anthropic/",
+  "openai/",
+  "google/",
+  "deepseek/",
+  "moonshotai/",
+  "qwen/",
+  "z-ai/",
+  "meta/",
+  "meta-llama/",
+  "x-ai/",
+];
+
+function cleanLabel(name: string): string {
+  return name.replace(/^[^:]+:\s*/, "").trim();
+}
+
+function isFreeModel(id: string): boolean {
+  return id.includes(":free");
+}
+
+export async function fetchOpenRouterModels(): Promise<ModelOption[]> {
+  try {
+    const res = await fetch(OPENROUTER_MODELS_URL, {
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = (await res.json()) as { data: OpenRouterModel[] };
+
+    const filtered = json.data
+      .filter(
+        (m) =>
+          FEATURED_PREFIXES.some((p) => m.id.startsWith(p)) &&
+          !isFreeModel(m.id) &&
+          !m.id.startsWith("~"), // skip alias entries
+      )
+      .map((m) => ({
+        id: m.id,
+        label: cleanLabel(m.name),
+        provider: "openrouter" as ProviderId,
+        description: m.context_length
+          ? `${(m.context_length / 1000).toFixed(0)}K context`
+          : undefined,
+      }));
+
+    return filtered.length > 0 ? filtered : MODEL_OPTIONS;
+  } catch {
+    return MODEL_OPTIONS;
+  }
+}
+
+export function getCachedModels(): ModelOption[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const cache = JSON.parse(raw) as ModelCache;
+    if (Date.now() - cache.timestamp > CACHE_TTL) return null;
+    return cache.models;
+  } catch {
+    return null;
+  }
+}
+
+export function setCachedModels(models: ModelOption[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({ timestamp: Date.now(), models }),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Curated OpenRouter / multi-provider models for the picker. */
 export const MODEL_OPTIONS: ModelOption[] = [
   {

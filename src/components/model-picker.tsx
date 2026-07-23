@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
-import { MODEL_OPTIONS } from "@/lib/models";
+import {
+  MODEL_OPTIONS,
+  fetchOpenRouterModels,
+  getCachedModels,
+  setCachedModels,
+  type ModelOption,
+} from "@/lib/models";
 import { useSettings } from "@/providers/settings-provider";
 import { cn } from "@/lib/utils";
 
@@ -10,7 +16,27 @@ export function ModelPicker({ className }: { className?: string }) {
   const { settings, updateSettings, activeModel, activeModelLabel } =
     useSettings();
   const [open, setOpen] = useState(false);
+  const [models, setModels] = useState<ModelOption[]>(
+    () => getCachedModels() ?? MODEL_OPTIONS,
+  );
   const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const cached = getCachedModels();
+    if (cached) {
+      setModels(cached);
+      return;
+    }
+    let cancelled = false;
+    fetchOpenRouterModels().then((live) => {
+      if (cancelled) return;
+      setModels(live);
+      setCachedModels(live);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -54,7 +80,7 @@ export function ModelPicker({ className }: { className?: string }) {
           <div className="px-3 pb-1.5 pt-1 text-[10px] font-medium uppercase tracking-wider text-[var(--muted-soft)]">
             Models
           </div>
-          {MODEL_OPTIONS.map((model) => {
+          {models.map((model) => {
             const selected = activeModel === model.id && !settings.useCustomModel;
             return (
               <button
