@@ -52,7 +52,7 @@ export async function POST(req: Request) {
         : undefined;
     const modelId = resolveModel(
       provider,
-      (typeof body.model === "string" && body.model) || headerModel || "anthropic/claude-sonnet-4",
+      (typeof body.model === "string" && body.model) || headerModel || "anthropic/claude-sonnet-5",
     );
 
     let model;

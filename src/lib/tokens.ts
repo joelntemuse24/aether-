@@ -22,7 +22,7 @@ export const colors = {
 
 export const fonts = {
   reading:
-    'var(--font-newsreader), ui-serif, Georgia, Cambria, "Times New Roman", Times, serif',
+    'var(--font-serif), ui-serif, Georgia, Cambria, "Times New Roman", Times, serif',
   ui: 'var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
   mono: 'var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
 } as const;

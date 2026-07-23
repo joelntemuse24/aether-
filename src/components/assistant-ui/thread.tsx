@@ -143,7 +143,7 @@ const ThreadWelcome: FC = () => {
       <div className="mb-5 flex size-12 items-center justify-center rounded-2xl bg-[var(--accent-muted)] text-[var(--accent)]">
         <SparkleIcon className="size-7" />
       </div>
-      <h1 className="font-[family-name:var(--font-newsreader)] text-[1.75rem] font-medium tracking-[-0.01em] text-[var(--text)] sm:text-[2rem]">
+      <h1 className="font-[family-name:var(--font-serif)] text-[1.75rem] font-medium tracking-[-0.01em] text-[var(--text)] sm:text-[2rem]">
         How can I help you today?
       </h1>
     </div>
@@ -229,8 +229,8 @@ const AssistantMessage: FC = () => {
       <div
         className={cn(
           "px-1 text-[var(--text)]",
-          "font-[family-name:var(--font-newsreader)] text-[17px] leading-[1.65] tracking-[-0.01em]",
-          "[&_.prose-aether]:font-[family-name:var(--font-newsreader)]",
+          "font-[family-name:var(--font-serif)] text-[17px] leading-[1.65] tracking-[-0.01em]",
+          "[&_.prose-aether]:font-[family-name:var(--font-serif)]",
         )}
       >
         <MessagePrimitive.Parts>

@@ -10,26 +10,51 @@ export type ModelOption = {
 /** Curated OpenRouter / multi-provider models for the picker. */
 export const MODEL_OPTIONS: ModelOption[] = [
   {
-    id: "anthropic/claude-sonnet-4",
-    label: "Claude Sonnet 4",
+    id: "anthropic/claude-fable-5",
+    label: "Claude Fable 5",
+    provider: "openrouter",
+    description: "Frontier — autonomous & coding",
+  },
+  {
+    id: "anthropic/claude-sonnet-5",
+    label: "Claude Sonnet 5",
     provider: "openrouter",
     description: "Balanced reasoning & speed",
   },
   {
-    id: "anthropic/claude-opus-4",
-    label: "Claude Opus 4",
+    id: "anthropic/claude-opus-4.8",
+    label: "Claude Opus 4.8",
     provider: "openrouter",
-    description: "Highest quality",
+    description: "Highest quality reasoning",
   },
   {
-    id: "openai/gpt-4.1",
-    label: "GPT-4.1",
+    id: "anthropic/claude-haiku-4.5",
+    label: "Claude Haiku 4.5",
+    provider: "openrouter",
+    description: "Fast & affordable",
+  },
+  {
+    id: "openai/gpt-5.6-sol",
+    label: "GPT-5.6 Sol",
+    provider: "openrouter",
+    description: "OpenAI frontier",
+  },
+  {
+    id: "openai/gpt-5.5",
+    label: "GPT-5.5",
     provider: "openrouter",
   },
   {
-    id: "openai/gpt-4.1-mini",
-    label: "GPT-4.1 Mini",
+    id: "google/gemini-3.1-pro-preview",
+    label: "Gemini 3.1 Pro",
     provider: "openrouter",
+    description: "Google frontier",
+  },
+  {
+    id: "google/gemini-3.5-flash",
+    label: "Gemini 3.5 Flash",
+    provider: "openrouter",
+    description: "Fast & capable",
   },
   {
     id: "google/gemini-2.5-pro",
@@ -37,19 +62,10 @@ export const MODEL_OPTIONS: ModelOption[] = [
     provider: "openrouter",
   },
   {
-    id: "google/gemini-2.5-flash",
-    label: "Gemini 2.5 Flash",
-    provider: "openrouter",
-  },
-  {
-    id: "deepseek/deepseek-chat-v3-0324",
-    label: "DeepSeek V3",
-    provider: "openrouter",
-  },
-  {
     id: "deepseek/deepseek-r1",
     label: "DeepSeek R1",
     provider: "openrouter",
+    description: "Open-source reasoning",
   },
   {
     id: "moonshotai/kimi-k2",
@@ -67,13 +83,20 @@ export const MODEL_OPTIONS: ModelOption[] = [
     provider: "openrouter",
   },
   {
-    id: "meta-llama/llama-4-maverick",
-    label: "Llama 4 Maverick",
+    id: "meta/muse-spark-1.1",
+    label: "Muse Spark 1.1",
     provider: "openrouter",
+    description: "Meta's latest",
+  },
+  {
+    id: "openai/gpt-oss-120b",
+    label: "GPT-OSS 120B",
+    provider: "openrouter",
+    description: "Open-source, smart coding",
   },
 ];
 
-export const DEFAULT_MODEL = "anthropic/claude-sonnet-4";
+export const DEFAULT_MODEL = "anthropic/claude-sonnet-5";
 
 export const PROVIDER_DEFAULTS: Record<
   ProviderId,

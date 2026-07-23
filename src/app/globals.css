@@ -35,7 +35,7 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   /* Reading font is applied via CSS var — never Tailwind font-serif */
-  --font-reading: var(--font-newsreader);
+  --font-reading: var(--font-serif);
 }
 
 * {
@@ -56,10 +56,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Optical sizing for Newsreader when available */
+/* Optical sizing for reading serif when available */
 .font-reading,
-[class*="font-newsreader"],
-[style*="--font-newsreader"] {
+[class*="font-serif"],
+[style*="--font-serif"] {
   font-optical-sizing: auto;
 }
 
