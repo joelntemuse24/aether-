@@ -19,7 +19,7 @@ type GoogleAccountsOauth2 = {
     scope: string;
     callback: (resp: { access_token?: string; error?: string }) => void;
   }) => {
-    requestAccessToken: (opts: { prompt: string }) => void;
+    requestAccessToken: (opts: { prompt?: string }) => void;
   };
 };
 
@@ -52,7 +52,7 @@ type GooglePickerNamespace = {
   PickerBuilder: new () => GooglePickerBuilder;
   ViewId: { DOCS_IMAGES: string; PDFS: string };
   Feature: { MULTISELECT_ENABLED: string };
-  Action: { PICKED: string };
+  Action: { PICKED: string; CANCEL: string };
 };
 
 type GoogleNamespace = {
@@ -72,8 +72,10 @@ const SCOPES = "https://www.googleapis.com/auth/drive.readonly";
 let gapiLoaded = false;
 let gisLoaded = false;
 let tokenClient: {
-  requestAccessToken: (opts: { prompt: string }) => void;
+  requestAccessToken: (opts: { prompt?: string }) => void;
 } | null = null;
+let currentClientId: string | null = null;
+let pendingTokenCallback: ((token: string) => void) | null = null;
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -91,6 +93,10 @@ function loadScript(src: string): Promise<void> {
 }
 
 export async function loadGoogleApis(): Promise<void> {
+  if (gapiLoaded && gisLoaded && window.gapi && window.google) {
+    return;
+  }
+
   await Promise.all([
     loadScript("https://apis.google.com/js/api.js"),
     loadScript("https://accounts.google.com/gsi/client"),
@@ -106,26 +112,34 @@ export async function loadGoogleApis(): Promise<void> {
   gisLoaded = true;
 }
 
-export function initTokenClient(
-  clientId: string,
-  callback: (token: string) => void,
-) {
+function ensureTokenClient(clientId: string) {
+  if (tokenClient && currentClientId === clientId) return;
+
+  currentClientId = clientId;
   tokenClient = window.google.accounts.oauth2.initTokenClient({
     client_id: clientId,
     scope: SCOPES,
     callback: (resp) => {
+      const cb = pendingTokenCallback;
+      pendingTokenCallback = null;
       if (resp.error || !resp.access_token) {
         console.error("[google-drive] token error", resp);
         return;
       }
-      callback(resp.access_token);
+      if (cb) cb(resp.access_token);
     },
   });
 }
 
-export function requestAccessToken(prompt: "" | "consent" = ""): void {
+/** Request an access token and run the callback when it arrives. */
+export function requestAccessToken(
+  clientId: string,
+  onToken: (token: string) => void,
+): void {
+  ensureTokenClient(clientId);
   if (!tokenClient) throw new Error("Token client not initialized");
-  tokenClient.requestAccessToken({ prompt });
+  pendingTokenCallback = onToken;
+  tokenClient.requestAccessToken({ prompt: "" });
 }
 
 type PickerDoc = {
@@ -139,6 +153,7 @@ type PickerDoc = {
 export function openPicker(
   accessToken: string,
   onPicked: (docs: PickerDoc[]) => void,
+  onCancel?: () => void,
 ): void {
   const view = new window.google.picker.DocsView()
     .setIncludeFolders(false)
@@ -162,6 +177,8 @@ export function openPicker(
           url: d.url,
         }));
         onPicked(docs);
+      } else if (data.action === window.google.picker.Action.CANCEL) {
+        onCancel?.();
       }
     })
     .build();

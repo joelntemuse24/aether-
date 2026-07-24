@@ -13,7 +13,6 @@ import { useAttachments } from "@/providers/attachments-provider";
 import type { PendingAttachment } from "@/lib/attachments";
 import {
   loadGoogleApis,
-  initTokenClient,
   requestAccessToken,
   openPicker,
   downloadDriveFile,
@@ -214,51 +213,75 @@ const Composer: FC = () => {
       return;
     }
 
+    // Prevent double-clicks but always allow retry after failure
+    if (driveLoading) return;
     setDriveLoading(true);
     setErrors([]);
+
+    // Safety: never leave the button stuck disabled
+    const safetyTimer = window.setTimeout(() => {
+      setDriveLoading(false);
+    }, 30_000);
+
+    const finish = () => {
+      window.clearTimeout(safetyTimer);
+      setDriveLoading(false);
+    };
 
     try {
       await loadGoogleApis();
 
-      initTokenClient(clientId, async (accessToken: string) => {
-        openPicker(accessToken, async (docs) => {
-          if (!docs.length) {
-            setDriveLoading(false);
-            return;
-          }
+      requestAccessToken(clientId, (accessToken) => {
+        openPicker(
+          accessToken,
+          async (docs) => {
+            try {
+              if (!docs.length) {
+                finish();
+                return;
+              }
 
-          const newAttachments: PendingAttachment[] = [];
-          for (const doc of docs) {
-            const att = await downloadDriveFile(
-              doc.id,
-              doc.name,
-              doc.mimeType,
-              accessToken,
-            );
-            if (att) newAttachments.push(att);
-          }
+              const newAttachments: PendingAttachment[] = [];
+              for (const doc of docs) {
+                const att = await downloadDriveFile(
+                  doc.id,
+                  doc.name,
+                  doc.mimeType,
+                  accessToken,
+                );
+                if (att) newAttachments.push(att);
+              }
 
-          if (newAttachments.length > 0) {
-            window.dispatchEvent(
-              new CustomEvent("aether:add-attachments", {
-                detail: newAttachments,
-              }),
-            );
-          }
-
-          setDriveLoading(false);
-        });
+              if (newAttachments.length > 0) {
+                window.dispatchEvent(
+                  new CustomEvent("aether:add-attachments", {
+                    detail: newAttachments,
+                  }),
+                );
+              } else {
+                setErrors(["Could not download the selected file(s)."]);
+              }
+            } catch (err) {
+              console.error("[drive] download", err);
+              setErrors(["Failed to download files from Drive."]);
+            } finally {
+              finish();
+            }
+          },
+          () => {
+            // User cancelled the picker
+            finish();
+          },
+        );
       });
-
-      requestAccessToken("");
     } catch (err) {
       console.error("[drive]", err);
       setErrors([
         "Could not open Google Drive. Check your Client ID and try again.",
       ]);
-      setDriveLoading(false);
+      finish();
     }
-  }, [settings.googleClientId, setOpenSettings]);
+  }, [settings.googleClientId, setOpenSettings, driveLoading]);
 
   return (
     <ComposerPrimitive.Root className="relative flex w-full flex-col border-0 bg-transparent">
@@ -331,7 +354,7 @@ const ComposerAction: FC<{
           <PaperclipIcon className="size-3.5" />
         </TooltipIconButton>
         <TooltipIconButton
-          tooltip="Google Drive"
+          tooltip={driveLoading ? "Opening Drive…" : "Google Drive"}
           onClick={onDriveClick}
           disabled={driveLoading}
           className="size-7"
