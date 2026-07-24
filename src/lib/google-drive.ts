@@ -461,42 +461,57 @@ export async function downloadDriveFile(
     }
 
     // Regular files (PDF, images, uploads, etc.)
-    let mediaUrl =
+    // Strategy 1: Drive API with acknowledgeAbuse=true from the start
+    const apiUrl =
       `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}` +
-      `?alt=media&supportsAllDrives=true`;
+      `?alt=media&supportsAllDrives=true&acknowledgeAbuse=true`;
 
-    let res = await fetchWithAuth(mediaUrl, accessToken);
+    let res = await fetchWithAuth(apiUrl, accessToken);
 
-    // On any 403, retry with acknowledgeAbuse=true.
-    // Google's abuse detection flags many files (especially PDFs from
-    // third-party sources) and the reason codes vary — always retry.
+    // Strategy 2: If API fails with 403, try the web download endpoint
+    // This uses a different path that sometimes bypasses API-level restrictions
     if (res.status === 403) {
       const body = await res.text().catch(() => "");
       const { reason } = parseDriveError(body);
-      console.error("[google-drive] media download 403, retrying with acknowledgeAbuse", reason, body);
+      console.error("[google-drive] API download 403, trying web endpoint", reason, body);
 
-      mediaUrl += "&acknowledgeAbuse=true";
-      res = await fetchWithAuth(mediaUrl, accessToken);
+      const webUrl =
+        `https://drive.google.com/uc?id=${encodeURIComponent(fileId)}&export=download&confirm=t`;
 
-      if (!res.ok) {
-        const retryBody = await res.text().catch(() => "");
-        const retryInfo = parseDriveError(retryBody);
-        console.error("[google-drive] acknowledgeAbuse retry also failed", res.status, retryBody);
-        return {
-          attachment: {
-            id,
-            name,
-            kind: "file",
-            mime: mimeType,
-            size: 0,
-          },
-          error: explain403(name, retryInfo.reason || reason),
-        };
+      const webRes = await fetchWithAuth(webUrl, accessToken);
+      if (webRes.ok) {
+        res = webRes;
+      } else {
+        // Strategy 3: Try without supportsAllDrives and with different params
+        const fallbackUrl =
+          `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}` +
+          `?alt=media&acknowledgeAbuse=true`;
+
+        const fallbackRes = await fetchWithAuth(fallbackUrl, accessToken);
+        if (fallbackRes.ok) {
+          res = fallbackRes;
+        } else {
+          // All strategies failed — return error with the file's Drive URL
+          const retryBody = await fallbackRes.text().catch(() => "");
+          console.error("[google-drive] all download strategies failed", fallbackRes.status, retryBody);
+          return {
+            attachment: {
+              id,
+              name,
+              kind: "file",
+              mime: mimeType,
+              size: 0,
+            },
+            error:
+              `Could not download "${name}" from Drive (Google blocked the download). ` +
+              `Open it in Drive and use the paperclip to upload it manually: ` +
+              `https://drive.google.com/file/d/${fileId}/view`,
+          };
+        }
       }
     } else if (!res.ok) {
       const body = await res.text().catch(() => "");
       console.error("[google-drive] media download failed", res.status, body);
-      // Token expired — clear cache so next click re-authenticates
       if (res.status === 401) {
         clearTokenCache();
       }
@@ -511,9 +526,7 @@ export async function downloadDriveFile(
         error:
           res.status === 401
             ? `Google session expired. Click the Drive button again to re-sign in.`
-            : res.status === 403
-              ? explain403(name)
-              : `Could not download "${name}" (${res.status}). Attached as a reference only.`,
+            : `Could not download "${name}" (${res.status}). Try the paperclip button instead.`,
       };
     }
 
