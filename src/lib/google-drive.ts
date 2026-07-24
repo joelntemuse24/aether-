@@ -232,10 +232,14 @@ function ensureTokenClient(clientId: string) {
  * Get a valid access token. Uses cached token if available.
  * Only prompts the user if a new token is needed.
  * Returns a promise that resolves with the token.
+ *
+ * @param selectAccount - If true, shows the Google account picker (for first sign-in).
+ *                        If false, uses silent auth (no popup if already consented).
  */
 export function getAccessToken(
   clientId: string,
   onError?: (error: string) => void,
+  selectAccount = false,
 ): Promise<string> {
   // Return cached token if still valid
   const cached = getCachedToken();
@@ -252,9 +256,10 @@ export function getAccessToken(
       onError?.(err);
       reject(new Error(err));
     };
-    // prompt: "" = silent if possible, only shows popup if consent needed
+    // "select_account" shows the account picker (like ChatGPT's sign-in flow)
+    // "" is silent — only shows popup if consent is actually needed
     tokenClient.requestAccessToken({
-      prompt: "",
+      prompt: selectAccount ? "select_account" : "",
     });
   });
 }
