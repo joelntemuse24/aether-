@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/providers/settings-provider";
 import { useAttachments } from "@/providers/attachments-provider";
+import type { PendingAttachment } from "@/lib/attachments";
 import {
   loadGoogleApis,
   initTokenClient,
@@ -192,7 +193,7 @@ function AttachmentChips() {
 
 const Composer: FC = () => {
   const { hasKey, setOpenSettings, settings } = useSettings();
-  const { addFiles, clearAttachments, attachments } = useAttachments();
+  const { addFiles, clearAttachments } = useAttachments();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [driveLoading, setDriveLoading] = useState(false);
@@ -208,9 +209,7 @@ const Composer: FC = () => {
   const handleDriveClick = useCallback(async () => {
     const clientId = settings.googleClientId?.trim();
     if (!clientId) {
-      setErrors([
-        "Add a Google Client ID in Settings to use Drive.",
-      ]);
+      setErrors(["Add a Google Client ID in Settings to use Drive."]);
       setOpenSettings(true);
       return;
     }
@@ -228,7 +227,7 @@ const Composer: FC = () => {
             return;
           }
 
-          const newAttachments = [];
+          const newAttachments: PendingAttachment[] = [];
           for (const doc of docs) {
             const att = await downloadDriveFile(
               doc.id,
@@ -240,11 +239,6 @@ const Composer: FC = () => {
           }
 
           if (newAttachments.length > 0) {
-            // Manually push into the attachments store via a small hack:
-            // we reuse the process path by creating File-like objects is hard,
-            // so we extend the provider with a direct add method in a moment.
-            // For now, use the existing addFiles path by converting where possible,
-            // and fall back to direct state update via a custom event.
             window.dispatchEvent(
               new CustomEvent("aether:add-attachments", {
                 detail: newAttachments,
@@ -256,11 +250,12 @@ const Composer: FC = () => {
         });
       });
 
-      // Trigger the consent / token request
       requestAccessToken("");
     } catch (err) {
       console.error("[drive]", err);
-      setErrors(["Could not open Google Drive. Check your Client ID and try again."]);
+      setErrors([
+        "Could not open Google Drive. Check your Client ID and try again.",
+      ]);
       setDriveLoading(false);
     }
   }, [settings.googleClientId, setOpenSettings]);
@@ -341,7 +336,9 @@ const ComposerAction: FC<{
           disabled={driveLoading}
           className="size-7"
         >
-          <HardDriveIcon className={cn("size-3.5", driveLoading && "animate-pulse")} />
+          <HardDriveIcon
+            className={cn("size-3.5", driveLoading && "animate-pulse")}
+          />
         </TooltipIconButton>
         <ModelPicker />
       </div>
