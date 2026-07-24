@@ -102,7 +102,7 @@ export function ArtifactPanel() {
             className="h-full min-h-[20rem] w-full border-0 bg-white"
           />
         ) : (
-          <pre className="h-full overflow-auto p-4 font-[family-name:var(--font-geist-mono)] text-[12.5px] leading-relaxed text-[var(--text)]">
+          <pre className="h-full overflow-auto p-4 font-[family-name:var(--font-mono)] text-[12.5px] leading-relaxed text-[var(--text)]">
             <code>{artifact.code}</code>
           </pre>
         )}

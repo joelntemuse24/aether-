@@ -5,6 +5,7 @@ import { XIcon, ExternalLinkIcon, KeyRoundIcon } from "lucide-react";
 import { useSettings } from "@/providers/settings-provider";
 import { PROVIDER_DEFAULTS, type ProviderId } from "@/lib/models";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 const PROVIDERS: ProviderId[] = ["openrouter", "openai", "anthropic", "custom"];
@@ -46,7 +47,7 @@ export function SettingsDialog() {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-[rgba(20,20,19,0.28)]"
+        className="absolute inset-0 bg-[rgba(10,9,6,0.6)]"
         onClick={() => hasKey && setOpenSettings(false)}
         aria-hidden
       />
@@ -61,7 +62,7 @@ export function SettingsDialog() {
             <KeyRoundIcon className="size-4 text-[var(--accent)]" />
             <h2
               id={titleId}
-              className="text-base font-semibold text-[var(--text)]"
+              className="font-[family-name:var(--font-sc)] text-[14px] font-medium tracking-[0.06em] text-[var(--text)]"
             >
               Settings
             </h2>
@@ -70,7 +71,7 @@ export function SettingsDialog() {
             <button
               type="button"
               onClick={() => setOpenSettings(false)}
-              className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--elevated)] hover:text-[var(--text)]"
+              className="rounded p-1 text-[var(--muted)] transition-colors hover:bg-white/5 hover:text-[var(--text)]"
               aria-label="Close settings"
             >
               <XIcon className="size-4" />
@@ -85,9 +86,7 @@ export function SettingsDialog() {
           </p>
 
           <div className="space-y-2">
-            <label className="text-xs font-medium uppercase tracking-wide text-[var(--muted-soft)]">
-              Provider
-            </label>
+            <Label>Provider</Label>
             <div className="grid grid-cols-2 gap-1.5">
               {PROVIDERS.map((id) => (
                 <button
@@ -103,10 +102,10 @@ export function SettingsDialog() {
                     })
                   }
                   className={cn(
-                    "rounded-xl border px-3 py-2 text-left text-sm transition-colors",
+                    "rounded-lg border px-3 py-2 text-left text-sm transition-colors",
                     settings.provider === id
                       ? "border-[var(--accent)] bg-[var(--accent-muted)] text-[var(--text)]"
-                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--elevated)]",
+                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-white/5",
                   )}
                 >
                   {PROVIDER_DEFAULTS[id].label}

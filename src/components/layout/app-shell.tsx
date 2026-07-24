@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { ArtifactPanel } from "@/components/layout/artifact-panel";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { useArtifact } from "@/providers/artifact-provider";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 export function AppShell() {
@@ -41,7 +42,7 @@ export function AppShell() {
             onClick={() => setMobileSidebar(false)}
             aria-hidden
           />
-          <div className="absolute inset-y-0 left-0 z-10 w-[260px] shadow-none">
+          <div className="absolute inset-y-0 left-0 z-10 w-[248px] shadow-none">
             <Sidebar
               collapsed={false}
               onToggle={() => setMobileSidebar(false)}
@@ -56,11 +57,11 @@ export function AppShell() {
           <button
             type="button"
             onClick={() => setMobileSidebar(true)}
-            className="rounded-lg px-2 py-1.5 text-sm font-medium text-[var(--muted)] hover:bg-[var(--elevated)] hover:text-[var(--text)]"
+            className="rounded px-2 py-1 text-[var(--muted)] transition-colors hover:bg-white/5"
           >
-            Menu
+            <Label>Menu</Label>
           </button>
-          <span className="text-sm font-semibold text-[var(--text)]">Aether</span>
+          <span className="font-[family-name:var(--font-sc)] text-[13px] tracking-[0.08em] text-[var(--text)]">Aether</span>
         </div>
 
         <div className="flex min-h-0 flex-1">

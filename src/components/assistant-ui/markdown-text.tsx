@@ -259,7 +259,7 @@ const defaultComponents = memoizeMarkdownComponents({
   pre: ({ className, ...props }) => (
     <pre
       className={cn(
-        "overflow-x-auto rounded-b-xl rounded-t-none border border-t-0 border-[var(--border)] bg-[#f7f4ed] p-3.5 font-[family-name:var(--font-geist-mono)] text-[13px] leading-relaxed text-[var(--text)]",
+        "overflow-x-auto rounded-b-xl rounded-t-none border border-t-0 border-[var(--border)] bg-[var(--elevated-deep)] p-3.5 font-[family-name:var(--font-mono)] text-[13px] leading-relaxed text-[var(--text)]",
         className,
       )}
       {...props}
@@ -271,7 +271,7 @@ const defaultComponents = memoizeMarkdownComponents({
       <code
         className={cn(
           !isCodeBlock &&
-            "rounded-md bg-[var(--elevated)] px-1.5 py-0.5 font-[family-name:var(--font-geist-mono)] text-[0.85em]",
+            "rounded-md bg-[var(--elevated)] px-1.5 py-0.5 font-[family-name:var(--font-mono)] text-[0.85em]",
           className,
         )}
         {...props}

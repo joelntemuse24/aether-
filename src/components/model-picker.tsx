@@ -10,6 +10,7 @@ import {
   type ModelOption,
 } from "@/lib/models";
 import { useSettings } from "@/providers/settings-provider";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 export function ModelPicker({ className }: { className?: string }) {
@@ -59,14 +60,14 @@ export function ModelPicker({ className }: { className?: string }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-7 max-w-[11rem] items-center gap-1 rounded-full px-2 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[var(--elevated)] hover:text-[var(--text)]"
+        className="flex h-6 items-center gap-1 rounded px-1.5 text-[var(--muted)] transition-colors hover:bg-white/5"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="truncate">{activeModelLabel}</span>
+        <Label>{activeModelLabel}</Label>
         <ChevronDownIcon
           className={cn(
-            "size-3.5 shrink-0 opacity-60 transition-transform",
+            "size-3 shrink-0 opacity-50 transition-transform",
             open && "rotate-180",
           )}
         />
@@ -75,10 +76,10 @@ export function ModelPicker({ className }: { className?: string }) {
       {open && (
         <div
           role="listbox"
-          className="absolute bottom-full left-0 z-50 mb-2 max-h-72 w-64 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] py-1.5 shadow-none"
+          className="absolute bottom-full left-0 z-50 mb-2 w-60 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--elevated-deep)] py-1"
         >
-          <div className="px-3 pb-1.5 pt-1 text-[10px] font-medium uppercase tracking-wider text-[var(--muted-soft)]">
-            Models
+          <div className="px-3 pb-1.5 pt-2">
+            <Label>Models</Label>
           </div>
           {models.map((model) => {
             const selected = activeModel === model.id && !settings.useCustomModel;
@@ -96,22 +97,20 @@ export function ModelPicker({ className }: { className?: string }) {
                   setOpen(false);
                 }}
                 className={cn(
-                  "flex w-full items-start gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--elevated)]",
+                  "flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-white/5",
                   selected && "bg-[var(--accent-muted)]",
                 )}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium text-[var(--text)]">
+                  <div className="text-[13px] text-[var(--text)]">
                     {model.label}
                   </div>
                   {model.description && (
-                    <div className="text-xs text-[var(--muted-soft)]">
-                      {model.description}
-                    </div>
+                    <Label>{model.description}</Label>
                   )}
                 </div>
                 {selected && (
-                  <CheckIcon className="mt-0.5 size-4 shrink-0 text-[var(--accent)]" />
+                  <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-[var(--accent)]" />
                 )}
               </button>
             );

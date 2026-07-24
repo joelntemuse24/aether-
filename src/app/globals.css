@@ -1,22 +1,22 @@
 @import "tailwindcss";
-@import "highlight.js/styles/github.css";
+@import "highlight.js/styles/github-dark.css";
 
-/* ─── Design tokens (Claude-like cream aesthetic) ─── */
+/* ─── Design tokens (warm editorial dark palette) ─── */
 :root {
-  --canvas: #faf9f5;
-  --elevated: #f5f0e8;
-  --elevated-deep: #efe9de;
-  --surface: #ffffff;
-  --border: #e5e0d6;
-  --border-subtle: rgba(120, 100, 75, 0.12);
-  --accent: #c96442;
-  --accent-hover: #b5573a;
-  --accent-muted: rgba(201, 100, 66, 0.12);
-  --text: #141413;
-  --text-secondary: #1a1a18;
-  --muted: #6c6a64;
-  --muted-soft: #8e8b82;
-  --danger: #b42318;
+  --canvas: #17150f;
+  --elevated: #252219;
+  --elevated-deep: #2d2a20;
+  --surface: #1e1c15;
+  --border: rgba(255, 245, 220, 0.08);
+  --border-subtle: rgba(255, 245, 220, 0.05);
+  --accent: #a83232;
+  --accent-hover: #be3838;
+  --accent-muted: rgba(168, 50, 50, 0.10);
+  --text: #ede9de;
+  --text-secondary: #d4d0c5;
+  --muted: #9a9588;
+  --muted-soft: #635e52;
+  --danger: #d4183d;
 
   --background: var(--canvas);
   --foreground: var(--text);
@@ -32,10 +32,11 @@
   --color-border: var(--border);
   --color-accent: var(--accent);
   --color-muted-fg: var(--muted);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-mono);
   /* Reading font is applied via CSS var — never Tailwind font-serif */
   --font-reading: var(--font-serif);
+  --font-sc: var(--font-sc);
 }
 
 * {
@@ -50,7 +51,7 @@ body {
 body {
   background: var(--canvas);
   color: var(--text);
-  font-family: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI",
+  font-family: var(--font-ui), system-ui, -apple-system, "Segoe UI",
     Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -79,10 +80,10 @@ body {
   color: inherit;
 }
 
-/* Scrollbars — thin, warm */
+/* Scrollbars — thin, warm dark */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(120, 100, 75, 0.25) transparent;
+  scrollbar-color: rgba(255, 245, 220, 0.12) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -91,7 +92,7 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: rgba(120, 100, 75, 0.22);
+  background: rgba(255, 245, 220, 0.10);
   border-radius: 999px;
 }
 
@@ -122,14 +123,14 @@ body {
   }
 }
 
-/* Selection color matches cream + accent */
+/* Selection color matches dark + accent */
 ::selection {
-  background: rgba(201, 100, 66, 0.18);
+  background: rgba(168, 50, 50, 0.25);
 }
 
 /* Focus rings */
 :focus-visible {
-  outline: 2px solid rgba(201, 100, 66, 0.35);
+  outline: 2px solid rgba(168, 50, 50, 0.40);
   outline-offset: 2px;
 }
 

@@ -1,22 +1,38 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Source_Serif_4 } from "next/font/google";
+import {
+  Cormorant_Garamond,
+  Cormorant_SC,
+  Inter,
+  JetBrains_Mono,
+} from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-// Source Serif 4 — clean transitional serif, closest free alternative to Claude's reading font.
-const sourceSerif = Source_Serif_4({
+const cormorant = Cormorant_Garamond({
   variable: "--font-serif",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
   style: ["normal", "italic"],
+  display: "swap",
+});
+
+const cormorantSC = Cormorant_SC({
+  variable: "--font-sc",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
+});
+
+const inter = Inter({
+  variable: "--font-ui",
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-mono",
+  subsets: ["latin"],
+  weight: ["400", "500"],
   display: "swap",
 });
 
@@ -28,7 +44,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#faf9f5",
+  themeColor: "#17150f",
   width: "device-width",
   initialScale: 1,
 };
@@ -41,7 +57,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${sourceSerif.variable} antialiased`}
+        className={`${cormorant.variable} ${cormorantSC.variable} ${inter.variable} ${jetbrainsMono.variable} antialiased`}
       >
         {children}
       </body>
