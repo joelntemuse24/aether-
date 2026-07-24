@@ -50,7 +50,9 @@ function enrichMessagesWithAttachments(
   if (lastUserIdx === undefined) return messages;
 
   const original = messages[lastUserIdx];
-  const existingParts = Array.isArray(original.parts) ? [...original.parts] : [];
+  const existingParts: UIMessage["parts"] = Array.isArray(original.parts)
+    ? [...original.parts]
+    : [];
 
   // Prepend text prefix if present
   if (textPrefix) {
@@ -66,14 +68,14 @@ function enrichMessagesWithAttachments(
     }
   }
 
-  // Append image parts
+  // Append image parts (data URLs)
   for (const att of attachments) {
     existingParts.push({
       type: "file",
       mediaType: att.mime,
       url: att.dataUrl,
       filename: att.name,
-    } as any);
+    } as UIMessage["parts"][number]);
   }
 
   const enriched: UIMessage = {

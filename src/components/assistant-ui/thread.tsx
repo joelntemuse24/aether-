@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/providers/settings-provider";
 import { useAttachments } from "@/providers/attachments-provider";
-import { buildTextAttachmentPrefix } from "@/lib/attachments";
 import {
   ActionBarPrimitive,
   AuiIf,
@@ -185,8 +184,7 @@ function AttachmentChips() {
 
 const Composer: FC = () => {
   const { hasKey, setOpenSettings } = useSettings();
-  const { attachments, addFiles, clearAttachments, hasAttachments } =
-    useAttachments();
+  const { addFiles, clearAttachments } = useAttachments();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -233,13 +231,10 @@ const Composer: FC = () => {
         <ComposerAction
           onAttachClick={() => fileInputRef.current?.click()}
           onBeforeSend={() => {
-            // Text attachments are injected into the message body via the transport.
-            // Images are also passed through the transport body.
-            // We clear after a short delay so the send request can still read them.
-            setTimeout(() => clearAttachments(), 300);
+            // Clear after a short delay so the send request can still read the current attachments
+            setTimeout(() => clearAttachments(), 400);
             setErrors([]);
           }}
-          hasAttachments={hasAttachments}
         />
       </div>
 
@@ -258,8 +253,7 @@ const Composer: FC = () => {
 const ComposerAction: FC<{
   onAttachClick: () => void;
   onBeforeSend: () => void;
-  hasAttachments: boolean;
-}> = ({ onAttachClick, onBeforeSend, hasAttachments }) => {
+}> = ({ onAttachClick, onBeforeSend }) => {
   return (
     <div className="flex items-center justify-between gap-2 px-0.5">
       <div className="flex items-center gap-0.5">
