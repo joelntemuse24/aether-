@@ -13,9 +13,11 @@ import { useAttachments } from "@/providers/attachments-provider";
 import type { PendingAttachment } from "@/lib/attachments";
 import {
   loadGoogleApis,
-  requestAccessToken,
+  getAccessToken,
   openPicker,
   downloadDriveFile,
+  onDriveConnectionChange,
+  type DriveConnectionState,
 } from "@/lib/google-drive";
 import {
   ActionBarPrimitive,
@@ -196,12 +198,21 @@ const Composer: FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [driveLoading, setDriveLoading] = useState(false);
+  const [driveConnected, setDriveConnected] = useState(false);
+  const [driveEmail, setDriveEmail] = useState<string | undefined>();
   const isRunning = useAuiState((s) => s.thread.isRunning);
+
+  // Subscribe to Drive connection state changes
+  useEffect(() => {
+    return onDriveConnectionChange((state: DriveConnectionState) => {
+      setDriveConnected(state.connected);
+      setDriveEmail(state.email);
+    });
+  }, []);
 
   // Reset transient state when thread stops running (after send/stop/error)
   useEffect(() => {
     if (!isRunning) {
-      // Small delay to let onFinish clear attachments first
       const t = setTimeout(() => setErrors([]), 100);
       return () => clearTimeout(t);
     }
@@ -227,93 +238,85 @@ const Composer: FC = () => {
     setDriveLoading(true);
     setErrors([]);
 
-    const safetyTimer = window.setTimeout(() => {
-      setDriveLoading(false);
-    }, 30_000);
-
-    const finish = () => {
-      window.clearTimeout(safetyTimer);
-      setDriveLoading(false);
-    };
+    const finish = () => setDriveLoading(false);
 
     try {
       await loadGoogleApis();
 
-      // Token timeout — if Google's popup doesn't resolve in 30s, bail
+      // Get token — uses cache if valid, only shows popup if needed
       const tokenTimeout = window.setTimeout(() => {
         finish();
         setErrors(["Google sign-in timed out. Please try again."]);
       }, 30_000);
 
-      requestAccessToken(
-        clientId,
-        (accessToken) => {
-          window.clearTimeout(tokenTimeout);
-          openPicker(
-            accessToken,
-            async (docs) => {
-              try {
-                if (!docs.length) {
-                  finish();
-                  return;
-                }
+      const accessToken = await getAccessToken(clientId, (err) => {
+        window.clearTimeout(tokenTimeout);
+        finish();
+        setErrors([`Google sign-in failed: ${err}`]);
+      });
 
-                const newAttachments: PendingAttachment[] = [];
-                const downloadErrors: string[] = [];
+      window.clearTimeout(tokenTimeout);
 
-                for (const doc of docs) {
-                  const result = await downloadDriveFile(
-                    doc.id,
-                    doc.name,
-                    doc.mimeType,
-                    accessToken,
-                  );
-                  if (result.attachment) {
-                    newAttachments.push(result.attachment);
-                  }
-                  if (result.error) {
-                    downloadErrors.push(result.error);
-                  }
-                }
-
-                if (newAttachments.length > 0) {
-                  addAttachments(newAttachments);
-                }
-
-                if (downloadErrors.length > 0) {
-                  setErrors(downloadErrors);
-                } else if (newAttachments.length === 0) {
-                  setErrors([
-                    "Could not download the selected file(s). Try downloading them manually and using the paperclip.",
-                  ]);
-                }
-              } catch (err) {
-                console.error("[drive] download", err);
-                setErrors([
-                  err instanceof Error
-                    ? err.message
-                    : "Failed to download files from Drive.",
-                ]);
-              } finally {
-                finish();
-              }
-            },
-            () => {
-              window.clearTimeout(tokenTimeout);
+      // Now open the picker with the token
+      openPicker(
+        accessToken,
+        async (docs) => {
+          try {
+            if (!docs.length) {
               finish();
-            },
-          );
+              return;
+            }
+
+            const newAttachments: PendingAttachment[] = [];
+            const downloadErrors: string[] = [];
+
+            for (const doc of docs) {
+              const result = await downloadDriveFile(
+                doc.id,
+                doc.name,
+                doc.mimeType,
+                accessToken,
+              );
+              if (result.attachment) {
+                newAttachments.push(result.attachment);
+              }
+              if (result.error) {
+                downloadErrors.push(result.error);
+              }
+            }
+
+            if (newAttachments.length > 0) {
+              addAttachments(newAttachments);
+            }
+
+            if (downloadErrors.length > 0) {
+              setErrors(downloadErrors);
+            } else if (newAttachments.length === 0) {
+              setErrors([
+                "Could not download the selected file(s). Try downloading them manually and using the paperclip.",
+              ]);
+            }
+          } catch (err) {
+            console.error("[drive] download", err);
+            setErrors([
+              err instanceof Error
+                ? err.message
+                : "Failed to download files from Drive.",
+            ]);
+          } finally {
+            finish();
+          }
         },
-        (errorMsg) => {
-          window.clearTimeout(tokenTimeout);
+        () => {
           finish();
-          setErrors([`Google sign-in failed: ${errorMsg}`]);
         },
       );
     } catch (err) {
       console.error("[drive]", err);
       setErrors([
-        "Could not open Google Drive. Check your Client ID and try again.",
+        err instanceof Error
+          ? err.message
+          : "Could not open Google Drive. Check your Client ID and try again.",
       ]);
       finish();
     }
@@ -354,6 +357,8 @@ const Composer: FC = () => {
           onAttachClick={() => fileInputRef.current?.click()}
           onDriveClick={handleDriveClick}
           driveLoading={driveLoading}
+          driveConnected={driveConnected}
+          driveEmail={driveEmail}
         />
       </div>
 
@@ -373,7 +378,17 @@ const ComposerAction: FC<{
   onAttachClick: () => void;
   onDriveClick: () => void;
   driveLoading: boolean;
-}> = ({ onAttachClick, onDriveClick, driveLoading }) => {
+  driveConnected: boolean;
+  driveEmail?: string;
+}> = ({ onAttachClick, onDriveClick, driveLoading, driveConnected, driveEmail }) => {
+  const driveTooltip = driveLoading
+    ? "Opening Drive…"
+    : driveConnected && driveEmail
+      ? `Drive: ${driveEmail}`
+      : driveConnected
+        ? "Google Drive (connected)"
+        : "Google Drive";
+
   return (
     <div className="flex items-center justify-between gap-2 px-0.5">
       <div className="flex items-center gap-0.5">
@@ -385,13 +400,17 @@ const ComposerAction: FC<{
           <PaperclipIcon className="size-3.5" />
         </TooltipIconButton>
         <TooltipIconButton
-          tooltip={driveLoading ? "Opening Drive…" : "Google Drive"}
+          tooltip={driveTooltip}
           onClick={onDriveClick}
           disabled={driveLoading}
           className="size-7"
         >
           <HardDriveIcon
-            className={cn("size-3.5", driveLoading && "animate-pulse")}
+            className={cn(
+              "size-3.5",
+              driveLoading && "animate-pulse",
+              driveConnected && !driveLoading && "text-[var(--accent)]",
+            )}
           />
         </TooltipIconButton>
         <ModelPicker />

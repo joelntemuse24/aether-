@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useId } from "react";
-import { XIcon, ExternalLinkIcon, KeyRoundIcon } from "lucide-react";
+import { useEffect, useId, useState } from "react";
+import { XIcon, ExternalLinkIcon, KeyRoundIcon, CheckIcon } from "lucide-react";
 import { useSettings } from "@/providers/settings-provider";
 import { PROVIDER_DEFAULTS, type ProviderId } from "@/lib/models";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { onDriveConnectionChange, clearTokenCache, type DriveConnectionState } from "@/lib/google-drive";
 
 const PROVIDERS: ProviderId[] = ["openrouter", "openai", "anthropic", "custom"];
 
@@ -19,6 +20,11 @@ export function SettingsDialog() {
     hasKey,
   } = useSettings();
   const titleId = useId();
+  const [driveState, setDriveState] = useState<DriveConnectionState>({ connected: false });
+
+  useEffect(() => {
+    return onDriveConnectionChange(setDriveState);
+  }, []);
 
   useEffect(() => {
     if (!openSettings) return;
@@ -207,12 +213,20 @@ export function SettingsDialog() {
 
           {/* Google Drive */}
           <div className="space-y-2 border-t border-[var(--border)] pt-5">
-            <label
-              htmlFor="google-client-id"
-              className="text-xs font-medium uppercase tracking-wide text-[var(--muted-soft)]"
-            >
-              Google Client ID (for Drive)
-            </label>
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="google-client-id"
+                className="text-xs font-medium uppercase tracking-wide text-[var(--muted-soft)]"
+              >
+                Google Client ID (for Drive)
+              </label>
+              {settings.googleClientId && driveState.connected && (
+                <span className="flex items-center gap-1 text-xs text-[var(--accent)]">
+                  <CheckIcon className="size-3" />
+                  Connected{driveState.email ? `: ${driveState.email}` : ""}
+                </span>
+              )}
+            </div>
             <input
               id="google-client-id"
               type="text"
@@ -239,6 +253,15 @@ export function SettingsDialog() {
               Add your site origin (e.g. https://aether-seven-theta.vercel.app)
               under Authorized JavaScript origins.
             </p>
+            {settings.googleClientId && driveState.connected && (
+              <button
+                type="button"
+                onClick={() => clearTokenCache()}
+                className="text-xs text-[var(--muted)] hover:text-[var(--text)] hover:underline"
+              >
+                Disconnect Google Drive
+              </button>
+            )}
           </div>
         </div>
 

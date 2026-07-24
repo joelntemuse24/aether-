@@ -79,6 +79,69 @@ let currentClientId: string | null = null;
 let pendingTokenCallback: ((token: string) => void) | null = null;
 let pendingTokenError: ((error: string) => void) | null = null;
 
+// Token cache — avoids re-prompting the user on every Drive click
+let cachedToken: string | null = null;
+let cachedTokenExpiry = 0; // epoch ms
+const TOKEN_SAFETY_MARGIN = 60_000; // refresh 60s before actual expiry
+
+// Callbacks for token state changes (connected/disconnected)
+export type DriveConnectionState = {
+  connected: boolean;
+  email?: string;
+};
+let connectionListeners: ((state: DriveConnectionState) => void)[] = [];
+let currentConnectionState: DriveConnectionState = { connected: false };
+
+export function onDriveConnectionChange(cb: (state: DriveConnectionState) => void): () => void {
+  connectionListeners.push(cb);
+  // Immediately call with current state
+  cb(currentConnectionState);
+  return () => {
+    connectionListeners = connectionListeners.filter((c) => c !== cb);
+  };
+}
+
+function setConnectionState(state: DriveConnectionState) {
+  currentConnectionState = state;
+  connectionListeners.forEach((cb) => cb(state));
+}
+
+/** Check if we have a valid cached token. */
+export function hasValidToken(): boolean {
+  return !!cachedToken && Date.now() < cachedTokenExpiry;
+}
+
+/** Get cached token if valid, null otherwise. */
+export function getCachedToken(): string | null {
+  if (hasValidToken()) return cachedToken;
+  cachedToken = null;
+  cachedTokenExpiry = 0;
+  return null;
+}
+
+/** Clear the cached token (e.g. on 401 or explicit disconnect). */
+export function clearTokenCache(): void {
+  cachedToken = null;
+  cachedTokenExpiry = 0;
+  setConnectionState({ connected: false });
+}
+
+/** Fetch the user's email from the token info endpoint. */
+async function fetchTokenInfo(token: string): Promise<string | undefined> {
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${encodeURIComponent(token)}`,
+    );
+    if (res.ok) {
+      const data = await res.json();
+      return data.email;
+    }
+  } catch {
+    // non-critical
+  }
+  return undefined;
+}
+
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const existing = document.querySelector(
@@ -150,8 +213,49 @@ function ensureTokenClient(clientId: string) {
         errCb?.(resp.error || "Failed to get access token");
         return;
       }
+      // Cache the token with expiry (Google returns expires_in seconds)
+      const expiresIn = (resp as { expires_in?: number }).expires_in || 3600;
+      cachedToken = resp.access_token;
+      cachedTokenExpiry = Date.now() + expiresIn * 1000 - TOKEN_SAFETY_MARGIN;
+      // Update connection state
+      setConnectionState({ connected: true });
+      // Try to fetch email (non-blocking)
+      fetchTokenInfo(resp.access_token).then((email) => {
+        setConnectionState({ connected: true, email });
+      });
       cb?.(resp.access_token);
     },
+  });
+}
+
+/**
+ * Get a valid access token. Uses cached token if available.
+ * Only prompts the user if a new token is needed.
+ * Returns a promise that resolves with the token.
+ */
+export function getAccessToken(
+  clientId: string,
+  onError?: (error: string) => void,
+): Promise<string> {
+  // Return cached token if still valid
+  const cached = getCachedToken();
+  if (cached) return Promise.resolve(cached);
+
+  return new Promise<string>((resolve, reject) => {
+    ensureTokenClient(clientId);
+    if (!tokenClient) {
+      reject(new Error("Token client not initialized"));
+      return;
+    }
+    pendingTokenCallback = (token) => resolve(token);
+    pendingTokenError = (err) => {
+      onError?.(err);
+      reject(new Error(err));
+    };
+    // prompt: "" = silent if possible, only shows popup if consent needed
+    tokenClient.requestAccessToken({
+      prompt: "",
+    });
   });
 }
 
@@ -393,6 +497,10 @@ export async function downloadDriveFile(
     } else if (!res.ok) {
       const body = await res.text().catch(() => "");
       console.error("[google-drive] media download failed", res.status, body);
+      // Token expired — clear cache so next click re-authenticates
+      if (res.status === 401) {
+        clearTokenCache();
+      }
       return {
         attachment: {
           id,
@@ -402,9 +510,11 @@ export async function downloadDriveFile(
           size: 0,
         },
         error:
-          res.status === 403
-            ? explain403(name)
-            : `Could not download "${name}" (${res.status}). Attached as a reference only.`,
+          res.status === 401
+            ? `Google session expired. Click the Drive button again to re-sign in.`
+            : res.status === 403
+              ? explain403(name)
+              : `Could not download "${name}" (${res.status}). Attached as a reference only.`,
       };
     }
 
