@@ -60,11 +60,11 @@ export function ModelPicker({ className }: { className?: string }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-6 items-center gap-1 rounded px-1.5 text-[var(--muted)] transition-colors hover:bg-white/5"
+        className="flex h-7 max-w-[11rem] items-center gap-1 rounded-md px-2 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-white/5 hover:text-[var(--text)]"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <Label>{activeModelLabel}</Label>
+        <span className="truncate">{activeModelLabel}</span>
         <ChevronDownIcon
           className={cn(
             "size-3 shrink-0 opacity-50 transition-transform",
@@ -76,7 +76,7 @@ export function ModelPicker({ className }: { className?: string }) {
       {open && (
         <div
           role="listbox"
-          className="absolute bottom-full left-0 z-50 mb-2 w-60 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--elevated-deep)] py-1"
+          className="absolute bottom-full left-0 z-50 mb-2 max-h-72 w-60 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--elevated-deep)] py-1"
         >
           <div className="px-3 pb-1.5 pt-2">
             <Label>Models</Label>

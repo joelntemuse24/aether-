@@ -103,58 +103,47 @@ export function setCachedModels(models: ModelOption[]): void {
   }
 }
 
-/** Curated OpenRouter / multi-provider models for the picker. */
+/** Curated OpenRouter / multi-provider models for the picker (fallback when API is unreachable). */
 export const MODEL_OPTIONS: ModelOption[] = [
   {
-    id: "anthropic/claude-fable-5",
-    label: "Claude Fable 5",
-    provider: "openrouter",
-    description: "Frontier — autonomous & coding",
-  },
-  {
-    id: "anthropic/claude-sonnet-5",
-    label: "Claude Sonnet 5",
+    id: "anthropic/claude-sonnet-4",
+    label: "Claude Sonnet 4",
     provider: "openrouter",
     description: "Balanced reasoning & speed",
   },
   {
-    id: "anthropic/claude-opus-4.8",
-    label: "Claude Opus 4.8",
+    id: "anthropic/claude-3.5-sonnet",
+    label: "Claude 3.5 Sonnet",
     provider: "openrouter",
-    description: "Highest quality reasoning",
+    description: "Previous generation",
   },
   {
-    id: "anthropic/claude-haiku-4.5",
-    label: "Claude Haiku 4.5",
+    id: "anthropic/claude-3.5-haiku",
+    label: "Claude 3.5 Haiku",
     provider: "openrouter",
     description: "Fast & affordable",
   },
   {
-    id: "openai/gpt-5.6-sol",
-    label: "GPT-5.6 Sol",
+    id: "openai/gpt-4o",
+    label: "GPT-4o",
     provider: "openrouter",
     description: "OpenAI frontier",
   },
   {
-    id: "openai/gpt-5.5",
-    label: "GPT-5.5",
+    id: "openai/gpt-4o-mini",
+    label: "GPT-4o Mini",
     provider: "openrouter",
+    description: "Fast & affordable",
   },
   {
-    id: "google/gemini-3.1-pro-preview",
-    label: "Gemini 3.1 Pro",
-    provider: "openrouter",
-    description: "Google frontier",
-  },
-  {
-    id: "google/gemini-3.5-flash",
-    label: "Gemini 3.5 Flash",
+    id: "google/gemini-2.0-flash-001",
+    label: "Gemini 2.0 Flash",
     provider: "openrouter",
     description: "Fast & capable",
   },
   {
-    id: "google/gemini-2.5-pro",
-    label: "Gemini 2.5 Pro",
+    id: "google/gemini-pro-1.5",
+    label: "Gemini Pro 1.5",
     provider: "openrouter",
   },
   {
@@ -162,6 +151,11 @@ export const MODEL_OPTIONS: ModelOption[] = [
     label: "DeepSeek R1",
     provider: "openrouter",
     description: "Open-source reasoning",
+  },
+  {
+    id: "deepseek/deepseek-chat",
+    label: "DeepSeek Chat",
+    provider: "openrouter",
   },
   {
     id: "moonshotai/kimi-k2",
@@ -174,25 +168,18 @@ export const MODEL_OPTIONS: ModelOption[] = [
     provider: "openrouter",
   },
   {
-    id: "z-ai/glm-4.5",
-    label: "GLM-4.5",
+    id: "meta-llama/llama-3.3-70b-instruct",
+    label: "Llama 3.3 70B",
     provider: "openrouter",
   },
   {
-    id: "meta/muse-spark-1.1",
-    label: "Muse Spark 1.1",
+    id: "x-ai/grok-2-1212",
+    label: "Grok 2",
     provider: "openrouter",
-    description: "Meta's latest",
-  },
-  {
-    id: "openai/gpt-oss-120b",
-    label: "GPT-OSS 120B",
-    provider: "openrouter",
-    description: "Open-source, smart coding",
   },
 ];
 
-export const DEFAULT_MODEL = "anthropic/claude-sonnet-5";
+export const DEFAULT_MODEL = "anthropic/claude-sonnet-4";
 
 export const PROVIDER_DEFAULTS: Record<
   ProviderId,
@@ -222,6 +209,19 @@ export const PROVIDER_DEFAULTS: Record<
 export function getModelLabel(modelId: string): string {
   const found = MODEL_OPTIONS.find((m) => m.id === modelId);
   if (found) return found.label;
+  // Check cached live models for a better label
+  if (typeof window !== "undefined") {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) {
+        const cache = JSON.parse(raw) as ModelCache;
+        const cached = cache.models.find((m) => m.id === modelId);
+        if (cached) return cached.label;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
   // Show a short id for custom models (last segment)
   const parts = modelId.split("/");
   return parts[parts.length - 1] || modelId;
