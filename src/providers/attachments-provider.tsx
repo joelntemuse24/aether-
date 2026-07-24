@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -16,6 +17,7 @@ import {
 type AttachmentsContextValue = {
   attachments: PendingAttachment[];
   addFiles: (files: FileList | File[]) => Promise<string[]>;
+  addAttachments: (items: PendingAttachment[]) => void;
   removeAttachment: (id: string) => void;
   clearAttachments: () => void;
   hasAttachments: boolean;
@@ -37,6 +39,15 @@ export function AttachmentsProvider({ children }: { children: ReactNode }) {
     return errors;
   }, [attachments.length]);
 
+  const addAttachments = useCallback((items: PendingAttachment[]) => {
+    if (!items.length) return;
+    setAttachments((prev) => {
+      const remaining = 6 - prev.length;
+      if (remaining <= 0) return prev;
+      return [...prev, ...items.slice(0, remaining)];
+    });
+  }, []);
+
   const removeAttachment = useCallback((id: string) => {
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   }, []);
@@ -45,15 +56,28 @@ export function AttachmentsProvider({ children }: { children: ReactNode }) {
     setAttachments([]);
   }, []);
 
+  // Allow Google Drive (and other sources) to inject attachments via custom event
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<PendingAttachment[]>).detail;
+      if (Array.isArray(detail) && detail.length > 0) {
+        addAttachments(detail);
+      }
+    };
+    window.addEventListener("aether:add-attachments", handler);
+    return () => window.removeEventListener("aether:add-attachments", handler);
+  }, [addAttachments]);
+
   const value = useMemo(
     () => ({
       attachments,
       addFiles,
+      addAttachments,
       removeAttachment,
       clearAttachments,
       hasAttachments: attachments.length > 0,
     }),
-    [attachments, addFiles, removeAttachment, clearAttachments],
+    [attachments, addFiles, addAttachments, removeAttachment, clearAttachments],
   );
 
   return (
