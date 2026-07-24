@@ -234,12 +234,35 @@ async function fetchWithAuth(
   }
 }
 
-function explain403(name: string): string {
+function explain403(name: string, reason?: string): string {
+  if (reason === "cannotDownloadAbusiveFile") {
+    return `"${name}" was flagged by Google's abuse detection and downloaded with acknowledgeAbuse. If this still fails, download it manually and use the paperclip.`;
+  }
+  if (reason === "insufficientFilePermissions" || reason === "forbidden") {
+    return `Cannot download "${name}" — you don't have download permission for this file. The owner may have disabled downloads. Download it manually and use the paperclip button instead.`;
+  }
   return (
     `Cannot download "${name}" (403). ` +
     `Either the file owner disabled downloads, or Google needs a fresh permission grant. ` +
     `Try: (1) a file you own with download enabled, or (2) download it and use the paperclip button instead.`
   );
+}
+
+/** Parse Google Drive API error JSON to extract the reason. */
+function parseDriveError(body: string): { reason?: string; message?: string } {
+  try {
+    const parsed = JSON.parse(body);
+    const err = parsed?.error;
+    if (err?.errors?.[0]?.reason) {
+      return { reason: err.errors[0].reason, message: err.message || err.errors[0].message };
+    }
+    if (err?.status) {
+      return { reason: err.status, message: err.message };
+    }
+  } catch {
+    // not JSON
+  }
+  return {};
 }
 
 /** Download a Drive file and turn it into a PendingAttachment. */
@@ -269,13 +292,36 @@ export async function downloadDriveFile(
         ext = ".txt";
       }
 
-      const exportUrl =
+      let exportUrl =
         `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export` +
         `?mimeType=${encodeURIComponent(exportMime)}&supportsAllDrives=true`;
 
-      const res = await fetchWithAuth(exportUrl, accessToken);
+      let res = await fetchWithAuth(exportUrl, accessToken);
 
-      if (!res.ok) {
+      // Retry with acknowledgeAbuse if 403 due to abuse flag
+      if (res.status === 403) {
+        const body = await res.text().catch(() => "");
+        const { reason } = parseDriveError(body);
+        console.error("[google-drive] export 403", reason, body);
+        if (reason === "cannotDownloadAbusiveFile" || reason === "abuse") {
+          exportUrl += "&acknowledgeAbuse=true";
+          res = await fetchWithAuth(exportUrl, accessToken);
+        }
+        if (!res.ok) {
+          const retryBody = await res.text().catch(() => "");
+          const retryInfo = parseDriveError(retryBody);
+          return {
+            attachment: {
+              id,
+              name,
+              kind: "file",
+              mime: mimeType,
+              size: 0,
+            },
+            error: explain403(name, retryInfo.reason || reason),
+          };
+        }
+      } else if (!res.ok) {
         const body = await res.text().catch(() => "");
         console.error("[google-drive] export failed", res.status, body);
         return {
@@ -312,13 +358,39 @@ export async function downloadDriveFile(
     }
 
     // Regular files (PDF, images, uploads, etc.)
-    const mediaUrl =
+    let mediaUrl =
       `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}` +
       `?alt=media&supportsAllDrives=true`;
 
-    const res = await fetchWithAuth(mediaUrl, accessToken);
+    let res = await fetchWithAuth(mediaUrl, accessToken);
 
-    if (!res.ok) {
+    // If 403, parse the error and retry with acknowledgeAbuse if applicable
+    if (res.status === 403) {
+      const body = await res.text().catch(() => "");
+      const { reason } = parseDriveError(body);
+      console.error("[google-drive] media download 403", reason, body);
+
+      // Retry with acknowledgeAbuse=true for flagged files
+      if (reason === "cannotDownloadAbusiveFile" || reason === "abuse") {
+        mediaUrl += "&acknowledgeAbuse=true";
+        res = await fetchWithAuth(mediaUrl, accessToken);
+      }
+
+      if (!res.ok) {
+        const retryBody = await res.text().catch(() => "");
+        const retryInfo = parseDriveError(retryBody);
+        return {
+          attachment: {
+            id,
+            name,
+            kind: "file",
+            mime: mimeType,
+            size: 0,
+          },
+          error: explain403(name, retryInfo.reason || reason),
+        };
+      }
+    } else if (!res.ok) {
       const body = await res.text().catch(() => "");
       console.error("[google-drive] media download failed", res.status, body);
       return {
