@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   AuiIf,
   ThreadListItemPrimitive,
@@ -33,7 +34,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   if (collapsed) {
     return (
       <aside className="flex h-full w-12 shrink-0 flex-col items-center border-r border-[var(--border)] bg-[var(--elevated)] py-3">
-        <img src="/logo.jpg" alt="Aether" className="mb-3 size-8 rounded object-cover" />
+        <Image src="/logo.jpg" alt="Aether" width={32} height={32} className="mb-3 rounded object-cover" />
         <button
           type="button"
           onClick={onToggle}
@@ -80,7 +81,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <div className="flex items-center justify-between px-4 pb-3 pt-4">
         <div className="flex items-center gap-2.5">
           <div className="flex size-7 shrink-0 items-center justify-center rounded">
-            <img src="/logo.jpg" alt="Aether" className="size-7 rounded object-cover" />
+            <Image src="/logo.jpg" alt="Aether" width={28} height={28} className="rounded object-cover" />
           </div>
           <span className="font-[family-name:var(--font-sc)] text-[13px] font-medium tracking-[0.08em] text-[var(--text)]">
             Aether

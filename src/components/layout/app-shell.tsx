@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { Thread } from "@/components/assistant-ui/thread";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -61,7 +62,7 @@ export function AppShell() {
           >
             <Label>Menu</Label>
           </button>
-          <img src="/logo.jpg" alt="Aether" className="size-5 rounded object-cover" />
+          <Image src="/logo.jpg" alt="Aether" width={20} height={20} className="rounded object-cover" />
           <span className="font-[family-name:var(--font-sc)] text-[13px] tracking-[0.08em] text-[var(--text)]">Aether</span>
         </div>
 

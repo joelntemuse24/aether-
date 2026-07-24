@@ -175,7 +175,7 @@ const Composer: FC = () => {
       <div className="flex w-full flex-col gap-2 p-2">
         <ComposerPrimitive.Input
           placeholder="How can I help you today?"
-          className="max-h-40 min-h-[44px] w-full resize-none bg-transparent px-2.5 py-2 text-[15px] leading-relaxed text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)]"
+          className="max-h-40 min-h-[44px] w-full resize-none border-0 bg-transparent px-2.5 py-2 text-[15px] leading-relaxed text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)]"
           rows={1}
           autoFocus
           aria-label="Message input"
@@ -344,7 +344,7 @@ const EditComposer: FC = () => {
     <MessagePrimitive.Root className="flex flex-col items-end">
       <ComposerPrimitive.Root className="flex w-full max-w-[85%] flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] sm:max-w-[80%]">
         <ComposerPrimitive.Input
-          className="min-h-14 w-full resize-none bg-transparent px-4 pb-1 pt-3 text-[15px] text-[var(--text)] outline-none"
+          className="min-h-14 w-full resize-none border-0 bg-transparent px-4 pb-1 pt-3 text-[15px] text-[var(--text)] outline-none"
           autoFocus
         />
         <div className="mb-2.5 me-2.5 flex items-center gap-1.5 self-end">

@@ -83,6 +83,10 @@
   box-sizing: border-box;
 }
 
+textarea {
+  border: 0;
+}
+
 html,
 body {
   height: 100%;
