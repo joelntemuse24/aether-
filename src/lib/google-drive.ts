@@ -186,22 +186,36 @@ export function openPicker(
   picker.setVisible(true);
 }
 
+async function fetchWithAuth(
+  url: string,
+  accessToken: string,
+): Promise<Response> {
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  return res;
+}
+
 /** Download a Drive file and turn it into a PendingAttachment. */
 export async function downloadDriveFile(
   fileId: string,
   name: string,
   mimeType: string,
   accessToken: string,
-): Promise<PendingAttachment | null> {
+): Promise<{ attachment: PendingAttachment | null; error?: string }> {
   const id = crypto.randomUUID();
 
   const isGoogleDoc =
     mimeType === "application/vnd.google-apps.document" ||
     mimeType === "application/vnd.google-apps.spreadsheet" ||
-    mimeType === "application/vnd.google-apps.presentation";
+    mimeType === "application/vnd.google-apps.presentation" ||
+    mimeType === "application/vnd.google-apps.drawing";
 
   try {
     if (isGoogleDoc) {
+      // Prefer useful export formats
       let exportMime = "text/plain";
       let ext = ".txt";
       if (mimeType.includes("spreadsheet")) {
@@ -210,13 +224,31 @@ export async function downloadDriveFile(
       } else if (mimeType.includes("presentation")) {
         exportMime = "text/plain";
         ext = ".txt";
+      } else if (mimeType.includes("document")) {
+        // plain text is most reliable for LLM context
+        exportMime = "text/plain";
+        ext = ".txt";
       }
 
-      const res = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${encodeURIComponent(exportMime)}`,
-        { headers: { Authorization: `Bearer ${accessToken}` } },
-      );
-      if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+      const exportUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export?mimeType=${encodeURIComponent(exportMime)}`;
+      const res = await fetchWithAuth(exportUrl, accessToken);
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.error("[google-drive] export failed", res.status, body);
+        // Fallback: still attach a note so the user sees something
+        return {
+          attachment: {
+            id,
+            name,
+            kind: "file",
+            mime: mimeType,
+            size: 0,
+          },
+          error: `Could not export "${name}" (${res.status}). It was attached as a reference only.`,
+        };
+      }
+
       const text = await res.text();
       const capped =
         text.length > 120_000
@@ -224,20 +256,35 @@ export async function downloadDriveFile(
           : text;
 
       return {
-        id,
-        name: name.endsWith(ext) ? name : name + ext,
-        kind: "text",
-        mime: exportMime,
-        size: capped.length,
-        text: capped,
+        attachment: {
+          id,
+          name: name.endsWith(ext) ? name : name + ext,
+          kind: "text",
+          mime: exportMime,
+          size: capped.length,
+          text: capped,
+        },
       };
     }
 
-    const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
-    if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+    // Regular binary / uploaded files
+    const mediaUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`;
+    const res = await fetchWithAuth(mediaUrl, accessToken);
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error("[google-drive] media download failed", res.status, body);
+      return {
+        attachment: {
+          id,
+          name,
+          kind: "file",
+          mime: mimeType,
+          size: 0,
+        },
+        error: `Could not download "${name}" (${res.status}). Attached as a reference only.`,
+      };
+    }
 
     if (isImageFile(mimeType)) {
       const blob = await res.blob();
@@ -248,41 +295,66 @@ export async function downloadDriveFile(
         reader.readAsDataURL(blob);
       });
       return {
-        id,
-        name,
-        kind: "image",
-        mime: mimeType,
-        size: blob.size,
-        dataUrl,
+        attachment: {
+          id,
+          name,
+          kind: "image",
+          mime: mimeType,
+          size: blob.size,
+          dataUrl,
+        },
       };
     }
 
-    if (isTextFile(name, mimeType)) {
+    // Treat many types as text if possible
+    if (
+      isTextFile(name, mimeType) ||
+      mimeType === "application/json" ||
+      mimeType === "application/xml" ||
+      mimeType.startsWith("text/")
+    ) {
       const text = await res.text();
       const capped =
         text.length > 120_000
           ? text.slice(0, 120_000) + "\n\n[… truncated]"
           : text;
       return {
-        id,
-        name,
-        kind: "text",
-        mime: mimeType,
-        size: capped.length,
-        text: capped,
+        attachment: {
+          id,
+          name,
+          kind: "text",
+          mime: mimeType || "text/plain",
+          size: capped.length,
+          text: capped,
+        },
       };
     }
 
+    // PDF and other binaries — attach as a named reference for now
+    // (full binary upload to the model would need base64 + provider support)
     return {
-      id,
-      name,
-      kind: "file",
-      mime: mimeType,
-      size: Number(res.headers.get("content-length") || 0),
+      attachment: {
+        id,
+        name,
+        kind: "file",
+        mime: mimeType,
+        size: Number(res.headers.get("content-length") || 0),
+      },
     };
   } catch (err) {
     console.error("[google-drive] download error", err);
-    return null;
+    const message =
+      err instanceof Error ? err.message : "Unknown download error";
+    return {
+      attachment: {
+        id,
+        name,
+        kind: "file",
+        mime: mimeType,
+        size: 0,
+      },
+      error: `"${name}": ${message}`,
+    };
   }
 }
 

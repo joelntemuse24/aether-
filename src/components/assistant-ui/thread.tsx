@@ -213,12 +213,10 @@ const Composer: FC = () => {
       return;
     }
 
-    // Prevent double-clicks but always allow retry after failure
     if (driveLoading) return;
     setDriveLoading(true);
     setErrors([]);
 
-    // Safety: never leave the button stuck disabled
     const safetyTimer = window.setTimeout(() => {
       setDriveLoading(false);
     }, 30_000);
@@ -242,14 +240,21 @@ const Composer: FC = () => {
               }
 
               const newAttachments: PendingAttachment[] = [];
+              const downloadErrors: string[] = [];
+
               for (const doc of docs) {
-                const att = await downloadDriveFile(
+                const result = await downloadDriveFile(
                   doc.id,
                   doc.name,
                   doc.mimeType,
                   accessToken,
                 );
-                if (att) newAttachments.push(att);
+                if (result.attachment) {
+                  newAttachments.push(result.attachment);
+                }
+                if (result.error) {
+                  downloadErrors.push(result.error);
+                }
               }
 
               if (newAttachments.length > 0) {
@@ -258,18 +263,27 @@ const Composer: FC = () => {
                     detail: newAttachments,
                   }),
                 );
-              } else {
-                setErrors(["Could not download the selected file(s)."]);
+              }
+
+              if (downloadErrors.length > 0) {
+                setErrors(downloadErrors);
+              } else if (newAttachments.length === 0) {
+                setErrors([
+                  "Could not download the selected file(s). Check the browser console for details.",
+                ]);
               }
             } catch (err) {
               console.error("[drive] download", err);
-              setErrors(["Failed to download files from Drive."]);
+              setErrors([
+                err instanceof Error
+                  ? err.message
+                  : "Failed to download files from Drive.",
+              ]);
             } finally {
               finish();
             }
           },
           () => {
-            // User cancelled the picker
             finish();
           },
         );
