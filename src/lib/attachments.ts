@@ -42,7 +42,7 @@ const TEXT_EXTENSIONS = new Set([
   "hpp",
 ]);
 
-const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8 MB
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB (matches most AI provider limits)
 const MAX_ATTACHMENTS = 6;
 
 export function isTextFile(name: string, mime: string): boolean {
@@ -80,7 +80,7 @@ export async function processFiles(
 
   for (const file of files.slice(0, remainingSlots)) {
     if (file.size > MAX_FILE_SIZE) {
-      errors.push(`${file.name} is larger than 8 MB and was skipped.`);
+      errors.push(`${file.name} is larger than 25 MB and was skipped.`);
       continue;
     }
 

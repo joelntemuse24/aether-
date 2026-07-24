@@ -458,8 +458,8 @@ export async function downloadDriveFile(
       name.toLowerCase().endsWith(".pdf")
     ) {
       const blob = await res.blob();
-      // Cap very large PDFs to avoid blowing up localStorage / request size
-      if (blob.size > 8 * 1024 * 1024) {
+      // Cap very large PDFs to avoid blowing up request size
+      if (blob.size > 25 * 1024 * 1024) {
         return {
           attachment: {
             id,
@@ -468,7 +468,7 @@ export async function downloadDriveFile(
             mime: "application/pdf",
             size: blob.size,
           },
-          error: `"${name}" is larger than 8 MB — attached as a reference only. Use a smaller file or the paperclip for local upload.`,
+          error: `"${name}" is larger than 25 MB — attached as a reference only. Use a smaller file or the paperclip for local upload.`,
         };
       }
       const dataUrl = await new Promise<string>((resolve, reject) => {
