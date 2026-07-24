@@ -135,11 +135,14 @@ function ensureTokenClient(clientId: string) {
 export function requestAccessToken(
   clientId: string,
   onToken: (token: string) => void,
+  forceConsent = false,
 ): void {
   ensureTokenClient(clientId);
   if (!tokenClient) throw new Error("Token client not initialized");
   pendingTokenCallback = onToken;
-  tokenClient.requestAccessToken({ prompt: "" });
+  tokenClient.requestAccessToken({
+    prompt: forceConsent ? "consent" : "",
+  });
 }
 
 type PickerDoc = {
@@ -190,12 +193,19 @@ async function fetchWithAuth(
   url: string,
   accessToken: string,
 ): Promise<Response> {
-  const res = await fetch(url, {
+  return fetch(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
   });
-  return res;
+}
+
+function explain403(name: string): string {
+  return (
+    `Cannot download "${name}" (403). ` +
+    `Either the file owner disabled downloads, or Google needs a fresh permission grant. ` +
+    `Try: (1) a file you own with download enabled, or (2) download it and use the paperclip button instead.`
+  );
 }
 
 /** Download a Drive file and turn it into a PendingAttachment. */
@@ -215,7 +225,6 @@ export async function downloadDriveFile(
 
   try {
     if (isGoogleDoc) {
-      // Prefer useful export formats
       let exportMime = "text/plain";
       let ext = ".txt";
       if (mimeType.includes("spreadsheet")) {
@@ -224,19 +233,17 @@ export async function downloadDriveFile(
       } else if (mimeType.includes("presentation")) {
         exportMime = "text/plain";
         ext = ".txt";
-      } else if (mimeType.includes("document")) {
-        // plain text is most reliable for LLM context
-        exportMime = "text/plain";
-        ext = ".txt";
       }
 
-      const exportUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export?mimeType=${encodeURIComponent(exportMime)}`;
+      const exportUrl =
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export` +
+        `?mimeType=${encodeURIComponent(exportMime)}&supportsAllDrives=true`;
+
       const res = await fetchWithAuth(exportUrl, accessToken);
 
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         console.error("[google-drive] export failed", res.status, body);
-        // Fallback: still attach a note so the user sees something
         return {
           attachment: {
             id,
@@ -245,7 +252,10 @@ export async function downloadDriveFile(
             mime: mimeType,
             size: 0,
           },
-          error: `Could not export "${name}" (${res.status}). It was attached as a reference only.`,
+          error:
+            res.status === 403
+              ? explain403(name)
+              : `Could not export "${name}" (${res.status}). Attached as a reference only.`,
         };
       }
 
@@ -267,8 +277,11 @@ export async function downloadDriveFile(
       };
     }
 
-    // Regular binary / uploaded files
-    const mediaUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`;
+    // Regular files (PDF, images, uploads, etc.)
+    const mediaUrl =
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}` +
+      `?alt=media&supportsAllDrives=true`;
+
     const res = await fetchWithAuth(mediaUrl, accessToken);
 
     if (!res.ok) {
@@ -282,7 +295,10 @@ export async function downloadDriveFile(
           mime: mimeType,
           size: 0,
         },
-        error: `Could not download "${name}" (${res.status}). Attached as a reference only.`,
+        error:
+          res.status === 403
+            ? explain403(name)
+            : `Could not download "${name}" (${res.status}). Attached as a reference only.`,
       };
     }
 
@@ -306,7 +322,6 @@ export async function downloadDriveFile(
       };
     }
 
-    // Treat many types as text if possible
     if (
       isTextFile(name, mimeType) ||
       mimeType === "application/json" ||
@@ -330,8 +345,44 @@ export async function downloadDriveFile(
       };
     }
 
-    // PDF and other binaries — attach as a named reference for now
-    // (full binary upload to the model would need base64 + provider support)
+    // PDF and other binaries — we have the bytes; store as data URL so
+    // vision/PDF-capable models can receive them when the API path supports it.
+    if (
+      mimeType === "application/pdf" ||
+      name.toLowerCase().endsWith(".pdf")
+    ) {
+      const blob = await res.blob();
+      // Cap very large PDFs to avoid blowing up localStorage / request size
+      if (blob.size > 8 * 1024 * 1024) {
+        return {
+          attachment: {
+            id,
+            name,
+            kind: "file",
+            mime: "application/pdf",
+            size: blob.size,
+          },
+          error: `"${name}" is larger than 8 MB — attached as a reference only. Use a smaller file or the paperclip for local upload.`,
+        };
+      }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Failed to read PDF"));
+        reader.readAsDataURL(blob);
+      });
+      return {
+        attachment: {
+          id,
+          name,
+          kind: "file",
+          mime: "application/pdf",
+          size: blob.size,
+          dataUrl,
+        },
+      };
+    }
+
     return {
       attachment: {
         id,
