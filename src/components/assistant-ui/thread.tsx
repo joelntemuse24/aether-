@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { ModelPicker } from "@/components/model-picker";
@@ -36,27 +37,6 @@ import type { FC } from "react";
 const isNewChatView = (s: AssistantState) =>
   s.thread.messages.length === 0 &&
   (!s.thread.isLoading || s.threads.isLoading);
-
-function SparkleIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      className={className}
-      aria-hidden
-    >
-      <path d="M12 2.5c.4 3.8 1.7 6.2 4.2 8.2-2.5 2-3.8 4.4-4.2 8.2-.4-3.8-1.7-6.2-4.2-8.2C10.3 8.7 11.6 6.3 12 2.5z" />
-      <path
-        d="M18.5 4c.2 1.6.8 2.6 1.9 3.5-1.1.9-1.7 1.9-1.9 3.5-.2-1.6-.8-2.6-1.9-3.5 1.1-.9 1.7-1.9 1.9-3.5z"
-        opacity="0.85"
-      />
-      <path
-        d="M6 14c.15 1.2.55 1.95 1.4 2.65-.85.7-1.25 1.45-1.4 2.65-.15-1.2-.55-1.95-1.4-2.65.85-.7 1.25-1.45 1.4-2.65z"
-        opacity="0.7"
-      />
-    </svg>
-  );
-}
 
 export const Thread: FC = () => {
   const isEmpty = useAuiState(isNewChatView);
@@ -135,9 +115,13 @@ const ThreadScrollToBottom: FC = () => {
 const ThreadWelcome: FC = () => {
   return (
     <div className="mb-10 flex flex-col items-center px-4 text-center">
-      <div className="mb-6 flex size-11 items-center justify-center rounded-xl bg-[var(--accent-muted)] text-[var(--accent)]">
-        <SparkleIcon className="size-6" />
-      </div>
+      <Image
+        src="/logo.jpg"
+        alt="Aether"
+        width={56}
+        height={56}
+        className="mb-6 rounded-full object-cover"
+      />
       <h1
         className="font-[family-name:var(--font-serif)] text-[var(--text)]"
         style={{
@@ -162,7 +146,7 @@ const Composer: FC = () => {
   const { hasKey, setOpenSettings } = useSettings();
 
   return (
-    <ComposerPrimitive.Root className="relative flex w-full flex-col">
+    <ComposerPrimitive.Root className="relative flex w-full flex-col border-0 bg-transparent">
       {!hasKey && (
         <button
           type="button"
@@ -172,7 +156,7 @@ const Composer: FC = () => {
           Add an API key in Settings to start chatting →
         </button>
       )}
-      <div className="flex w-full flex-col gap-2 p-2">
+      <div className="flex w-full flex-col gap-2 border-0 bg-transparent p-2">
         <ComposerPrimitive.Input
           placeholder="How can I help you today?"
           className="max-h-40 min-h-[44px] w-full resize-none border-0 bg-transparent px-2.5 py-2 text-[15px] leading-relaxed text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)]"

@@ -35,29 +35,29 @@
 
 /* ─── Design tokens: light ─── */
 :root[data-theme="light"] {
-  --canvas: #faf9f5;
-  --elevated: #f5f0e8;
-  --elevated-deep: #efe9de;
+  --canvas: #ffffff;
+  --elevated: #f9f9f9;
+  --elevated-deep: #f0f0f0;
   --surface: #ffffff;
-  --border: #e5e0d6;
-  --border-subtle: rgba(120, 100, 75, 0.12);
+  --border: #e0e0e0;
+  --border-subtle: rgba(0, 0, 0, 0.06);
   --accent: #c96442;
   --accent-hover: #b5573a;
-  --accent-muted: rgba(201, 100, 66, 0.12);
-  --text: #141413;
-  --text-secondary: #1a1a18;
-  --muted: #6c6a64;
-  --muted-soft: #8e8b82;
+  --accent-muted: rgba(201, 100, 66, 0.10);
+  --text: #1a1a1a;
+  --text-secondary: #333333;
+  --muted: #6b6b6b;
+  --muted-soft: #999999;
   --danger: #b42318;
   --hover-overlay: rgba(0, 0, 0, 0.04);
-  --scrollbar-thumb: rgba(120, 100, 75, 0.22);
-  --scrollbar-color: rgba(120, 100, 75, 0.25);
-  --selection-bg: rgba(201, 100, 66, 0.18);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+  --scrollbar-color: rgba(0, 0, 0, 0.20);
+  --selection-bg: rgba(201, 100, 66, 0.15);
   --focus-ring: rgba(201, 100, 66, 0.35);
-  --code-bg: #f7f4ed;
+  --code-bg: #f6f6f6;
   --error-border: rgba(239, 68, 68, 0.25);
-  --error-bg: rgba(254, 242, 242, 0.8);
-  --overlay: rgba(20, 20, 19, 0.4);
+  --error-bg: rgba(254, 242, 242, 0.9);
+  --overlay: rgba(0, 0, 0, 0.3);
   --error-text: #991b1b;
   --hljs-theme: "highlight.js/styles/github.css";
 }
@@ -85,6 +85,11 @@
 
 textarea {
   border: 0;
+}
+
+form {
+  border: 0;
+  background: transparent;
 }
 
 html,
