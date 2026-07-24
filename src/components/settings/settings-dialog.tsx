@@ -79,7 +79,7 @@ export function SettingsDialog() {
           )}
         </div>
 
-        <div className="space-y-5 px-5 py-5">
+        <div className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-5">
           <p className="text-sm leading-relaxed text-[var(--muted)]">
             Bring your own key. Keys stay in this browser&apos;s localStorage and
             are sent only to your chosen provider via the app&apos;s chat proxy.
@@ -200,7 +200,44 @@ export function SettingsDialog() {
             />
             <p className="text-xs text-[var(--muted-soft)]">
               Overrides the composer model picker when set. OpenRouter accepts
-              ids like <code className="text-[var(--text)]">anthropic/claude-sonnet-4</code>.
+              ids like{" "}
+              <code className="text-[var(--text)]">anthropic/claude-sonnet-4</code>.
+            </p>
+          </div>
+
+          {/* Google Drive */}
+          <div className="space-y-2 border-t border-[var(--border)] pt-5">
+            <label
+              htmlFor="google-client-id"
+              className="text-xs font-medium uppercase tracking-wide text-[var(--muted-soft)]"
+            >
+              Google Client ID (for Drive)
+            </label>
+            <input
+              id="google-client-id"
+              type="text"
+              spellCheck={false}
+              placeholder="123456789-xxxx.apps.googleusercontent.com"
+              value={settings.googleClientId}
+              onChange={(e) =>
+                updateSettings({ googleClientId: e.target.value.trim() })
+              }
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)] focus:border-[var(--accent)]/40"
+            />
+            <p className="text-xs leading-relaxed text-[var(--muted-soft)]">
+              Optional. Create an OAuth 2.0 Client ID (Web application) in{" "}
+              <a
+                href="https://console.cloud.google.com/apis/credentials"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[var(--accent)] hover:underline"
+              >
+                Google Cloud Console
+              </a>
+              , enable the <strong>Google Picker API</strong> and{" "}
+              <strong>Google Drive API</strong>, then paste the Client ID here.
+              Add your site origin (e.g. https://aether-seven-theta.vercel.app)
+              under Authorized JavaScript origins.
             </p>
           </div>
         </div>

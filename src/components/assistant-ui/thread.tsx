@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useRef, useState, type FC } from "react";
+import { useCallback, useRef, useState, type FC } from "react";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { ModelPicker } from "@/components/model-picker";
@@ -10,6 +10,13 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/providers/settings-provider";
 import { useAttachments } from "@/providers/attachments-provider";
+import {
+  loadGoogleApis,
+  initTokenClient,
+  requestAccessToken,
+  openPicker,
+  downloadDriveFile,
+} from "@/lib/google-drive";
 import {
   ActionBarPrimitive,
   AuiIf,
@@ -29,6 +36,7 @@ import {
   ChevronRightIcon,
   CopyIcon,
   FileIcon,
+  HardDriveIcon,
   ImageIcon,
   PaperclipIcon,
   PencilIcon,
@@ -183,19 +191,79 @@ function AttachmentChips() {
 /* ─── Composer ─── */
 
 const Composer: FC = () => {
-  const { hasKey, setOpenSettings } = useSettings();
-  const { addFiles, clearAttachments } = useAttachments();
+  const { hasKey, setOpenSettings, settings } = useSettings();
+  const { addFiles, clearAttachments, attachments } = useAttachments();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  const [driveLoading, setDriveLoading] = useState(false);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     const errs = await addFiles(files);
     setErrors(errs);
-    // reset so the same file can be re-selected later
     e.target.value = "";
   };
+
+  const handleDriveClick = useCallback(async () => {
+    const clientId = settings.googleClientId?.trim();
+    if (!clientId) {
+      setErrors([
+        "Add a Google Client ID in Settings to use Drive.",
+      ]);
+      setOpenSettings(true);
+      return;
+    }
+
+    setDriveLoading(true);
+    setErrors([]);
+
+    try {
+      await loadGoogleApis();
+
+      initTokenClient(clientId, async (accessToken: string) => {
+        openPicker(accessToken, async (docs) => {
+          if (!docs.length) {
+            setDriveLoading(false);
+            return;
+          }
+
+          const newAttachments = [];
+          for (const doc of docs) {
+            const att = await downloadDriveFile(
+              doc.id,
+              doc.name,
+              doc.mimeType,
+              accessToken,
+            );
+            if (att) newAttachments.push(att);
+          }
+
+          if (newAttachments.length > 0) {
+            // Manually push into the attachments store via a small hack:
+            // we reuse the process path by creating File-like objects is hard,
+            // so we extend the provider with a direct add method in a moment.
+            // For now, use the existing addFiles path by converting where possible,
+            // and fall back to direct state update via a custom event.
+            window.dispatchEvent(
+              new CustomEvent("aether:add-attachments", {
+                detail: newAttachments,
+              }),
+            );
+          }
+
+          setDriveLoading(false);
+        });
+      });
+
+      // Trigger the consent / token request
+      requestAccessToken("");
+    } catch (err) {
+      console.error("[drive]", err);
+      setErrors(["Could not open Google Drive. Check your Client ID and try again."]);
+      setDriveLoading(false);
+    }
+  }, [settings.googleClientId, setOpenSettings]);
 
   return (
     <ComposerPrimitive.Root className="relative flex w-full flex-col border-0 bg-transparent">
@@ -230,8 +298,9 @@ const Composer: FC = () => {
 
         <ComposerAction
           onAttachClick={() => fileInputRef.current?.click()}
+          onDriveClick={handleDriveClick}
+          driveLoading={driveLoading}
           onBeforeSend={() => {
-            // Clear after a short delay so the send request can still read the current attachments
             setTimeout(() => clearAttachments(), 400);
             setErrors([]);
           }}
@@ -252,8 +321,10 @@ const Composer: FC = () => {
 
 const ComposerAction: FC<{
   onAttachClick: () => void;
+  onDriveClick: () => void;
+  driveLoading: boolean;
   onBeforeSend: () => void;
-}> = ({ onAttachClick, onBeforeSend }) => {
+}> = ({ onAttachClick, onDriveClick, driveLoading, onBeforeSend }) => {
   return (
     <div className="flex items-center justify-between gap-2 px-0.5">
       <div className="flex items-center gap-0.5">
@@ -263,6 +334,14 @@ const ComposerAction: FC<{
           className="size-7"
         >
           <PaperclipIcon className="size-3.5" />
+        </TooltipIconButton>
+        <TooltipIconButton
+          tooltip="Google Drive"
+          onClick={onDriveClick}
+          disabled={driveLoading}
+          className="size-7"
+        >
+          <HardDriveIcon className={cn("size-3.5", driveLoading && "animate-pulse")} />
         </TooltipIconButton>
         <ModelPicker />
       </div>
