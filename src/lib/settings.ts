@@ -18,6 +18,8 @@ export type AppSettings = {
   /** Optional custom model string when not picking from list */
   customModel: string;
   useCustomModel: boolean;
+  /** Google OAuth Client ID for Drive Picker (optional) */
+  googleClientId: string;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -31,6 +33,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   model: DEFAULT_MODEL,
   customModel: "",
   useCustomModel: false,
+  googleClientId: "",
 };
 
 export function loadSettings(): AppSettings {
