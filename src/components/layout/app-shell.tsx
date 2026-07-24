@@ -38,7 +38,7 @@ export function AppShell() {
       {mobileSidebar && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div
-            className="absolute inset-0 bg-[rgba(20,20,19,0.28)]"
+            className="absolute inset-0 bg-[var(--overlay)]"
             onClick={() => setMobileSidebar(false)}
             aria-hidden
           />
@@ -57,7 +57,7 @@ export function AppShell() {
           <button
             type="button"
             onClick={() => setMobileSidebar(true)}
-            className="rounded px-2 py-1 text-[var(--muted)] transition-colors hover:bg-white/5"
+            className="rounded px-2 py-1 text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)]"
           >
             <Label>Menu</Label>
           </button>

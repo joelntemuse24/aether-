@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "highlight.js/styles/github-dark.css";
 
-/* ─── Design tokens (warm editorial dark palette) ─── */
+/* ─── Design tokens: dark (default) ─── */
 :root {
   --canvas: #17150f;
   --elevated: #252219;
@@ -17,9 +17,49 @@
   --muted: #9a9588;
   --muted-soft: #635e52;
   --danger: #d4183d;
+  --hover-overlay: rgba(255, 255, 255, 0.05);
+  --scrollbar-thumb: rgba(255, 245, 220, 0.10);
+  --scrollbar-color: rgba(255, 245, 220, 0.12);
+  --selection-bg: rgba(168, 50, 50, 0.25);
+  --focus-ring: rgba(168, 50, 50, 0.40);
+  --code-bg: var(--elevated-deep);
+  --error-border: rgba(239, 68, 68, 0.3);
+  --error-bg: rgba(127, 29, 29, 0.2);
+  --error-text: #f87171;
+  --overlay: rgba(10, 9, 6, 0.6);
+  --hljs-theme: "highlight.js/styles/github-dark.css";
 
   --background: var(--canvas);
   --foreground: var(--text);
+}
+
+/* ─── Design tokens: light ─── */
+:root[data-theme="light"] {
+  --canvas: #faf9f5;
+  --elevated: #f5f0e8;
+  --elevated-deep: #efe9de;
+  --surface: #ffffff;
+  --border: #e5e0d6;
+  --border-subtle: rgba(120, 100, 75, 0.12);
+  --accent: #c96442;
+  --accent-hover: #b5573a;
+  --accent-muted: rgba(201, 100, 66, 0.12);
+  --text: #141413;
+  --text-secondary: #1a1a18;
+  --muted: #6c6a64;
+  --muted-soft: #8e8b82;
+  --danger: #b42318;
+  --hover-overlay: rgba(0, 0, 0, 0.04);
+  --scrollbar-thumb: rgba(120, 100, 75, 0.22);
+  --scrollbar-color: rgba(120, 100, 75, 0.25);
+  --selection-bg: rgba(201, 100, 66, 0.18);
+  --focus-ring: rgba(201, 100, 66, 0.35);
+  --code-bg: #f7f4ed;
+  --error-border: rgba(239, 68, 68, 0.25);
+  --error-bg: rgba(254, 242, 242, 0.8);
+  --overlay: rgba(20, 20, 19, 0.4);
+  --error-text: #991b1b;
+  --hljs-theme: "highlight.js/styles/github.css";
 }
 
 @theme inline {
@@ -74,16 +114,55 @@ body {
   letter-spacing: -0.01em;
 }
 
-/* Code highlighting on cream canvas */
+/* Code highlighting */
 .hljs {
   background: transparent !important;
   color: inherit;
 }
 
-/* Scrollbars — thin, warm dark */
+/* Light mode code token colors */
+:root[data-theme="light"] .hljs {
+  color: #24292e;
+}
+:root[data-theme="light"] .hljs-comment,
+:root[data-theme="light"] .hljs-quote {
+  color: #6a737d;
+}
+:root[data-theme="light"] .hljs-keyword,
+:root[data-theme="light"] .hljs-selector-tag,
+:root[data-theme="light"] .hljs-literal,
+:root[data-theme="light"] .hljs-type {
+  color: #d73a49;
+}
+:root[data-theme="light"] .hljs-string,
+:root[data-theme="light"] .hljs-doctag {
+  color: #032f62;
+}
+:root[data-theme="light"] .hljs-title,
+:root[data-theme="light"] .hljs-section,
+:root[data-theme="light"] .hljs-name,
+:root[data-theme="light"] .hljs-attribute {
+  color: #6f42c1;
+}
+:root[data-theme="light"] .hljs-number,
+:root[data-theme="light"] .hljs-symbol,
+:root[data-theme="light"] .hljs-bullet,
+:root[data-theme="light"] .hljs-built_in,
+:root[data-theme="light"] .hljs-code {
+  color: #005cc5;
+}
+:root[data-theme="light"] .hljs-meta {
+  color: #6a737d;
+}
+:root[data-theme="light"] .hljs-variable,
+:root[data-theme="light"] .hljs-template-variable {
+  color: #e36209;
+}
+
+/* Scrollbars — thin, warm */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 245, 220, 0.12) transparent;
+  scrollbar-color: var(--scrollbar-color) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -92,7 +171,7 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: rgba(255, 245, 220, 0.10);
+  background: var(--scrollbar-thumb);
   border-radius: 999px;
 }
 
@@ -123,14 +202,14 @@ body {
   }
 }
 
-/* Selection color matches dark + accent */
+/* Selection color */
 ::selection {
-  background: rgba(168, 50, 50, 0.25);
+  background: var(--selection-bg);
 }
 
 /* Focus rings */
 :focus-visible {
-  outline: 2px solid rgba(168, 50, 50, 0.40);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 

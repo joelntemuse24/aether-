@@ -259,7 +259,7 @@ const defaultComponents = memoizeMarkdownComponents({
   pre: ({ className, ...props }) => (
     <pre
       className={cn(
-        "overflow-x-auto rounded-b-xl rounded-t-none border border-t-0 border-[var(--border)] bg-[var(--elevated-deep)] p-3.5 font-[family-name:var(--font-mono)] text-[13px] leading-relaxed text-[var(--text)]",
+        "overflow-x-auto rounded-b-xl rounded-t-none border border-t-0 border-[var(--border)] bg-[var(--code-bg)] p-3.5 font-[family-name:var(--font-mono)] text-[13px] leading-relaxed text-[var(--text)]",
         className,
       )}
       {...props}

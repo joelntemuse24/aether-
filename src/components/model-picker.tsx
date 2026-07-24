@@ -60,7 +60,7 @@ export function ModelPicker({ className }: { className?: string }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-7 max-w-[11rem] items-center gap-1 rounded-md px-2 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-white/5 hover:text-[var(--text)]"
+        className="flex h-7 max-w-[11rem] items-center gap-1 rounded-md px-2 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
@@ -97,7 +97,7 @@ export function ModelPicker({ className }: { className?: string }) {
                   setOpen(false);
                 }}
                 className={cn(
-                  "flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-white/5",
+                  "flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--hover-overlay)]",
                   selected && "bg-[var(--accent-muted)]",
                 )}
               >

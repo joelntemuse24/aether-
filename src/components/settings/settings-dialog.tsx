@@ -47,7 +47,7 @@ export function SettingsDialog() {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-[rgba(10,9,6,0.6)]"
+        className="absolute inset-0 bg-[var(--overlay)]"
         onClick={() => hasKey && setOpenSettings(false)}
         aria-hidden
       />
@@ -71,7 +71,7 @@ export function SettingsDialog() {
             <button
               type="button"
               onClick={() => setOpenSettings(false)}
-              className="rounded p-1 text-[var(--muted)] transition-colors hover:bg-white/5 hover:text-[var(--text)]"
+              className="rounded p-1 text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
               aria-label="Close settings"
             >
               <XIcon className="size-4" />
@@ -105,7 +105,7 @@ export function SettingsDialog() {
                     "rounded-lg border px-3 py-2 text-left text-sm transition-colors",
                     settings.provider === id
                       ? "border-[var(--accent)] bg-[var(--accent-muted)] text-[var(--text)]"
-                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-white/5",
+                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--hover-overlay)]",
                   )}
                 >
                   {PROVIDER_DEFAULTS[id].label}

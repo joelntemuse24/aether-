@@ -13,8 +13,11 @@ import {
   SettingsIcon,
   TrashIcon,
   MessageSquareIcon,
+  SunIcon,
+  MoonIcon,
 } from "lucide-react";
 import { useSettings } from "@/providers/settings-provider";
+import { useTheme } from "@/providers/theme-provider";
 import { Label } from "@/components/ui/label";
 import type { FC } from "react";
 
@@ -35,6 +38,7 @@ type SidebarProps = {
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { setOpenSettings } = useSettings();
+  const { theme, toggleTheme } = useTheme();
 
   if (collapsed) {
     return (
@@ -42,7 +46,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <button
           type="button"
           onClick={onToggle}
-          className="mb-3 flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-white/5 hover:text-[var(--text)]"
+          className="mb-3 flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
           aria-label="Expand sidebar"
           title="Expand sidebar"
         >
@@ -61,11 +65,20 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <button
           type="button"
           onClick={() => setOpenSettings(true)}
-          className="flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-white/5 hover:text-[var(--text)]"
+          className="flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
           aria-label="Settings"
           title="Settings"
         >
           <SettingsIcon className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+          aria-label="Toggle theme"
+          title="Toggle theme"
+        >
+          {theme === "dark" ? <SunIcon className="size-4" /> : <MoonIcon className="size-4" />}
         </button>
       </aside>
     );
@@ -85,7 +98,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <button
           type="button"
           onClick={onToggle}
-          className="flex size-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-white/5 hover:text-[var(--text)]"
+          className="flex size-7 items-center justify-center rounded text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
           aria-label="Collapse sidebar"
           title="Collapse sidebar"
         >
@@ -97,7 +110,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <ThreadListPrimitive.New asChild>
           <button
             type="button"
-            className="flex w-full items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text)] transition-colors hover:bg-white/5"
+            className="flex w-full items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--hover-overlay)]"
           >
             <PlusIcon className="size-3.5 shrink-0 text-[var(--accent)]" />
             <Label>New conversation</Label>
@@ -123,17 +136,28 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       <div className="border-t border-[var(--border)] p-3">
-        <button
-          type="button"
-          onClick={() => setOpenSettings(true)}
-          className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[var(--muted)] transition-colors hover:bg-white/5"
-        >
-          <SettingsIcon className="size-3.5 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[12px] text-[var(--text)]">Settings</div>
-            <Label>Model · API key</Label>
-          </div>
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setOpenSettings(true)}
+            className="flex flex-1 items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)]"
+          >
+            <SettingsIcon className="size-3.5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12px] text-[var(--text)]">Settings</div>
+              <Label>Model · API key</Label>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="flex size-8 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+            aria-label="Toggle theme"
+            title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+          >
+            {theme === "dark" ? <SunIcon className="size-3.5" /> : <MoonIcon className="size-3.5" />}
+          </button>
+        </div>
       </div>
     </aside>
   );
@@ -143,7 +167,7 @@ const ThreadListItem: FC = () => {
   const title = useAuiState((s) => s.threadListItem.title || "New chat");
 
   return (
-    <ThreadListItemPrimitive.Root className="group relative flex items-center rounded-md data-[active]:bg-[var(--elevated-deep)] hover:bg-white/5">
+    <ThreadListItemPrimitive.Root className="group relative flex items-center rounded-md data-[active]:bg-[var(--elevated-deep)] hover:bg-[var(--hover-overlay)]">
       <ThreadListItemPrimitive.Trigger className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left text-[13px] text-[var(--text)]">
         <span className="truncate">{title}</span>
       </ThreadListItemPrimitive.Trigger>
@@ -151,7 +175,7 @@ const ThreadListItem: FC = () => {
       <ThreadListItemPrimitive.Delete asChild>
         <button
           type="button"
-          className="me-1 flex size-6 shrink-0 items-center justify-center rounded text-[var(--muted)] opacity-0 transition-opacity hover:bg-white/5 group-hover:opacity-100 group-data-[active]:opacity-100"
+          className="me-1 flex size-6 shrink-0 items-center justify-center rounded text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--hover-overlay)] group-hover:opacity-100 group-data-[active]:opacity-100"
           aria-label="Delete conversation"
           title="Delete"
         >
