@@ -7,10 +7,63 @@
 import type { PendingAttachment } from "./attachments";
 import { isImageFile, isTextFile } from "./attachments";
 
+/* ─── Minimal ambient types for the Google scripts we load at runtime ─── */
+
+type GapiClient = {
+  load: (libraries: string, callback: () => void) => void;
+};
+
+type GoogleAccountsOauth2 = {
+  initTokenClient: (config: {
+    client_id: string;
+    scope: string;
+    callback: (resp: { access_token?: string; error?: string }) => void;
+  }) => {
+    requestAccessToken: (opts: { prompt: string }) => void;
+  };
+};
+
+type GooglePickerDocsView = {
+  setIncludeFolders: (v: boolean) => GooglePickerDocsView;
+  setSelectFolderEnabled: (v: boolean) => GooglePickerDocsView;
+};
+
+type GooglePickerBuilder = {
+  addView: (view: GooglePickerDocsView) => GooglePickerBuilder;
+  enableFeature: (feature: string) => GooglePickerBuilder;
+  setOAuthToken: (token: string) => GooglePickerBuilder;
+  setCallback: (cb: (data: GooglePickerCallbackData) => void) => GooglePickerBuilder;
+  build: () => { setVisible: (v: boolean) => void };
+};
+
+type GooglePickerCallbackData = {
+  action: string;
+  docs?: Array<{
+    id: string;
+    name: string;
+    mimeType: string;
+    sizeBytes?: string;
+    url?: string;
+  }>;
+};
+
+type GooglePickerNamespace = {
+  DocsView: new (viewId?: string) => GooglePickerDocsView;
+  PickerBuilder: new () => GooglePickerBuilder;
+  ViewId: { DOCS_IMAGES: string; PDFS: string };
+  Feature: { MULTISELECT_ENABLED: string };
+  Action: { PICKED: string };
+};
+
+type GoogleNamespace = {
+  accounts: { oauth2: GoogleAccountsOauth2 };
+  picker: GooglePickerNamespace;
+};
+
 declare global {
   interface Window {
-    gapi: any;
-    google: any;
+    gapi: GapiClient;
+    google: GoogleNamespace;
   }
 }
 
@@ -18,7 +71,9 @@ const SCOPES = "https://www.googleapis.com/auth/drive.readonly";
 
 let gapiLoaded = false;
 let gisLoaded = false;
-let tokenClient: any = null;
+let tokenClient: {
+  requestAccessToken: (opts: { prompt: string }) => void;
+} | null = null;
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -51,12 +106,15 @@ export async function loadGoogleApis(): Promise<void> {
   gisLoaded = true;
 }
 
-export function initTokenClient(clientId: string, callback: (token: string) => void) {
+export function initTokenClient(
+  clientId: string,
+  callback: (token: string) => void,
+) {
   tokenClient = window.google.accounts.oauth2.initTokenClient({
     client_id: clientId,
     scope: SCOPES,
-    callback: (resp: any) => {
-      if (resp.error) {
+    callback: (resp) => {
+      if (resp.error || !resp.access_token) {
         console.error("[google-drive] token error", resp);
         return;
       }
@@ -88,13 +146,15 @@ export function openPicker(
 
   const picker = new window.google.picker.PickerBuilder()
     .addView(view)
-    .addView(new window.google.picker.DocsView(window.google.picker.ViewId.DOCS_IMAGES))
+    .addView(
+      new window.google.picker.DocsView(window.google.picker.ViewId.DOCS_IMAGES),
+    )
     .addView(new window.google.picker.DocsView(window.google.picker.ViewId.PDFS))
     .enableFeature(window.google.picker.Feature.MULTISELECT_ENABLED)
     .setOAuthToken(accessToken)
-    .setCallback((data: any) => {
+    .setCallback((data) => {
       if (data.action === window.google.picker.Action.PICKED) {
-        const docs: PickerDoc[] = (data.docs || []).map((d: any) => ({
+        const docs: PickerDoc[] = (data.docs || []).map((d) => ({
           id: d.id,
           name: d.name,
           mimeType: d.mimeType,
@@ -118,7 +178,6 @@ export async function downloadDriveFile(
 ): Promise<PendingAttachment | null> {
   const id = crypto.randomUUID();
 
-  // Google-native formats need export
   const isGoogleDoc =
     mimeType === "application/vnd.google-apps.document" ||
     mimeType === "application/vnd.google-apps.spreadsheet" ||
@@ -134,10 +193,6 @@ export async function downloadDriveFile(
       } else if (mimeType.includes("presentation")) {
         exportMime = "text/plain";
         ext = ".txt";
-      } else {
-        // Docs → markdown-ish plain text
-        exportMime = "text/plain";
-        ext = ".txt";
       }
 
       const res = await fetch(
@@ -147,7 +202,9 @@ export async function downloadDriveFile(
       if (!res.ok) throw new Error(`Export failed: ${res.status}`);
       const text = await res.text();
       const capped =
-        text.length > 120_000 ? text.slice(0, 120_000) + "\n\n[… truncated]" : text;
+        text.length > 120_000
+          ? text.slice(0, 120_000) + "\n\n[… truncated]"
+          : text;
 
       return {
         id,
@@ -159,7 +216,6 @@ export async function downloadDriveFile(
       };
     }
 
-    // Regular binary / text files
     const res = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
@@ -187,7 +243,9 @@ export async function downloadDriveFile(
     if (isTextFile(name, mimeType)) {
       const text = await res.text();
       const capped =
-        text.length > 120_000 ? text.slice(0, 120_000) + "\n\n[… truncated]" : text;
+        text.length > 120_000
+          ? text.slice(0, 120_000) + "\n\n[… truncated]"
+          : text;
       return {
         id,
         name,
@@ -198,7 +256,6 @@ export async function downloadDriveFile(
       };
     }
 
-    // Other files (PDF etc.) – keep as generic file reference for now
     return {
       id,
       name,
