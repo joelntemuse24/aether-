@@ -212,21 +212,24 @@ export function SettingsDialog() {
           </div>
 
           {/* Google Drive */}
-          <div className="space-y-2 border-t border-[var(--border)] pt-5">
-            <div className="flex items-center justify-between">
-              <label
-                htmlFor="google-client-id"
-                className="text-xs font-medium uppercase tracking-wide text-[var(--muted-soft)]"
-              >
-                Google Client ID (for Drive)
-              </label>
+          <div className="space-y-3 border-t border-[var(--border)] pt-5">
+            <div className="flex items-center gap-2">
+              <svg className="size-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9.3 2L14.7 2L22 15.5L19.3 20.5L12.7 20.5L9.3 2Z" fill="#0F9D58"/>
+                <path d="M9.3 2L2 15.5L4.7 20.5L12 7L9.3 2Z" fill="#4285F4"/>
+                <path d="M14.7 2L9.3 2L2 15.5L7.3 15.5L14.7 2Z" fill="#0F9D58"/>
+                <path d="M12 7L7.3 15.5L12 15.5L16.7 15.5L12 7Z" fill="#FFC107"/>
+                <path d="M12 7L16.7 15.5L22 15.5L12 7Z" fill="#FFC107"/>
+              </svg>
+              <span className="text-sm font-medium text-[var(--text)]">Google Drive</span>
               {settings.googleClientId && driveState.connected && (
-                <span className="flex items-center gap-1 text-xs text-[var(--accent)]">
+                <span className="ml-auto flex items-center gap-1 rounded-full bg-[var(--accent)]/10 px-2 py-0.5 text-xs text-[var(--accent)]">
                   <CheckIcon className="size-3" />
-                  Connected{driveState.email ? `: ${driveState.email}` : ""}
+                  Connected{driveState.email ? ` · ${driveState.email}` : ""}
                 </span>
               )}
             </div>
+
             <input
               id="google-client-id"
               type="text"

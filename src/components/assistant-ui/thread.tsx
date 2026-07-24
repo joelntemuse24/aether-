@@ -17,6 +17,7 @@ import {
   openPicker,
   downloadDriveFile,
   onDriveConnectionChange,
+  hasValidToken,
   type DriveConnectionState,
 } from "@/lib/google-drive";
 import {
@@ -38,7 +39,6 @@ import {
   ChevronRightIcon,
   CopyIcon,
   FileIcon,
-  HardDriveIcon,
   ImageIcon,
   PaperclipIcon,
   PencilIcon,
@@ -243,21 +243,28 @@ const Composer: FC = () => {
     try {
       await loadGoogleApis();
 
-      // Get token — uses cache if valid, only shows popup if needed
-      const tokenTimeout = window.setTimeout(() => {
-        finish();
-        setErrors(["Google sign-in timed out. Please try again."]);
-      }, 30_000);
+      // If we already have a valid token, skip auth and go straight to picker
+      let accessToken: string;
+      if (hasValidToken()) {
+        // getAccessToken returns Promise<string> even for cached tokens
+        accessToken = await getAccessToken(clientId);
+      } else {
+        // Need to authenticate — shows Google consent popup
+        const tokenTimeout = window.setTimeout(() => {
+          finish();
+          setErrors(["Google sign-in timed out. Please try again."]);
+        }, 30_000);
 
-      const accessToken = await getAccessToken(clientId, (err) => {
+        accessToken = await getAccessToken(clientId, (err) => {
+          window.clearTimeout(tokenTimeout);
+          finish();
+          setErrors([`Google sign-in failed: ${err}`]);
+        });
+
         window.clearTimeout(tokenTimeout);
-        finish();
-        setErrors([`Google sign-in failed: ${err}`]);
-      });
+      }
 
-      window.clearTimeout(tokenTimeout);
-
-      // Now open the picker with the token
+      // Open the picker with the token
       openPicker(
         accessToken,
         async (docs) => {
@@ -359,6 +366,7 @@ const Composer: FC = () => {
           driveLoading={driveLoading}
           driveConnected={driveConnected}
           driveEmail={driveEmail}
+          hasDriveClientId={!!settings.googleClientId?.trim()}
         />
       </div>
 
@@ -374,20 +382,33 @@ const Composer: FC = () => {
   );
 };
 
+const GoogleDriveIcon: FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M9.3 2L14.7 2L22 15.5L19.3 20.5L12.7 20.5L9.3 2Z" fill="#0F9D58"/>
+    <path d="M9.3 2L2 15.5L4.7 20.5L12 7L9.3 2Z" fill="#4285F4"/>
+    <path d="M14.7 2L9.3 2L2 15.5L7.3 15.5L14.7 2Z" fill="#0F9D58"/>
+    <path d="M12 7L7.3 15.5L12 15.5L16.7 15.5L12 7Z" fill="#FFC107"/>
+    <path d="M12 7L16.7 15.5L22 15.5L12 7Z" fill="#FFC107"/>
+  </svg>
+);
+
 const ComposerAction: FC<{
   onAttachClick: () => void;
   onDriveClick: () => void;
   driveLoading: boolean;
   driveConnected: boolean;
   driveEmail?: string;
-}> = ({ onAttachClick, onDriveClick, driveLoading, driveConnected, driveEmail }) => {
+  hasDriveClientId: boolean;
+}> = ({ onAttachClick, onDriveClick, driveLoading, driveConnected, driveEmail, hasDriveClientId }) => {
   const driveTooltip = driveLoading
     ? "Opening Drive…"
     : driveConnected && driveEmail
       ? `Drive: ${driveEmail}`
       : driveConnected
         ? "Google Drive (connected)"
-        : "Google Drive";
+        : hasDriveClientId
+          ? "Sign in to Google Drive"
+          : "Add Google Client ID in Settings";
 
   return (
     <div className="flex items-center justify-between gap-2 px-0.5">
@@ -405,13 +426,16 @@ const ComposerAction: FC<{
           disabled={driveLoading}
           className="size-7"
         >
-          <HardDriveIcon
-            className={cn(
-              "size-3.5",
-              driveLoading && "animate-pulse",
-              driveConnected && !driveLoading && "text-[var(--accent)]",
-            )}
-          />
+          {driveLoading ? (
+            <RefreshCwIcon className="size-3.5 animate-spin text-[var(--muted)]" />
+          ) : (
+            <GoogleDriveIcon
+              className={cn(
+                "size-4",
+                !driveConnected && "opacity-60",
+              )}
+            />
+          )}
         </TooltipIconButton>
         <ModelPicker />
       </div>
