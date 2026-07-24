@@ -402,18 +402,17 @@ export async function downloadDriveFile(
 
       let res = await fetchWithAuth(exportUrl, accessToken);
 
-      // Retry with acknowledgeAbuse if 403 due to abuse flag
+      // On any 403, retry with acknowledgeAbuse=true
       if (res.status === 403) {
         const body = await res.text().catch(() => "");
         const { reason } = parseDriveError(body);
-        console.error("[google-drive] export 403", reason, body);
-        if (reason === "cannotDownloadAbusiveFile" || reason === "abuse") {
-          exportUrl += "&acknowledgeAbuse=true";
-          res = await fetchWithAuth(exportUrl, accessToken);
-        }
+        console.error("[google-drive] export 403, retrying with acknowledgeAbuse", reason, body);
+        exportUrl += "&acknowledgeAbuse=true";
+        res = await fetchWithAuth(exportUrl, accessToken);
         if (!res.ok) {
           const retryBody = await res.text().catch(() => "");
           const retryInfo = parseDriveError(retryBody);
+          console.error("[google-drive] export acknowledgeAbuse retry failed", res.status, retryBody);
           return {
             attachment: {
               id,
@@ -468,21 +467,21 @@ export async function downloadDriveFile(
 
     let res = await fetchWithAuth(mediaUrl, accessToken);
 
-    // If 403, parse the error and retry with acknowledgeAbuse if applicable
+    // On any 403, retry with acknowledgeAbuse=true.
+    // Google's abuse detection flags many files (especially PDFs from
+    // third-party sources) and the reason codes vary — always retry.
     if (res.status === 403) {
       const body = await res.text().catch(() => "");
       const { reason } = parseDriveError(body);
-      console.error("[google-drive] media download 403", reason, body);
+      console.error("[google-drive] media download 403, retrying with acknowledgeAbuse", reason, body);
 
-      // Retry with acknowledgeAbuse=true for flagged files
-      if (reason === "cannotDownloadAbusiveFile" || reason === "abuse") {
-        mediaUrl += "&acknowledgeAbuse=true";
-        res = await fetchWithAuth(mediaUrl, accessToken);
-      }
+      mediaUrl += "&acknowledgeAbuse=true";
+      res = await fetchWithAuth(mediaUrl, accessToken);
 
       if (!res.ok) {
         const retryBody = await res.text().catch(() => "");
         const retryInfo = parseDriveError(retryBody);
+        console.error("[google-drive] acknowledgeAbuse retry also failed", res.status, retryBody);
         return {
           attachment: {
             id,
