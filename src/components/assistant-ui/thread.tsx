@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRef, useState, type FC } from "react";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { ModelPicker } from "@/components/model-picker";
@@ -8,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/providers/settings-provider";
+import { useAttachments } from "@/providers/attachments-provider";
+import { buildTextAttachmentPrefix } from "@/lib/attachments";
 import {
   ActionBarPrimitive,
   AuiIf,
@@ -26,13 +29,16 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CopyIcon,
+  FileIcon,
+  ImageIcon,
+  PaperclipIcon,
   PencilIcon,
   RefreshCwIcon,
   SquareIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
+  XIcon,
 } from "lucide-react";
-import type { FC } from "react";
 
 const isNewChatView = (s: AssistantState) =>
   s.thread.messages.length === 0 &&
@@ -142,8 +148,56 @@ const ThreadWelcome: FC = () => {
   );
 };
 
+/* ─── Attachment chips ─── */
+
+function AttachmentChips() {
+  const { attachments, removeAttachment } = useAttachments();
+  if (attachments.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1.5 px-2.5 pb-1">
+      {attachments.map((a) => (
+        <div
+          key={a.id}
+          className="group flex max-w-[14rem] items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--elevated)] px-2 py-1 text-xs text-[var(--text-secondary)]"
+        >
+          {a.kind === "image" ? (
+            <ImageIcon className="size-3.5 shrink-0 text-[var(--muted)]" />
+          ) : (
+            <FileIcon className="size-3.5 shrink-0 text-[var(--muted)]" />
+          )}
+          <span className="truncate">{a.name}</span>
+          <button
+            type="button"
+            onClick={() => removeAttachment(a.id)}
+            className="ml-0.5 rounded p-0.5 text-[var(--muted)] opacity-60 transition-opacity hover:bg-[var(--hover-overlay)] hover:opacity-100"
+            aria-label={`Remove ${a.name}`}
+          >
+            <XIcon className="size-3" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Composer ─── */
+
 const Composer: FC = () => {
   const { hasKey, setOpenSettings } = useSettings();
+  const { attachments, addFiles, clearAttachments, hasAttachments } =
+    useAttachments();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [errors, setErrors] = useState<string[]>([]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const errs = await addFiles(files);
+    setErrors(errs);
+    // reset so the same file can be re-selected later
+    e.target.value = "";
+  };
 
   return (
     <ComposerPrimitive.Root className="relative flex w-full flex-col border-0 bg-transparent">
@@ -156,7 +210,18 @@ const Composer: FC = () => {
           Add an API key in Settings to start chatting →
         </button>
       )}
-      <div className="flex w-full flex-col gap-2 border-0 bg-transparent p-2">
+
+      <div className="flex w-full flex-col gap-1 border-0 bg-transparent p-2">
+        <AttachmentChips />
+
+        {errors.length > 0 && (
+          <div className="px-2.5 pb-1 text-xs text-[var(--error-text)]">
+            {errors.map((err) => (
+              <div key={err}>{err}</div>
+            ))}
+          </div>
+        )}
+
         <ComposerPrimitive.Input
           placeholder="How can I help you today?"
           className="max-h-40 min-h-[44px] w-full resize-none border-0 bg-transparent px-2.5 py-2 text-[15px] leading-relaxed text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)]"
@@ -164,21 +229,56 @@ const Composer: FC = () => {
           autoFocus
           aria-label="Message input"
         />
-        <ComposerAction />
+
+        <ComposerAction
+          onAttachClick={() => fileInputRef.current?.click()}
+          onBeforeSend={() => {
+            // Text attachments are injected into the message body via the transport.
+            // Images are also passed through the transport body.
+            // We clear after a short delay so the send request can still read them.
+            setTimeout(() => clearAttachments(), 300);
+            setErrors([]);
+          }}
+          hasAttachments={hasAttachments}
+        />
       </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="image/*,.pdf,.txt,.md,.markdown,.csv,.json,.js,.jsx,.ts,.tsx,.py,.html,.css,.xml,.yaml,.yml,.toml,.sh,.sql,.rs,.go"
+        className="hidden"
+        onChange={handleFileChange}
+      />
     </ComposerPrimitive.Root>
   );
 };
 
-const ComposerAction: FC = () => {
+const ComposerAction: FC<{
+  onAttachClick: () => void;
+  onBeforeSend: () => void;
+  hasAttachments: boolean;
+}> = ({ onAttachClick, onBeforeSend, hasAttachments }) => {
   return (
     <div className="flex items-center justify-between gap-2 px-0.5">
-      <ModelPicker />
+      <div className="flex items-center gap-0.5">
+        <TooltipIconButton
+          tooltip="Attach files"
+          onClick={onAttachClick}
+          className="size-7"
+        >
+          <PaperclipIcon className="size-3.5" />
+        </TooltipIconButton>
+        <ModelPicker />
+      </div>
+
       <div className="flex items-center gap-1">
         <AuiIf condition={(s) => !s.thread.isRunning}>
           <ComposerPrimitive.Send asChild>
             <button
               type="button"
+              onClick={onBeforeSend}
               className="flex size-8 items-center justify-center rounded-full bg-[var(--accent)] text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
               aria-label="Send message"
             >
