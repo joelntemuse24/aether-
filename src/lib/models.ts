@@ -10,7 +10,7 @@ export type ModelOption = {
 // ─── Live model fetching from OpenRouter public API ───
 
 const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
-const CACHE_KEY = "aether:models-cache:v1";
+const CACHE_KEY = "aether:models-cache:v2";
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 type OpenRouterModel = {

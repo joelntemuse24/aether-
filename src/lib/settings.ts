@@ -3,6 +3,21 @@ import { DEFAULT_MODEL } from "./models";
 
 const STORAGE_KEY = "aether:settings:v1";
 
+const STALE_MODELS = [
+  "anthropic/claude-fable-5",
+  "anthropic/claude-sonnet-5",
+  "anthropic/claude-opus-4.8",
+  "anthropic/claude-haiku-4.5",
+  "openai/gpt-5.6-sol",
+  "openai/gpt-5.5",
+  "google/gemini-3.1-pro-preview",
+  "google/gemini-3.5-flash",
+  "google/gemini-2.5-pro",
+  "z-ai/glm-4.5",
+  "meta/muse-spark-1.1",
+  "openai/gpt-oss-120b",
+];
+
 export type AppSettings = {
   provider: ProviderId;
   /** Active API key for the selected provider */
@@ -39,7 +54,12 @@ export function loadSettings(): AppSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<AppSettings>;
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    const merged = { ...DEFAULT_SETTINGS, ...parsed };
+    // Migrate stale/fictional model IDs to the current default
+    if (merged.model && STALE_MODELS.includes(merged.model)) {
+      merged.model = DEFAULT_MODEL;
+    }
+    return merged;
   } catch {
     return { ...DEFAULT_SETTINGS };
   }

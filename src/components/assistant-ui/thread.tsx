@@ -152,7 +152,7 @@ const ThreadWelcome: FC = () => {
         How can I help you today?
       </h1>
       <div className="mt-3">
-        <Label>Ask anything · Shift+Enter for new line</Label>
+        <Label>Ask anything</Label>
       </div>
     </div>
   );
@@ -172,7 +172,7 @@ const Composer: FC = () => {
           Add an API key in Settings to start chatting →
         </button>
       )}
-      <div className="flex w-full flex-col gap-2 rounded-xl p-2 transition-colors focus-within:bg-[var(--elevated)]">
+      <div className="flex w-full flex-col gap-2 p-2">
         <ComposerPrimitive.Input
           placeholder="How can I help you today?"
           className="max-h-40 min-h-[44px] w-full resize-none bg-transparent px-2.5 py-2 text-[15px] leading-relaxed text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)]"
