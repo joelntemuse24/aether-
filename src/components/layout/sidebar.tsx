@@ -21,16 +21,6 @@ import { useTheme } from "@/providers/theme-provider";
 import { Label } from "@/components/ui/label";
 import type { FC } from "react";
 
-function SparkleIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
-      <path d="M12 2.5c.4 3.8 1.7 6.2 4.2 8.2-2.5 2-3.8 4.4-4.2 8.2-.4-3.8-1.7-6.2-4.2-8.2C10.3 8.7 11.6 6.3 12 2.5z" />
-      <path d="M18.5 4c.2 1.6.8 2.6 1.9 3.5-1.1.9-1.7 1.9-1.9 3.5-.2-1.6-.8-2.6-1.9-3.5 1.1-.9 1.7-1.9 1.9-3.5z" opacity="0.85" />
-      <path d="M6 14c.15 1.2.55 1.95 1.4 2.65-.85.7-1.25 1.45-1.4 2.65-.15-1.2-.55-1.95-1.4-2.65.85-.7 1.25-1.45 1.4-2.65z" opacity="0.7" />
-    </svg>
-  );
-}
-
 type SidebarProps = {
   collapsed: boolean;
   onToggle: () => void;
@@ -43,6 +33,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   if (collapsed) {
     return (
       <aside className="flex h-full w-12 shrink-0 flex-col items-center border-r border-[var(--border)] bg-[var(--elevated)] py-3">
+        <img src="/logo.jpg" alt="Aether" className="mb-3 size-8 rounded object-cover" />
         <button
           type="button"
           onClick={onToggle}
@@ -88,8 +79,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     <aside className="flex h-full w-[248px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--elevated)]">
       <div className="flex items-center justify-between px-4 pb-3 pt-4">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-7 shrink-0 items-center justify-center rounded bg-[var(--accent-muted)] text-[var(--accent)]">
-            <SparkleIcon className="size-3.5" />
+          <div className="flex size-7 shrink-0 items-center justify-center rounded">
+            <img src="/logo.jpg" alt="Aether" className="size-7 rounded object-cover" />
           </div>
           <span className="font-[family-name:var(--font-sc)] text-[13px] font-medium tracking-[0.08em] text-[var(--text)]">
             Aether

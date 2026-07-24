@@ -61,6 +61,7 @@ export function AppShell() {
           >
             <Label>Menu</Label>
           </button>
+          <img src="/logo.jpg" alt="Aether" className="size-5 rounded object-cover" />
           <span className="font-[family-name:var(--font-sc)] text-[13px] tracking-[0.08em] text-[var(--text)]">Aether</span>
         </div>
 
