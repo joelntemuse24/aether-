@@ -49,33 +49,27 @@ function isFreeModel(id: string): boolean {
 }
 
 export async function fetchOpenRouterModels(): Promise<ModelOption[]> {
-  try {
-    const res = await fetch(OPENROUTER_MODELS_URL, {
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = (await res.json()) as { data: OpenRouterModel[] };
+  const res = await fetch(OPENROUTER_MODELS_URL, {
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = (await res.json()) as { data: OpenRouterModel[] };
 
-    const filtered = json.data
-      .filter(
-        (m) =>
-          FEATURED_PREFIXES.some((p) => m.id.startsWith(p)) &&
-          !isFreeModel(m.id) &&
-          !m.id.startsWith("~"), // skip alias entries
-      )
-      .map((m) => ({
-        id: m.id,
-        label: cleanLabel(m.name),
-        provider: "openrouter" as ProviderId,
-        description: m.context_length
-          ? `${(m.context_length / 1000).toFixed(0)}K context`
-          : undefined,
-      }));
-
-    return filtered.length > 0 ? filtered : MODEL_OPTIONS;
-  } catch {
-    return MODEL_OPTIONS;
-  }
+  return json.data
+    .filter(
+      (m) =>
+        FEATURED_PREFIXES.some((p) => m.id.startsWith(p)) &&
+        !isFreeModel(m.id) &&
+        !m.id.startsWith("~"),
+    )
+    .map((m) => ({
+      id: m.id,
+      label: cleanLabel(m.name),
+      provider: "openrouter" as ProviderId,
+      description: m.context_length
+        ? `${(m.context_length / 1000).toFixed(0)}K context`
+        : undefined,
+    }));
 }
 
 export function getCachedModels(): ModelOption[] | null {
@@ -103,83 +97,8 @@ export function setCachedModels(models: ModelOption[]): void {
   }
 }
 
-/** Curated OpenRouter / multi-provider models for the picker (fallback when API is unreachable). */
-export const MODEL_OPTIONS: ModelOption[] = [
-  {
-    id: "anthropic/claude-sonnet-4",
-    label: "Claude Sonnet 4",
-    provider: "openrouter",
-    description: "Balanced reasoning & speed",
-  },
-  {
-    id: "anthropic/claude-3.5-sonnet",
-    label: "Claude 3.5 Sonnet",
-    provider: "openrouter",
-    description: "Previous generation",
-  },
-  {
-    id: "anthropic/claude-3.5-haiku",
-    label: "Claude 3.5 Haiku",
-    provider: "openrouter",
-    description: "Fast & affordable",
-  },
-  {
-    id: "openai/gpt-4o",
-    label: "GPT-4o",
-    provider: "openrouter",
-    description: "OpenAI frontier",
-  },
-  {
-    id: "openai/gpt-4o-mini",
-    label: "GPT-4o Mini",
-    provider: "openrouter",
-    description: "Fast & affordable",
-  },
-  {
-    id: "google/gemini-2.0-flash-001",
-    label: "Gemini 2.0 Flash",
-    provider: "openrouter",
-    description: "Fast & capable",
-  },
-  {
-    id: "google/gemini-pro-1.5",
-    label: "Gemini Pro 1.5",
-    provider: "openrouter",
-  },
-  {
-    id: "deepseek/deepseek-r1",
-    label: "DeepSeek R1",
-    provider: "openrouter",
-    description: "Open-source reasoning",
-  },
-  {
-    id: "deepseek/deepseek-chat",
-    label: "DeepSeek Chat",
-    provider: "openrouter",
-  },
-  {
-    id: "moonshotai/kimi-k2",
-    label: "Kimi K2",
-    provider: "openrouter",
-  },
-  {
-    id: "qwen/qwen3-235b-a22b",
-    label: "Qwen3 235B",
-    provider: "openrouter",
-  },
-  {
-    id: "meta-llama/llama-3.3-70b-instruct",
-    label: "Llama 3.3 70B",
-    provider: "openrouter",
-  },
-  {
-    id: "x-ai/grok-2-1212",
-    label: "Grok 2",
-    provider: "openrouter",
-  },
-];
-
-export const DEFAULT_MODEL = "anthropic/claude-sonnet-4";
+/** No hardcoded fallback — models always come from the live OpenRouter API. */
+export const DEFAULT_MODEL = "";
 
 export const PROVIDER_DEFAULTS: Record<
   ProviderId,
@@ -207,9 +126,8 @@ export const PROVIDER_DEFAULTS: Record<
 };
 
 export function getModelLabel(modelId: string): string {
-  const found = MODEL_OPTIONS.find((m) => m.id === modelId);
-  if (found) return found.label;
-  // Check cached live models for a better label
+  if (!modelId) return "Select a model";
+  // Check cached live models for the label
   if (typeof window !== "undefined") {
     try {
       const raw = localStorage.getItem(CACHE_KEY);
@@ -222,7 +140,7 @@ export function getModelLabel(modelId: string): string {
       /* ignore */
     }
   }
-  // Show a short id for custom models (last segment)
+  // Show a short id for custom/unknown models (last segment)
   const parts = modelId.split("/");
   return parts[parts.length - 1] || modelId;
 }

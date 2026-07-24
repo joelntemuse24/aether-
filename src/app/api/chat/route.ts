@@ -52,8 +52,15 @@ export async function POST(req: Request) {
         : undefined;
     const modelId = resolveModel(
       provider,
-      (typeof body.model === "string" && body.model) || headerModel || "anthropic/claude-sonnet-4",
+      (typeof body.model === "string" && body.model) || headerModel,
     );
+
+    if (!modelId) {
+      return new Response(
+        JSON.stringify({ error: "No model selected. Pick a model from the dropdown." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
 
     let model;
     if (provider === "anthropic") {
