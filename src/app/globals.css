@@ -35,26 +35,26 @@
 
 /* ─── Design tokens: light ─── */
 :root[data-theme="light"] {
-  --canvas: #ffffff;
-  --elevated: #f9f9f9;
-  --elevated-deep: #f0f0f0;
-  --surface: #ffffff;
-  --border: #e0e0e0;
-  --border-subtle: rgba(0, 0, 0, 0.06);
+  --canvas: #f7f4ec;
+  --elevated: #f0ebe0;
+  --elevated-deep: #e8e2d4;
+  --surface: #f7f4ec;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-subtle: rgba(0, 0, 0, 0.05);
   --accent: #c96442;
   --accent-hover: #b5573a;
   --accent-muted: rgba(201, 100, 66, 0.10);
-  --text: #1a1a1a;
-  --text-secondary: #333333;
-  --muted: #6b6b6b;
-  --muted-soft: #999999;
+  --text: #1a1714;
+  --text-secondary: #2e2a24;
+  --muted: #6b6458;
+  --muted-soft: #9a9285;
   --danger: #b42318;
   --hover-overlay: rgba(0, 0, 0, 0.04);
-  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
-  --scrollbar-color: rgba(0, 0, 0, 0.20);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+  --scrollbar-color: rgba(0, 0, 0, 0.18);
   --selection-bg: rgba(201, 100, 66, 0.15);
   --focus-ring: rgba(201, 100, 66, 0.35);
-  --code-bg: #f6f6f6;
+  --code-bg: #efe9dc;
   --error-border: rgba(239, 68, 68, 0.25);
   --error-bg: rgba(254, 242, 242, 0.9);
   --overlay: rgba(0, 0, 0, 0.3);
@@ -104,6 +104,26 @@ body {
     Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Subtle material grain (leather / fine paper) ─── */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 180px 180px;
+  mix-blend-mode: overlay;
+}
+
+:root[data-theme="light"] body::before {
+  opacity: 0.07;
+  mix-blend-mode: multiply;
+  background-size: 160px 160px;
 }
 
 /* Optical sizing for reading serif when available */
@@ -216,10 +236,29 @@ body {
   background: var(--selection-bg);
 }
 
-/* Focus rings */
+/* Focus — remove hard rectangle on text inputs; keep soft ring on interactive controls */
 :focus-visible {
+  outline: none;
+}
+
+/* Soft focus indicator only for buttons / links / explicit interactive elements */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
+}
+
+/* Explicitly kill any residual outline / ring on the main composer and textareas */
+textarea:focus,
+textarea:focus-visible,
+.ComposerPrimitive-Input:focus,
+.ComposerPrimitive-Input:focus-visible,
+[data-composer] textarea:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
 }
 
 /* assistant-ui streaming caret */
