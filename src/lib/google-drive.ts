@@ -71,22 +71,36 @@ const SCOPES = "https://www.googleapis.com/auth/drive.readonly";
 
 let gapiLoaded = false;
 let gisLoaded = false;
+let gapiLoading: Promise<void> | null = null;
 let tokenClient: {
   requestAccessToken: (opts: { prompt?: string }) => void;
 } | null = null;
 let currentClientId: string | null = null;
 let pendingTokenCallback: ((token: string) => void) | null = null;
+let pendingTokenError: ((error: string) => void) | null = null;
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) {
-      resolve();
+    const existing = document.querySelector(
+      `script[src="${src}"]`,
+    ) as HTMLScriptElement | null;
+    if (existing) {
+      if (existing.dataset.loaded === "true") {
+        resolve();
+      } else {
+        existing.addEventListener("load", () => resolve(), { once: true });
+        existing.addEventListener("error", () =>
+          reject(new Error(`Failed to load ${src}`)), { once: true });
+      }
       return;
     }
     const s = document.createElement("script");
     s.src = src;
     s.async = true;
-    s.onload = () => resolve();
+    s.onload = () => {
+      s.dataset.loaded = "true";
+      resolve();
+    };
     s.onerror = () => reject(new Error(`Failed to load ${src}`));
     document.head.appendChild(s);
   });
@@ -97,19 +111,26 @@ export async function loadGoogleApis(): Promise<void> {
     return;
   }
 
-  await Promise.all([
-    loadScript("https://apis.google.com/js/api.js"),
-    loadScript("https://accounts.google.com/gsi/client"),
-  ]);
+  // Avoid double-loading if already in progress
+  if (gapiLoading) return gapiLoading;
 
-  await new Promise<void>((resolve) => {
-    window.gapi.load("client:picker", () => {
-      gapiLoaded = true;
-      resolve();
+  gapiLoading = (async () => {
+    await Promise.all([
+      loadScript("https://apis.google.com/js/api.js"),
+      loadScript("https://accounts.google.com/gsi/client"),
+    ]);
+
+    await new Promise<void>((resolve) => {
+      window.gapi.load("client:picker", () => {
+        gapiLoaded = true;
+        resolve();
+      });
     });
-  });
 
-  gisLoaded = true;
+    gisLoaded = true;
+  })();
+
+  return gapiLoading;
 }
 
 function ensureTokenClient(clientId: string) {
@@ -121,12 +142,15 @@ function ensureTokenClient(clientId: string) {
     scope: SCOPES,
     callback: (resp) => {
       const cb = pendingTokenCallback;
+      const errCb = pendingTokenError;
       pendingTokenCallback = null;
+      pendingTokenError = null;
       if (resp.error || !resp.access_token) {
         console.error("[google-drive] token error", resp);
+        errCb?.(resp.error || "Failed to get access token");
         return;
       }
-      if (cb) cb(resp.access_token);
+      cb?.(resp.access_token);
     },
   });
 }
@@ -135,11 +159,13 @@ function ensureTokenClient(clientId: string) {
 export function requestAccessToken(
   clientId: string,
   onToken: (token: string) => void,
+  onError?: (error: string) => void,
   forceConsent = false,
 ): void {
   ensureTokenClient(clientId);
   if (!tokenClient) throw new Error("Token client not initialized");
   pendingTokenCallback = onToken;
+  pendingTokenError = onError || null;
   tokenClient.requestAccessToken({
     prompt: forceConsent ? "consent" : "",
   });
@@ -192,12 +218,20 @@ export function openPicker(
 async function fetchWithAuth(
   url: string,
   accessToken: string,
+  timeoutMs = 20_000,
 ): Promise<Response> {
-  return fetch(url, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function explain403(name: string): string {
@@ -394,8 +428,12 @@ export async function downloadDriveFile(
     };
   } catch (err) {
     console.error("[google-drive] download error", err);
-    const message =
-      err instanceof Error ? err.message : "Unknown download error";
+    const isAbort = err instanceof DOMException && err.name === "AbortError";
+    const message = isAbort
+      ? `Download of "${name}" timed out. Try a smaller file or use the paperclip.`
+      : err instanceof Error
+        ? err.message
+        : "Unknown download error";
     return {
       attachment: {
         id,

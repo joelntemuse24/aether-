@@ -105,8 +105,23 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = await req.json();
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid request body." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     const messages = body.messages as UIMessage[];
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "No messages provided." }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
     const system =
       typeof body.system === "string" && body.system.length <= 8000
         ? body.system
@@ -116,7 +131,9 @@ export async function POST(req: Request) {
       (typeof body.model === "string" && body.model) || headerModel,
     );
 
-    const attachments = (body.attachments || []) as IncomingAttachment[];
+    const attachments = Array.isArray(body.attachments)
+      ? (body.attachments as IncomingAttachment[])
+      : [];
     const textPrefix =
       typeof body.textPrefix === "string" ? body.textPrefix : undefined;
 

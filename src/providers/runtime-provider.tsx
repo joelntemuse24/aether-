@@ -17,7 +17,7 @@ import { buildTextAttachmentPrefix } from "@/lib/attachments";
 
 function useChatThreadRuntime() {
   const { chatHeaders, activeModel, hasKey } = useSettings();
-  const { attachments } = useAttachments();
+  const { attachments, clearAttachments } = useAttachments();
 
   const transport = useMemo(
     () =>
@@ -25,8 +25,9 @@ function useChatThreadRuntime() {
         api: "/api/chat",
         headers: () => chatHeaders,
         body: () => {
-          const imageAttachments = attachments
-            .filter((a) => a.kind === "image" && a.dataUrl)
+          // Send all attachments that have usable content
+          const fileAttachments = attachments
+            .filter((a) => (a.kind === "image" || (a.kind === "file" && a.dataUrl)) && a.dataUrl)
             .map((a) => ({
               name: a.name,
               mime: a.mime,
@@ -37,7 +38,7 @@ function useChatThreadRuntime() {
 
           return {
             model: activeModel,
-            attachments: imageAttachments,
+            attachments: fileAttachments,
             textPrefix: textPrefix || undefined,
           };
         },
@@ -49,6 +50,10 @@ function useChatThreadRuntime() {
     transport,
     onError: (error) => {
       console.error("[chat]", error);
+    },
+    onFinish: () => {
+      // Clear attachments after the message is successfully sent
+      clearAttachments();
     },
   });
 

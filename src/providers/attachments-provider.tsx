@@ -68,6 +68,13 @@ export function AttachmentsProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("aether:add-attachments", handler);
   }, [addAttachments]);
 
+  // Clear attachments when the active thread changes (custom event from runtime)
+  useEffect(() => {
+    const handler = () => setAttachments([]);
+    window.addEventListener("aether:thread-switched", handler);
+    return () => window.removeEventListener("aether:thread-switched", handler);
+  }, []);
+
   const value = useMemo(
     () => ({
       attachments,

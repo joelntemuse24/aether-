@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useRef, useState, type FC } from "react";
+import { useCallback, useEffect, useRef, useState, type FC } from "react";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { ModelPicker } from "@/components/model-picker";
@@ -192,10 +192,20 @@ function AttachmentChips() {
 
 const Composer: FC = () => {
   const { hasKey, setOpenSettings, settings } = useSettings();
-  const { addFiles, clearAttachments } = useAttachments();
+  const { addFiles, addAttachments } = useAttachments();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [driveLoading, setDriveLoading] = useState(false);
+  const isRunning = useAuiState((s) => s.thread.isRunning);
+
+  // Reset transient state when thread stops running (after send/stop/error)
+  useEffect(() => {
+    if (!isRunning) {
+      // Small delay to let onFinish clear attachments first
+      const t = setTimeout(() => setErrors([]), 100);
+      return () => clearTimeout(t);
+    }
+  }, [isRunning]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -229,65 +239,77 @@ const Composer: FC = () => {
     try {
       await loadGoogleApis();
 
-      requestAccessToken(clientId, (accessToken) => {
-        openPicker(
-          accessToken,
-          async (docs) => {
-            try {
-              if (!docs.length) {
-                finish();
-                return;
-              }
+      // Token timeout — if Google's popup doesn't resolve in 30s, bail
+      const tokenTimeout = window.setTimeout(() => {
+        finish();
+        setErrors(["Google sign-in timed out. Please try again."]);
+      }, 30_000);
 
-              const newAttachments: PendingAttachment[] = [];
-              const downloadErrors: string[] = [];
-
-              for (const doc of docs) {
-                const result = await downloadDriveFile(
-                  doc.id,
-                  doc.name,
-                  doc.mimeType,
-                  accessToken,
-                );
-                if (result.attachment) {
-                  newAttachments.push(result.attachment);
+      requestAccessToken(
+        clientId,
+        (accessToken) => {
+          window.clearTimeout(tokenTimeout);
+          openPicker(
+            accessToken,
+            async (docs) => {
+              try {
+                if (!docs.length) {
+                  finish();
+                  return;
                 }
-                if (result.error) {
-                  downloadErrors.push(result.error);
+
+                const newAttachments: PendingAttachment[] = [];
+                const downloadErrors: string[] = [];
+
+                for (const doc of docs) {
+                  const result = await downloadDriveFile(
+                    doc.id,
+                    doc.name,
+                    doc.mimeType,
+                    accessToken,
+                  );
+                  if (result.attachment) {
+                    newAttachments.push(result.attachment);
+                  }
+                  if (result.error) {
+                    downloadErrors.push(result.error);
+                  }
                 }
-              }
 
-              if (newAttachments.length > 0) {
-                window.dispatchEvent(
-                  new CustomEvent("aether:add-attachments", {
-                    detail: newAttachments,
-                  }),
-                );
-              }
+                if (newAttachments.length > 0) {
+                  addAttachments(newAttachments);
+                }
 
-              if (downloadErrors.length > 0) {
-                setErrors(downloadErrors);
-              } else if (newAttachments.length === 0) {
+                if (downloadErrors.length > 0) {
+                  setErrors(downloadErrors);
+                } else if (newAttachments.length === 0) {
+                  setErrors([
+                    "Could not download the selected file(s). Try downloading them manually and using the paperclip.",
+                  ]);
+                }
+              } catch (err) {
+                console.error("[drive] download", err);
                 setErrors([
-                  "Could not download the selected file(s). Check the browser console for details.",
+                  err instanceof Error
+                    ? err.message
+                    : "Failed to download files from Drive.",
                 ]);
+              } finally {
+                finish();
               }
-            } catch (err) {
-              console.error("[drive] download", err);
-              setErrors([
-                err instanceof Error
-                  ? err.message
-                  : "Failed to download files from Drive.",
-              ]);
-            } finally {
+            },
+            () => {
+              window.clearTimeout(tokenTimeout);
               finish();
-            }
-          },
-          () => {
-            finish();
-          },
-        );
-      });
+            },
+          );
+        },
+        (errorMsg) => {
+          window.clearTimeout(tokenTimeout);
+          finish();
+          setErrors([`Google sign-in failed: ${errorMsg}`]);
+        },
+      );
     } catch (err) {
       console.error("[drive]", err);
       setErrors([
@@ -295,7 +317,7 @@ const Composer: FC = () => {
       ]);
       finish();
     }
-  }, [settings.googleClientId, setOpenSettings, driveLoading]);
+  }, [settings.googleClientId, setOpenSettings, driveLoading, addAttachments]);
 
   return (
     <ComposerPrimitive.Root className="relative flex w-full flex-col border-0 bg-transparent">
@@ -332,10 +354,6 @@ const Composer: FC = () => {
           onAttachClick={() => fileInputRef.current?.click()}
           onDriveClick={handleDriveClick}
           driveLoading={driveLoading}
-          onBeforeSend={() => {
-            setTimeout(() => clearAttachments(), 400);
-            setErrors([]);
-          }}
         />
       </div>
 
@@ -355,8 +373,7 @@ const ComposerAction: FC<{
   onAttachClick: () => void;
   onDriveClick: () => void;
   driveLoading: boolean;
-  onBeforeSend: () => void;
-}> = ({ onAttachClick, onDriveClick, driveLoading, onBeforeSend }) => {
+}> = ({ onAttachClick, onDriveClick, driveLoading }) => {
   return (
     <div className="flex items-center justify-between gap-2 px-0.5">
       <div className="flex items-center gap-0.5">
@@ -385,7 +402,6 @@ const ComposerAction: FC<{
           <ComposerPrimitive.Send asChild>
             <button
               type="button"
-              onClick={onBeforeSend}
               className="flex size-8 items-center justify-center rounded-full bg-[var(--accent)] text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
               aria-label="Send message"
             >
