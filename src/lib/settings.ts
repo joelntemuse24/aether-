@@ -1,5 +1,5 @@
 import type { ProviderId } from "./models";
-import { DEFAULT_MODEL } from "./models";
+import { DEFAULT_MODEL, providerSupportsTools } from "./models";
 
 const STORAGE_KEY = "aether:settings:v1";
 
@@ -23,6 +23,8 @@ export type AppSettings = {
    * Drive uses server OAuth (GOOGLE_CLIENT_ID). Kept for localStorage compat.
    */
   googleClientId: string;
+  /** Enable tool calling (Python, web search, artifacts). Degrades to text-only when off. */
+  enableTools: boolean;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -37,6 +39,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   customModel: "",
   useCustomModel: false,
   googleClientId: "",
+  enableTools: true,
 };
 
 export function loadSettings(): AppSettings {
@@ -103,7 +106,13 @@ export function buildChatHeaders(settings: AppSettings): Record<string, string> 
     "x-provider": settings.provider,
     "x-base-url": resolveBaseURL(settings),
     "x-model": resolveModel(settings),
+    "x-tools": toolsEnabled(settings) ? "1" : "0",
   };
+}
+
+/** Whether tool calling should be active for the current settings/provider. */
+export function toolsEnabled(settings: AppSettings): boolean {
+  return settings.enableTools && providerSupportsTools(settings.provider);
 }
 
 export function hasValidKey(settings: AppSettings): boolean {

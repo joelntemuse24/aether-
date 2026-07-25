@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState, type FC } from "react";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
+import { ToolCallPart, type ToolPartLike } from "@/components/assistant-ui/tool-ui";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { ModelPicker } from "@/components/model-picker";
 import { Button } from "@/components/ui/button";
@@ -356,6 +357,8 @@ const AssistantMessage: FC = () => {
         <MessagePrimitive.Parts>
           {({ part }) => {
             if (part.type === "text") return <MarkdownText />;
+            if (part.type === "tool-call")
+              return <ToolCallPart part={part as unknown as ToolPartLike} />;
             return null;
           }}
         </MessagePrimitive.Parts>

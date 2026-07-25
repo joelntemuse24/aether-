@@ -9,11 +9,22 @@ import {
   type ReactNode,
 } from "react";
 
+import type { ArtifactKind } from "@/lib/tools";
+
 export type Artifact = {
   id: string;
   title: string;
-  language: string;
+  /** Artifact type. Defaults to "code" when omitted (back-compat). */
+  kind?: ArtifactKind;
+  /** Programming language for code artifacts. */
+  language?: string;
+  /**
+   * Primary content: source code, markdown, JSON text, SVG markup, or an
+   * image data/URL depending on `kind`.
+   */
   code: string;
+  /** MIME type for image artifacts. */
+  mime?: string;
 };
 
 type ArtifactContextValue = {
