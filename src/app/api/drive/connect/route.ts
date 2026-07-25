@@ -17,7 +17,7 @@ export async function GET(req: Request) {
   if (!session?.user?.id && !session?.user?.email) {
     const origin = new URL(req.url).origin;
     return NextResponse.redirect(
-      `${origin}/auth/signin?callbackUrl=${encodeURIComponent("/settings?connect=drive")}`,
+      `${origin}/auth/signin?callbackUrl=${encodeURIComponent("/?connect=drive")}`,
     );
   }
 

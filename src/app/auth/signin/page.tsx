@@ -30,11 +30,12 @@ function SignInForm() {
   );
 
   useEffect(() => {
-    void fetch("/api/auth/providers")
+    void fetch("/api/auth/configured")
       .then((r) => r.json())
       .then((data: ProviderFlags) => setProviders(data))
       .catch(() =>
-        setProviders({ google: true, github: true, apple: false, email: true }),
+        // Don't invent OAuth buttons if the probe failed — email still works locally.
+        setProviders({ google: false, github: false, apple: false, email: true }),
       );
   }, []);
 
@@ -59,12 +60,16 @@ function SignInForm() {
       const res = await fetch("/api/auth/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
+        body: JSON.stringify({
+          email: email.trim(),
+          callbackUrl,
+        }),
       });
       const data = (await res.json()) as {
         error?: string;
         ok?: boolean;
         devLink?: string;
+        message?: string;
       };
       if (!res.ok) {
         setError(data.error || "Could not send magic link.");
@@ -110,7 +115,9 @@ function SignInForm() {
           {emailSent ? (
             <div className="space-y-3 text-center">
               <p className="text-sm text-[var(--text)]">
-                Check your email for a sign-in link.
+                {devLink
+                  ? "Local harness: open the magic link below to finish sign-in."
+                  : "Check your email for a sign-in link."}
               </p>
               <p className="text-xs text-[var(--muted)]">
                 Sent to <span className="text-[var(--text)]">{email}</span>
@@ -120,7 +127,7 @@ function SignInForm() {
                   href={devLink}
                   className="block break-all rounded-lg border border-[var(--border)] bg-[var(--elevated)] px-3 py-2 text-left text-xs text-[var(--accent)] hover:underline"
                 >
-                  Dev link: {devLink}
+                  Continue with magic link
                 </a>
               )}
               <button

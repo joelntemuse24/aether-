@@ -63,8 +63,17 @@ export function DriveProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("drive_connected") === "1" || params.get("drive_error")) {
+    const connected = params.get("drive_connected") === "1";
+    const driveError = params.get("drive_error");
+    if (connected || driveError) {
       void refresh();
+      if (driveError) {
+        window.dispatchEvent(
+          new CustomEvent("aether:drive-error", {
+            detail: decodeURIComponent(driveError),
+          }),
+        );
+      }
       params.delete("drive_connected");
       params.delete("drive_error");
       const next = params.toString();

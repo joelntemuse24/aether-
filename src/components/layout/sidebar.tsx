@@ -37,6 +37,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { data: session, status } = useSession();
   const user = session?.user;
   const isAuthenticated = status === "authenticated" && !!user;
+  const isLoadingSession = status === "loading";
 
   if (collapsed) {
     return (
@@ -61,14 +62,36 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <PlusIcon className="size-4" />
           </button>
         </ThreadListPrimitive.New>
-        {isAuthenticated && user?.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={user.image}
-            alt=""
-            className="mb-2 size-7 rounded-full object-cover"
-            title={user.email || user.name || "Account"}
-          />
+        {isAuthenticated ? (
+          <button
+            type="button"
+            onClick={() => void signOut({ callbackUrl: "/" })}
+            className="mb-2 flex size-8 items-center justify-center overflow-hidden rounded-full text-[var(--muted)] transition-colors hover:ring-2 hover:ring-[var(--border)]"
+            aria-label="Sign out"
+            title={`Sign out${user?.email ? ` (${user.email})` : ""}`}
+          >
+            {user?.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={user.image}
+                alt=""
+                className="size-7 rounded-full object-cover"
+              />
+            ) : (
+              <span className="flex size-7 items-center justify-center rounded-full bg-[var(--elevated-deep)] text-[11px] font-medium text-[var(--muted)]">
+                {(user?.email || user?.name || "?")[0]?.toUpperCase()}
+              </span>
+            )}
+          </button>
+        ) : !isLoadingSession ? (
+          <Link
+            href="/auth/signin"
+            className="mb-2 flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+            aria-label="Sign in"
+            title="Sign in"
+          >
+            <LogInIcon className="size-4" />
+          </Link>
         ) : null}
         <button
           type="button"
@@ -144,7 +167,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       <div className="border-t border-[var(--border)] p-3">
-        {isAuthenticated ? (
+        {isLoadingSession ? (
+          <div className="mb-2 h-10 animate-pulse rounded-md bg-[var(--hover-overlay)]" />
+        ) : isAuthenticated ? (
           <div className="mb-2 flex items-center gap-2.5 rounded-md px-2 py-1.5">
             {user?.image ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -184,7 +209,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             className="mb-2 flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
           >
             <LogInIcon className="size-3.5 shrink-0" />
-            <span className="text-[12px]">Sign in</span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12px] text-[var(--text)]">Sign in</div>
+              <Label>Drive · account</Label>
+            </div>
           </Link>
         )}
 
@@ -227,7 +255,7 @@ const ThreadListItem: FC = () => {
       <ThreadListItemPrimitive.Delete asChild>
         <button
           type="button"
-          className="me-1 flex size-6 shrink-0 items-center justify-center rounded text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--hover-overlay)] group-hover:opacity-100 group-data-[active]:opacity-100"
+          className="me-1 flex size-6 shrink-0 items-center justify-center rounded text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--hover-overlay)] group-hover:opacity-100 group-data-[active]:opacity-100 max-md:opacity-100"
           aria-label="Delete conversation"
           title="Delete"
         >

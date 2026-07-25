@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 /**
  * Returns which OAuth / email providers are configured on the server.
  * Used by the sign-in page to hide unavailable buttons.
+ *
+ * NOTE: Do NOT put this at /api/auth/providers — that path is reserved by
+ * Auth.js (NextAuth) for its own provider catalog used by client signIn().
  */
 export async function GET() {
   const google = Boolean(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import Link from "next/link";
 import {
   XIcon,
@@ -27,6 +27,8 @@ export function SettingsDialog() {
     openSettings,
     setOpenSettings,
     hasKey,
+    focusConnectedAccounts,
+    clearFocusConnectedAccounts,
   } = useSettings();
   const { data: session, status } = useSession();
   const {
@@ -39,11 +41,24 @@ export function SettingsDialog() {
     refresh,
   } = useDrive();
   const titleId = useId();
+  const connectedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!openSettings) return;
     void refresh();
   }, [openSettings, refresh]);
+
+  useEffect(() => {
+    if (!openSettings || !focusConnectedAccounts) return;
+    const el = connectedRef.current;
+    if (el) {
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    }
+    const t = window.setTimeout(() => clearFocusConnectedAccounts(), 2400);
+    return () => window.clearTimeout(t);
+  }, [openSettings, focusConnectedAccounts, clearFocusConnectedAccounts]);
 
   useEffect(() => {
     if (!openSettings) return;
@@ -268,7 +283,14 @@ export function SettingsDialog() {
           </div>
 
           {/* Connected accounts */}
-          <div className="space-y-3 border-t border-[var(--border)] pt-5">
+          <div
+            ref={connectedRef}
+            className={cn(
+              "space-y-3 border-t border-[var(--border)] pt-5 transition-[box-shadow,background-color] duration-500",
+              focusConnectedAccounts &&
+                "-mx-2 rounded-xl bg-[var(--accent-muted)] px-2 py-3 ring-1 ring-[var(--accent)]/25",
+            )}
+          >
             <div className="flex items-center gap-2">
               <LinkIcon className="size-4 text-[var(--muted)]" />
               <span className="text-sm font-medium text-[var(--text)]">
@@ -283,7 +305,7 @@ export function SettingsDialog() {
                   API key.
                 </p>
                 <Link
-                  href="/auth/signin"
+                  href="/auth/signin?callbackUrl=%2F%3Fconnect%3Ddrive"
                   onClick={() => setOpenSettings(false)}
                   className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] hover:underline"
                 >
@@ -306,8 +328,8 @@ export function SettingsDialog() {
                   ) : null}
                 </div>
                 <p className="text-xs leading-relaxed text-[var(--muted-soft)]">
-                  Optionally connect Drive with read-only access. A modern file
-                  browser appears in the composer once connected.
+                  Optionally connect Drive with read-only access. A file browser
+                  appears in the composer once connected.
                 </p>
                 {!googleConfigured && !driveConnected ? (
                   <p className="text-xs text-[var(--error-text)]">
@@ -338,16 +360,11 @@ export function SettingsDialog() {
         </div>
 
         <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
-          {hasKey && (
-            <Button variant="ghost" onClick={() => setOpenSettings(false)}>
-              Cancel
-            </Button>
-          )}
           <Button
             onClick={() => setOpenSettings(false)}
             disabled={!keyValue.trim()}
           >
-            Save
+            {hasKey ? "Done" : "Continue"}
           </Button>
         </div>
       </div>

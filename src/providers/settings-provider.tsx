@@ -33,6 +33,10 @@ type SettingsContextValue = {
   chatHeaders: Record<string, string>;
   openSettings: boolean;
   setOpenSettings: (open: boolean) => void;
+  /** When true, Settings should bring Connected accounts into view (e.g. ?connect=drive). */
+  focusConnectedAccounts: boolean;
+  clearFocusConnectedAccounts: () => void;
+  openConnectedAccounts: () => void;
 };
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -41,14 +45,40 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettingsState] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [hydrated, setHydrated] = useState(false);
   const [openSettings, setOpenSettings] = useState(false);
+  const [focusConnectedAccounts, setFocusConnectedAccounts] = useState(false);
 
   useEffect(() => {
     const loaded = loadSettings();
     setSettingsState(loaded);
     setHydrated(true);
-    if (!hasValidKey(loaded)) {
+
+    let openForConnect = false;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("connect") === "drive") {
+        openForConnect = true;
+        setFocusConnectedAccounts(true);
+        params.delete("connect");
+        const next = params.toString();
+        const url = next
+          ? `${window.location.pathname}?${next}`
+          : window.location.pathname;
+        window.history.replaceState({}, "", url);
+      }
+    }
+
+    if (openForConnect || !hasValidKey(loaded)) {
       setOpenSettings(true);
     }
+  }, []);
+
+  const clearFocusConnectedAccounts = useCallback(() => {
+    setFocusConnectedAccounts(false);
+  }, []);
+
+  const openConnectedAccounts = useCallback(() => {
+    setFocusConnectedAccounts(true);
+    setOpenSettings(true);
   }, []);
 
   const setSettings = useCallback((next: AppSettings) => {
@@ -90,6 +120,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       chatHeaders: buildChatHeaders(settings),
       openSettings,
       setOpenSettings,
+      focusConnectedAccounts,
+      clearFocusConnectedAccounts,
+      openConnectedAccounts,
     }),
     [
       settings,
@@ -98,6 +131,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setSettings,
       activeModel,
       openSettings,
+      focusConnectedAccounts,
+      clearFocusConnectedAccounts,
+      openConnectedAccounts,
     ],
   );
 

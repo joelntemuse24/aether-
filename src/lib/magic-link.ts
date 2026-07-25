@@ -1,15 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
+import { getAuthSecretKey } from "@/lib/auth-secret";
 
 const MAGIC_PURPOSE = "aether-email-magic";
 const MAGIC_TTL_SECONDS = 60 * 15; // 15 minutes
-
-function getSecret() {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret) {
-    throw new Error("AUTH_SECRET is not set");
-  }
-  return new TextEncoder().encode(secret);
-}
 
 export async function createMagicLinkToken(email: string): Promise<string> {
   const normalized = email.trim().toLowerCase();
@@ -17,14 +10,14 @@ export async function createMagicLinkToken(email: string): Promise<string> {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${MAGIC_TTL_SECONDS}s`)
-    .sign(getSecret());
+    .sign(getAuthSecretKey());
 }
 
 export async function verifyMagicLinkToken(
   token: string,
 ): Promise<{ email: string } | null> {
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    const { payload } = await jwtVerify(token, getAuthSecretKey());
     if (payload.purpose !== MAGIC_PURPOSE) return null;
     const email = typeof payload.email === "string" ? payload.email : null;
     if (!email) return null;

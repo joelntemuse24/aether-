@@ -1,9 +1,25 @@
 import { NextResponse } from "next/server";
 import { createMagicLinkToken } from "@/lib/magic-link";
 
+function sanitizeCallbackUrl(raw: unknown, origin: string): string {
+  if (typeof raw !== "string" || !raw.trim()) return "/";
+  const value = raw.trim();
+  // Only allow relative same-origin paths
+  if (value.startsWith("/") && !value.startsWith("//")) return value;
+  try {
+    const url = new URL(value);
+    if (url.origin === origin) {
+      return `${url.pathname}${url.search}${url.hash}`;
+    }
+  } catch {
+    // ignore
+  }
+  return "/";
+}
+
 export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as { email?: string };
+    const body = (await req.json()) as { email?: string; callbackUrl?: string };
     const email = body.email?.trim().toLowerCase();
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -13,9 +29,14 @@ export async function POST(req: Request) {
       );
     }
 
-    const token = await createMagicLinkToken(email);
     const origin = new URL(req.url).origin;
-    const verifyUrl = `${origin}/auth/verify?token=${encodeURIComponent(token)}`;
+    const callbackUrl = sanitizeCallbackUrl(body.callbackUrl, origin);
+    const token = await createMagicLinkToken(email);
+    const verifyUrl = new URL("/auth/verify", origin);
+    verifyUrl.searchParams.set("token", token);
+    if (callbackUrl !== "/") {
+      verifyUrl.searchParams.set("callbackUrl", callbackUrl);
+    }
 
     const resendKey = process.env.AUTH_RESEND_KEY || process.env.RESEND_API_KEY;
     const from =
@@ -39,7 +60,7 @@ export async function POST(req: Request) {
               <h2 style="font-weight: 500;">Sign in to Aether</h2>
               <p>Click the button below to sign in. This link expires in 15 minutes.</p>
               <p style="margin: 28px 0;">
-                <a href="${verifyUrl}"
+                <a href="${verifyUrl.toString()}"
                    style="background:#1a1714;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block;">
                   Continue to Aether
                 </a>
@@ -54,7 +75,10 @@ export async function POST(req: Request) {
         const errText = await res.text().catch(() => "");
         console.error("[auth/email] Resend failed", res.status, errText);
         return NextResponse.json(
-          { error: "Could not send email. Check AUTH_RESEND_KEY / AUTH_EMAIL_FROM." },
+          {
+            error:
+              "Could not send email. Check AUTH_RESEND_KEY / AUTH_EMAIL_FROM.",
+          },
           { status: 502 },
         );
       }
@@ -62,14 +86,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // Dev fallback when Resend is not configured — return the link
-    if (process.env.NODE_ENV !== "production") {
-      console.info("[auth/email] Dev magic link:", verifyUrl);
+    // Dev / harness fallback when Resend is not configured — return the link
+    const allowDevLink =
+      process.env.NODE_ENV !== "production" ||
+      process.env.AUTH_ALLOW_DEV_MAGIC_LINK === "1";
+
+    if (allowDevLink) {
+      const link = verifyUrl.toString();
+      console.info("[auth/email] Dev magic link:", link);
       return NextResponse.json({
         ok: true,
-        devLink: verifyUrl,
+        devLink: link,
         message:
-          "AUTH_RESEND_KEY not set — magic link returned for local development.",
+          "AUTH_RESEND_KEY not set — magic link returned for local / harness use.",
       });
     }
 
