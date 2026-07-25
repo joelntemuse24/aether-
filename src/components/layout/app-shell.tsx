@@ -2,10 +2,17 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Thread } from "@/components/assistant-ui/thread";
 import { Sidebar } from "@/components/layout/sidebar";
-import { ArtifactPanel } from "@/components/layout/artifact-panel";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
+
+// Lazy-loaded: pulls in highlight.js + marked only when an artifact is shown.
+const ArtifactPanel = dynamic(
+  () =>
+    import("@/components/layout/artifact-panel").then((m) => m.ArtifactPanel),
+  { ssr: false },
+);
 import { useArtifact } from "@/providers/artifact-provider";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";

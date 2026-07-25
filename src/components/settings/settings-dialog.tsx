@@ -211,6 +211,42 @@ export function SettingsDialog() {
             </p>
           </div>
 
+          {/* Tools */}
+          <div className="space-y-2 border-t border-[var(--border)] pt-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-[var(--text)]">
+                  Tools
+                </div>
+                <p className="text-xs leading-relaxed text-[var(--muted-soft)]">
+                  Let the model run Python, search the web, and build artifacts.
+                  Turn off for plain text-only chat.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settings.enableTools}
+                onClick={() =>
+                  updateSettings({ enableTools: !settings.enableTools })
+                }
+                className={cn(
+                  "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+                  settings.enableTools
+                    ? "bg-[var(--accent)]"
+                    : "bg-[var(--border)]",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-block size-4 transform rounded-full bg-white transition-transform",
+                    settings.enableTools ? "translate-x-6" : "translate-x-1",
+                  )}
+                />
+              </button>
+            </div>
+          </div>
+
           {/* Google Drive */}
           <div className="space-y-3 border-t border-[var(--border)] pt-5">
             <div className="flex items-center gap-2">

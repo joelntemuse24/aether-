@@ -125,6 +125,25 @@ export const PROVIDER_DEFAULTS: Record<
   },
 };
 
+/**
+ * Whether a provider is expected to support the OpenAI/Anthropic tool-calling
+ * API. When false, the chat route omits tools and the model degrades to a
+ * plain text assistant. Custom OpenAI-compatible endpoints are assumed to
+ * support tools (they can still degrade gracefully if a specific model ignores
+ * them — text responses continue to work).
+ */
+export function providerSupportsTools(provider: ProviderId): boolean {
+  switch (provider) {
+    case "openai":
+    case "anthropic":
+    case "openrouter":
+    case "custom":
+      return true;
+    default:
+      return false;
+  }
+}
+
 export function getModelLabel(modelId: string): string {
   if (!modelId) return "Select a model";
   // Check cached live models for the label
