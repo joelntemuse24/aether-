@@ -107,11 +107,19 @@ const SEARCH_TIMEOUT_MS = 10_000;
 async function runWebSearch(query: string): Promise<WebSearchOutput> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
+  // Some public APIs (e.g. Wikipedia) reject server requests lacking a UA.
+  const fetchInit: RequestInit = {
+    signal: controller.signal,
+    headers: {
+      "User-Agent": "AetherChat/1.0 (+https://github.com/; contact: dev)",
+      Accept: "application/json",
+    },
+  };
   try {
     const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(
       query,
     )}&format=json&no_html=1&skip_disambig=1`;
-    const ddgRes = await fetch(ddgUrl, { signal: controller.signal });
+    const ddgRes = await fetch(ddgUrl, fetchInit);
     if (ddgRes.ok) {
       const data = (await ddgRes.json()) as {
         AbstractText?: string;
@@ -147,7 +155,7 @@ async function runWebSearch(query: string): Promise<WebSearchOutput> {
     const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(
       query,
     )}&format=json&srlimit=5&origin=*`;
-    const wikiRes = await fetch(wikiUrl, { signal: controller.signal });
+    const wikiRes = await fetch(wikiUrl, fetchInit);
     if (wikiRes.ok) {
       const wiki = (await wikiRes.json()) as {
         query?: { search?: Array<{ title: string; snippet: string }> };
