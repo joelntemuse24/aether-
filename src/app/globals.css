@@ -62,6 +62,55 @@
   --hljs-theme: "highlight.js/styles/github.css";
 }
 
+/* ─── Accent themes (override accent tokens only) ─── */
+:root[data-accent="mono"] {
+  --accent: #e8e4d9;
+  --accent-hover: #f5f1e6;
+  --accent-muted: rgba(232, 228, 217, 0.12);
+  --selection-bg: rgba(232, 228, 217, 0.22);
+  --focus-ring: rgba(232, 228, 217, 0.45);
+}
+
+:root[data-theme="light"][data-accent="mono"] {
+  --accent: #1a1714;
+  --accent-hover: #000000;
+  --accent-muted: rgba(26, 23, 20, 0.08);
+  --selection-bg: rgba(26, 23, 20, 0.12);
+  --focus-ring: rgba(26, 23, 20, 0.35);
+}
+
+:root[data-accent="sky"] {
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-muted: rgba(59, 130, 246, 0.14);
+  --selection-bg: rgba(59, 130, 246, 0.28);
+  --focus-ring: rgba(59, 130, 246, 0.45);
+}
+
+:root[data-theme="light"][data-accent="sky"] {
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-muted: rgba(37, 99, 235, 0.10);
+  --selection-bg: rgba(37, 99, 235, 0.15);
+  --focus-ring: rgba(37, 99, 235, 0.35);
+}
+
+:root[data-accent="burgundy"] {
+  --accent: #7a1f3d;
+  --accent-hover: #9b2850;
+  --accent-muted: rgba(122, 31, 61, 0.16);
+  --selection-bg: rgba(122, 31, 61, 0.30);
+  --focus-ring: rgba(122, 31, 61, 0.45);
+}
+
+:root[data-theme="light"][data-accent="burgundy"] {
+  --accent: #8b2348;
+  --accent-hover: #6e1a38;
+  --accent-muted: rgba(139, 35, 72, 0.10);
+  --selection-bg: rgba(139, 35, 72, 0.14);
+  --focus-ring: rgba(139, 35, 72, 0.35);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
