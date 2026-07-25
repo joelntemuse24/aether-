@@ -103,13 +103,25 @@ function buildPreviewDoc(kind: ArtifactKind, lang: string, content: string): str
 
   // React / JSX / TSX / JS: transpile in-browser with Babel standalone (CDN).
   const cleaned = content
-    // Drop imports (React and friends come from CDN globals).
-    .replace(/^\s*import[^\n]*\n/gm, "")
-    // Normalize default exports to a global we can render.
-    .replace(/export\s+default\s+function\s+([A-Za-z0-9_]+)/, "function $1")
-    .replace(/export\s+default\s+class\s+([A-Za-z0-9_]+)/, "class $1")
+    // Drop imports (React and friends come from CDN globals below).
+    .replace(/^\s*import\s[^\n]*\n/gm, "")
+    // Drop CommonJS requires.
+    .replace(/^\s*(?:const|let|var)\s+.*=\s*require\([^)]*\);?\s*$/gm, "")
+    // Normalize default exports to a global we can render, keeping the
+    // declaration intact (assign the whole function/class/expression).
+    .replace(/export\s+default\s+function\b/, "window.__default = function")
+    .replace(/export\s+default\s+class\b/, "window.__default = class")
     .replace(/export\s+default\s+/, "window.__default = ")
-    .replace(/^\s*export\s+/gm, "");
+    // Drop remaining named export keywords (keep the declaration).
+    .replace(/^\s*export\s+(?=(const|let|var|function|class))/gm, "");
+
+  // Expose common hooks/APIs as locals so destructured-import code still runs.
+  const hookPrelude =
+    "const { useState, useEffect, useRef, useCallback, useMemo, useReducer, " +
+    "useContext, useLayoutEffect, createContext, Fragment, memo, forwardRef, " +
+    "createElement } = React;\n";
+  // Escape any nested </script> so the source survives inside a script tag.
+  const source = (hookPrelude + cleaned).replace(/<\/script>/gi, "<\\/script>");
 
   return `<!doctype html><html><head><meta charset="utf-8">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -121,25 +133,38 @@ function buildPreviewDoc(kind: ArtifactKind, lang: string, content: string): str
       .aether-err{color:#b00020;white-space:pre-wrap;font-family:monospace;font-size:12px}
     </style></head><body>
     <div id="root"></div>
-    <script type="text/babel" data-presets="react,typescript">
-      try {
-        ${cleaned}
-        const __C =
-          (typeof window.__default !== 'undefined' && window.__default) ||
-          (typeof App !== 'undefined' && App) ||
-          (typeof Component !== 'undefined' && Component) ||
-          null;
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        if (__C) {
-          root.render(React.createElement(__C));
-        } else {
+    <script type="text/plain" id="aether-src">${source}</script>
+    <script>
+      (function () {
+        function showErr(m) {
           document.getElementById('root').innerHTML =
-            '<div class="aether-err">No React component found. Define a component named App (or use export default).</div>';
+            '<div class="aether-err">' + m + '</div>';
         }
-      } catch (e) {
-        document.getElementById('root').innerHTML =
-          '<div class="aether-err">' + (e && e.message ? e.message : e) + '</div>';
-      }
+        try {
+          if (!window.Babel) return showErr('Babel failed to load from CDN.');
+          var src = document.getElementById('aether-src').textContent;
+          // Classic runtime => React.createElement (no injected ESM imports).
+          var out = Babel.transform(src, {
+            presets: [['react', { runtime: 'classic' }], 'typescript'],
+            filename: 'artifact.tsx',
+          }).code;
+          var factory = new Function('React', 'ReactDOM', out +
+            '\\n; return (typeof window.__default !== "undefined" && window.__default) ||' +
+            '(typeof App !== "undefined" && App) ||' +
+            '(typeof Component !== "undefined" && Component) || null;');
+          var __C = factory(React, ReactDOM);
+          var root = ReactDOM.createRoot(document.getElementById('root'));
+          if (typeof __C === 'function') {
+            root.render(React.createElement(__C));
+          } else if (__C && React.isValidElement(__C)) {
+            root.render(__C);
+          } else {
+            showErr('No React component found. Define a component named App (or use export default).');
+          }
+        } catch (e) {
+          showErr((e && e.message) ? e.message : String(e));
+        }
+      })();
     </script>
   </body></html>`;
 }
