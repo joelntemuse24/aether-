@@ -6,6 +6,7 @@ import Credentials from "next-auth/providers/credentials";
 import type { Provider } from "next-auth/providers";
 import { verifyMagicLinkToken } from "@/lib/magic-link";
 import { clearDriveCookie } from "@/lib/drive-session";
+import { getAuthSecretString } from "@/lib/auth-secret";
 
 const googleId = process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID;
 const googleSecret =
@@ -78,7 +79,7 @@ providers.push(
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers,
   // Placeholder allows `next build` without secrets; set AUTH_SECRET in deploy.
-  secret: process.env.AUTH_SECRET || "aether-dev-secret-change-me",
+  secret: getAuthSecretString(),
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60,

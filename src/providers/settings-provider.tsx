@@ -46,7 +46,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const loaded = loadSettings();
     setSettingsState(loaded);
     setHydrated(true);
-    if (!hasValidKey(loaded)) {
+
+    let openForConnect = false;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("connect") === "drive") {
+        openForConnect = true;
+        params.delete("connect");
+        const next = params.toString();
+        const url = next
+          ? `${window.location.pathname}?${next}`
+          : window.location.pathname;
+        window.history.replaceState({}, "", url);
+      }
+    }
+
+    if (openForConnect || !hasValidKey(loaded)) {
       setOpenSettings(true);
     }
   }, []);

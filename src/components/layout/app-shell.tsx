@@ -33,6 +33,21 @@ export function AppShell() {
     if (stored === "1") setSidebarCollapsed(true);
   }, []);
 
+  useEffect(() => {
+    const onDriveError = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      const message =
+        typeof detail === "string" && detail
+          ? `Google Drive: ${detail}`
+          : "Google Drive connection failed.";
+      setDriveErrors((prev) =>
+        prev.includes(message) ? prev : [...prev, message],
+      );
+    };
+    window.addEventListener("aether:drive-error", onDriveError);
+    return () => window.removeEventListener("aether:drive-error", onDriveError);
+  }, []);
+
   const toggleSidebar = () => {
     setSidebarCollapsed((v) => {
       const next = !v;

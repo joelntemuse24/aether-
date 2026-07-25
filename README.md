@@ -100,6 +100,7 @@ Optional sign-in via **Auth.js (NextAuth v5)**:
 
 - Google, GitHub, and (if configured) Apple OAuth
 - Email magic links via Resend (`AUTH_RESEND_KEY`)
+- Locally (or with `AUTH_ALLOW_DEV_MAGIC_LINK=1`), the magic link is returned in the UI when Resend is not configured
 
 The app still works without login (BYOK in Settings). Signing in unlocks **Connected accounts → Connect Google Drive** in Settings. Drive uses a custom file browser (Drive API v3) — not the legacy Google Picker.
 

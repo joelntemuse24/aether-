@@ -6,6 +6,7 @@
 
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { getAuthSecretKey } from "@/lib/auth-secret";
 
 export const DRIVE_COOKIE = "aether.drive";
 const DRIVE_PURPOSE = "aether-drive-tokens";
@@ -19,14 +20,6 @@ export type DriveTokenPayload = {
   email?: string;
 };
 
-function getSecret() {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret) {
-    throw new Error("AUTH_SECRET is not set");
-  }
-  return new TextEncoder().encode(secret);
-}
-
 export async function encryptDriveTokens(
   payload: DriveTokenPayload,
 ): Promise<string> {
@@ -34,14 +27,14 @@ export async function encryptDriveTokens(
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${DRIVE_COOKIE_MAX_AGE}s`)
-    .sign(getSecret());
+    .sign(getAuthSecretKey());
 }
 
 export async function decryptDriveTokens(
   token: string,
 ): Promise<DriveTokenPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    const { payload } = await jwtVerify(token, getAuthSecretKey());
     if (payload.purpose !== DRIVE_PURPOSE) return null;
     if (
       typeof payload.userId !== "string" ||

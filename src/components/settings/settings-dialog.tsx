@@ -283,7 +283,7 @@ export function SettingsDialog() {
                   API key.
                 </p>
                 <Link
-                  href="/auth/signin"
+                  href="/auth/signin?callbackUrl=%2F%3Fconnect%3Ddrive"
                   onClick={() => setOpenSettings(false)}
                   className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] hover:underline"
                 >
