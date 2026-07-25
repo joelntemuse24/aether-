@@ -1,13 +1,22 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
-import { XIcon, ExternalLinkIcon, KeyRoundIcon, CheckIcon } from "lucide-react";
+import { useEffect, useId } from "react";
+import Link from "next/link";
+import {
+  XIcon,
+  ExternalLinkIcon,
+  KeyRoundIcon,
+  CheckIcon,
+  Loader2Icon,
+  LinkIcon,
+} from "lucide-react";
 import { useSettings } from "@/providers/settings-provider";
+import { useDrive } from "@/providers/drive-provider";
+import { useSession } from "@/providers/session-provider";
 import { PROVIDER_DEFAULTS, type ProviderId } from "@/lib/models";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { onDriveConnectionChange, clearTokenCache, type DriveConnectionState } from "@/lib/google-drive";
 
 const PROVIDERS: ProviderId[] = ["openrouter", "openai", "anthropic", "custom"];
 
@@ -19,12 +28,22 @@ export function SettingsDialog() {
     setOpenSettings,
     hasKey,
   } = useSettings();
+  const { data: session, status } = useSession();
+  const {
+    connected: driveConnected,
+    email: driveEmail,
+    googleConfigured,
+    loading: driveLoading,
+    connect,
+    disconnect,
+    refresh,
+  } = useDrive();
   const titleId = useId();
-  const [driveState, setDriveState] = useState<DriveConnectionState>({ connected: false });
 
   useEffect(() => {
-    return onDriveConnectionChange(setDriveState);
-  }, []);
+    if (!openSettings) return;
+    void refresh();
+  }, [openSettings, refresh]);
 
   useEffect(() => {
     if (!openSettings) return;
@@ -49,6 +68,7 @@ export function SettingsDialog() {
           : "customKey";
 
   const keyValue = settings[keyField];
+  const isAuthenticated = status === "authenticated" && !!session?.user;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -211,59 +231,72 @@ export function SettingsDialog() {
             </p>
           </div>
 
-          {/* Google Drive */}
+          {/* Connected accounts */}
           <div className="space-y-3 border-t border-[var(--border)] pt-5">
             <div className="flex items-center gap-2">
-              <svg className="size-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M9.3 2L14.7 2L22 15.5L19.3 20.5L12.7 20.5L9.3 2Z" fill="#0F9D58"/>
-                <path d="M9.3 2L2 15.5L4.7 20.5L12 7L9.3 2Z" fill="#4285F4"/>
-                <path d="M14.7 2L9.3 2L2 15.5L7.3 15.5L14.7 2Z" fill="#0F9D58"/>
-                <path d="M12 7L7.3 15.5L12 15.5L16.7 15.5L12 7Z" fill="#FFC107"/>
-                <path d="M12 7L16.7 15.5L22 15.5L12 7Z" fill="#FFC107"/>
-              </svg>
-              <span className="text-sm font-medium text-[var(--text)]">Google Drive</span>
-              {settings.googleClientId && driveState.connected && (
-                <span className="ml-auto flex items-center gap-1 rounded-full bg-[var(--accent)]/10 px-2 py-0.5 text-xs text-[var(--accent)]">
-                  <CheckIcon className="size-3" />
-                  Connected{driveState.email ? ` · ${driveState.email}` : ""}
-                </span>
-              )}
+              <LinkIcon className="size-4 text-[var(--muted)]" />
+              <span className="text-sm font-medium text-[var(--text)]">
+                Connected accounts
+              </span>
             </div>
 
-            <input
-              id="google-client-id"
-              type="text"
-              spellCheck={false}
-              placeholder="123456789-xxxx.apps.googleusercontent.com"
-              value={settings.googleClientId}
-              onChange={(e) =>
-                updateSettings({ googleClientId: e.target.value.trim() })
-              }
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)] focus:border-[var(--accent)]/40"
-            />
-            <p className="text-xs leading-relaxed text-[var(--muted-soft)]">
-              Optional. Create an OAuth 2.0 Client ID (Web application) in{" "}
-              <a
-                href="https://console.cloud.google.com/apis/credentials"
-                target="_blank"
-                rel="noreferrer"
-                className="text-[var(--accent)] hover:underline"
-              >
-                Google Cloud Console
-              </a>
-              , enable the <strong>Google Picker API</strong> and{" "}
-              <strong>Google Drive API</strong>, then paste the Client ID here.
-              Add your site origin (e.g. https://aether-seven-theta.vercel.app)
-              under Authorized JavaScript origins.
-            </p>
-            {settings.googleClientId && driveState.connected && (
-              <button
-                type="button"
-                onClick={() => clearTokenCache()}
-                className="text-xs text-[var(--muted)] hover:text-[var(--text)] hover:underline"
-              >
-                Disconnect Google Drive
-              </button>
+            {!isAuthenticated ? (
+              <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                <p className="text-xs leading-relaxed text-[var(--muted)]">
+                  Sign in to connect Google Drive. Chat still works with just an
+                  API key.
+                </p>
+                <Link
+                  href="/auth/signin"
+                  onClick={() => setOpenSettings(false)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] hover:underline"
+                >
+                  Sign in
+                  <ExternalLinkIcon className="size-3" />
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                <div className="flex items-center gap-2">
+                  <GoogleDriveIcon className="size-4" />
+                  <span className="text-sm text-[var(--text)]">Google Drive</span>
+                  {driveLoading ? (
+                    <Loader2Icon className="ml-auto size-3.5 animate-spin text-[var(--muted)]" />
+                  ) : driveConnected ? (
+                    <span className="ml-auto flex items-center gap-1 rounded-full bg-[var(--accent)]/10 px-2 py-0.5 text-xs text-[var(--accent)]">
+                      <CheckIcon className="size-3" />
+                      Connected{driveEmail ? ` · ${driveEmail}` : ""}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="text-xs leading-relaxed text-[var(--muted-soft)]">
+                  Optionally connect Drive with read-only access. A modern file
+                  browser appears in the composer once connected.
+                </p>
+                {!googleConfigured && !driveConnected ? (
+                  <p className="text-xs text-[var(--error-text)]">
+                    Google OAuth is not configured on the server. Set
+                    GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.
+                  </p>
+                ) : driveConnected ? (
+                  <button
+                    type="button"
+                    onClick={() => void disconnect()}
+                    className="text-xs text-[var(--muted)] hover:text-[var(--text)] hover:underline"
+                  >
+                    Disconnect Google Drive
+                  </button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="mt-1"
+                    onClick={() => connect()}
+                  >
+                    Connect Google Drive
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -283,5 +316,22 @@ export function SettingsDialog() {
         </div>
       </div>
     </div>
+  );
+}
+
+function GoogleDriveIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M9.3 2L14.7 2L22 15.5L19.3 20.5L12.7 20.5L9.3 2Z" fill="#0F9D58" />
+      <path d="M9.3 2L2 15.5L4.7 20.5L12 7L9.3 2Z" fill="#4285F4" />
+      <path d="M14.7 2L9.3 2L2 15.5L7.3 15.5L14.7 2Z" fill="#0F9D58" />
+      <path d="M12 7L7.3 15.5L12 15.5L16.7 15.5L12 7Z" fill="#FFC107" />
+      <path d="M12 7L16.7 15.5L22 15.5L12 7Z" fill="#FFC107" />
+    </svg>
   );
 }

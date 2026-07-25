@@ -94,9 +94,22 @@ npm run start    # serve production build
 npm run lint     # eslint
 ```
 
+## Authentication & Google Drive
+
+Optional sign-in via **Auth.js (NextAuth v5)**:
+
+- Google, GitHub, and (if configured) Apple OAuth
+- Email magic links via Resend (`AUTH_RESEND_KEY`)
+
+The app still works without login (BYOK in Settings). Signing in unlocks **Connected accounts → Connect Google Drive** in Settings. Drive uses a custom file browser (Drive API v3) — not the legacy Google Picker.
+
+See `.env.example` for `AUTH_SECRET`, OAuth client IDs/secrets, and Resend.
+
+**Apple Sign In** requires an Apple Developer Program membership and is only enabled when `APPLE_ID` + `APPLE_SECRET` are set.
+
 ## Privacy
 
-API keys never leave the browser except as request headers to this app’s `/api/chat` route, which forwards them to the provider you chose. Conversation history is stored only in `localStorage` under the `aether:` prefix.
+API keys never leave the browser except as request headers to this app’s `/api/chat` route, which forwards them to the provider you chose. Conversation history is stored only in `localStorage` under the `aether:` prefix. Auth sessions use httpOnly cookies; Drive tokens are stored in a separate encrypted httpOnly cookie.
 
 ## License
 

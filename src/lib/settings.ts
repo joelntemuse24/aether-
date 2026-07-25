@@ -18,7 +18,10 @@ export type AppSettings = {
   /** Optional custom model string when not picking from list */
   customModel: string;
   useCustomModel: boolean;
-  /** Google OAuth Client ID for Drive Picker (optional) */
+  /**
+   * @deprecated Client-side Google Client ID is no longer used.
+   * Drive uses server OAuth (GOOGLE_CLIENT_ID). Kept for localStorage compat.
+   */
   googleClientId: string;
 };
 
