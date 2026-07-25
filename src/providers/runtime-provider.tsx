@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AssistantRuntimeProvider,
   useRemoteThreadListRuntime,
@@ -11,12 +11,36 @@ import {
 } from "@assistant-ui/react-ai-sdk";
 import { useChat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
-import { createAetherThreadListAdapter } from "@/lib/local-thread-adapter";
+import { createAetherThreadListAdapter, ACTIVE_THREAD_KEY } from "@/lib/local-thread-adapter";
 import { useSettings } from "./settings-provider";
 import { useAttachments } from "./attachments-provider";
 import { buildTextAttachmentPrefix } from "@/lib/attachments";
 import { runPython } from "@/lib/pyodide";
 import { TOOL_NAMES, type ExecutePythonInput } from "@/lib/tools";
+
+function loadActiveThreadId(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = localStorage.getItem(ACTIVE_THREAD_KEY);
+    return raw?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function saveActiveThreadId(threadId: string | undefined) {
+  if (typeof window === "undefined") return;
+  try {
+    if (threadId) {
+      localStorage.setItem(ACTIVE_THREAD_KEY, threadId);
+    } else {
+      localStorage.removeItem(ACTIVE_THREAD_KEY);
+    }
+    window.dispatchEvent(new CustomEvent("aether:thread-switched"));
+  } catch {
+    // ignore quota / private mode
+  }
+}
 
 type AddToolResult = (result: {
   tool: string;
@@ -94,10 +118,21 @@ function useChatThreadRuntime() {
 
 export function RuntimeProvider({ children }: { children: ReactNode }) {
   const adapter = useMemo(() => createAetherThreadListAdapter(), []);
+  const [initialThreadId] = useState(() => loadActiveThreadId());
+  const restoredRef = useRef(false);
+
+  const onThreadIdChange = useCallback((threadId: string | undefined) => {
+    // Skip the first undefined emit while the runtime boots.
+    if (!restoredRef.current && !threadId) return;
+    restoredRef.current = true;
+    saveActiveThreadId(threadId);
+  }, []);
 
   const runtime = useRemoteThreadListRuntime({
     runtimeHook: useChatThreadRuntime,
     adapter,
+    initialThreadId,
+    onThreadIdChange,
   });
 
   return (

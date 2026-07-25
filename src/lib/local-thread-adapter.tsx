@@ -18,6 +18,18 @@ import {
 import { createAssistantStream } from "assistant-stream";
 
 const PREFIX = "aether:";
+export const ACTIVE_THREAD_KEY = `${PREFIX}active-thread`;
+
+export function clearActiveThreadIf(remoteId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    if (localStorage.getItem(ACTIVE_THREAD_KEY) === remoteId) {
+      localStorage.removeItem(ACTIVE_THREAD_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
 
 type StoredThread = {
   remoteId: string;
@@ -304,6 +316,7 @@ export function createAetherThreadListAdapter(): RemoteThreadListAdapter {
     async delete(remoteId: string) {
       saveThreads(loadThreads().filter((t) => t.remoteId !== remoteId));
       storage.removeItem(messagesKey(remoteId));
+      clearActiveThreadIf(remoteId);
     },
 
     async fetch(threadId: string) {
