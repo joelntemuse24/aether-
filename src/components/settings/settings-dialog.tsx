@@ -9,10 +9,14 @@ import {
   CheckIcon,
   Loader2Icon,
   LinkIcon,
+  PaletteIcon,
+  MoonIcon,
+  SunIcon,
 } from "lucide-react";
 import { useSettings } from "@/providers/settings-provider";
 import { useDrive } from "@/providers/drive-provider";
 import { useSession } from "@/providers/session-provider";
+import { ACCENTS, useTheme } from "@/providers/theme-provider";
 import { PROVIDER_DEFAULTS, type ProviderId } from "@/lib/models";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -31,6 +35,7 @@ export function SettingsDialog() {
     clearFocusConnectedAccounts,
   } = useSettings();
   const { data: session, status } = useSession();
+  const { theme, setTheme, accent, setAccent } = useTheme();
   const {
     connected: driveConnected,
     email: driveEmail,
@@ -126,7 +131,90 @@ export function SettingsDialog() {
             are sent only to your chosen provider via the app&apos;s chat proxy.
           </p>
 
-          <div className="space-y-2">
+          {/* Preferences */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <PaletteIcon className="size-4 text-[var(--muted)]" />
+              <span className="text-sm font-medium text-[var(--text)]">
+                Preferences
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Appearance</Label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setTheme("dark")}
+                  className={cn(
+                    "flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
+                    theme === "dark"
+                      ? "border-[var(--accent)] bg-[var(--accent-muted)] text-[var(--text)]"
+                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--hover-overlay)]",
+                  )}
+                >
+                  <MoonIcon className="size-3.5" />
+                  Dark
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTheme("light")}
+                  className={cn(
+                    "flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
+                    theme === "light"
+                      ? "border-[var(--accent)] bg-[var(--accent-muted)] text-[var(--text)]"
+                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--hover-overlay)]",
+                  )}
+                >
+                  <SunIcon className="size-3.5" />
+                  Light
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Accent</Label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {ACCENTS.map((item) => {
+                  const selected = accent === item.id;
+                  const swatch =
+                    item.id === "mono"
+                      ? theme === "light"
+                        ? "#1a1714"
+                        : "#e8e4d9"
+                      : item.id === "default"
+                        ? theme === "light"
+                          ? "#c96442"
+                          : item.swatch
+                        : item.swatch;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setAccent(item.id)}
+                      aria-pressed={selected}
+                      title={item.label}
+                      className={cn(
+                        "flex flex-col items-center gap-1.5 rounded-lg border px-2 py-2 text-[11px] transition-colors",
+                        selected
+                          ? "border-[var(--accent)] bg-[var(--accent-muted)] text-[var(--text)]"
+                          : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--hover-overlay)]",
+                      )}
+                    >
+                      <span
+                        className="size-5 rounded-full border border-black/10"
+                        style={{ background: swatch }}
+                        aria-hidden
+                      />
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2 border-t border-[var(--border)] pt-5">
             <Label>Provider</Label>
             <div className="grid grid-cols-2 gap-1.5">
               {PROVIDERS.map((id) => (

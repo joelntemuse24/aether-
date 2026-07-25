@@ -41,11 +41,24 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   if (collapsed) {
     return (
-      <aside className="flex h-full w-12 shrink-0 flex-col items-center border-r border-[var(--border)] bg-[var(--elevated)] py-3">
-        <Image src="/logo.jpg" alt="Aether" width={32} height={32} className="mb-3 rounded-full object-cover" />
+      <aside
+        className="flex h-full w-12 shrink-0 cursor-e-resize flex-col items-center border-r border-[var(--border)] bg-[var(--elevated)] py-3 transition-colors hover:bg-[var(--elevated-deep)]"
+        onClick={onToggle}
+        title="Click to expand sidebar"
+      >
+        <Image
+          src="/logo.jpg"
+          alt="Aether"
+          width={32}
+          height={32}
+          className="mb-3 rounded-full object-cover"
+        />
         <button
           type="button"
-          onClick={onToggle}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
           className="mb-3 flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
           aria-label="Expand sidebar"
           title="Expand sidebar"
@@ -55,17 +68,23 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <ThreadListPrimitive.New asChild>
           <button
             type="button"
-            className="mb-auto flex size-8 items-center justify-center rounded-lg text-[var(--accent)] transition-colors hover:bg-[var(--accent-muted)]"
+            onClick={(e) => e.stopPropagation()}
+            className="flex size-8 items-center justify-center rounded-lg text-[var(--accent)] transition-colors hover:bg-[var(--accent-muted)]"
             aria-label="New chat"
             title="New chat"
           >
             <PlusIcon className="size-4" />
           </button>
         </ThreadListPrimitive.New>
+        {/* Explicit hit target — empty flex margin does not always receive clicks */}
+        <div className="min-h-4 w-full flex-1" aria-hidden />
         {isAuthenticated ? (
           <button
             type="button"
-            onClick={() => void signOut({ callbackUrl: "/" })}
+            onClick={(e) => {
+              e.stopPropagation();
+              void signOut({ callbackUrl: "/" });
+            }}
             className="mb-2 flex size-8 items-center justify-center overflow-hidden rounded-full text-[var(--muted)] transition-colors hover:ring-2 hover:ring-[var(--border)]"
             aria-label="Sign out"
             title={`Sign out${user?.email ? ` (${user.email})` : ""}`}
@@ -86,6 +105,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         ) : !isLoadingSession ? (
           <Link
             href="/auth/signin"
+            onClick={(e) => e.stopPropagation()}
             className="mb-2 flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
             aria-label="Sign in"
             title="Sign in"
@@ -95,7 +115,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         ) : null}
         <button
           type="button"
-          onClick={() => setOpenSettings(true)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpenSettings(true);
+          }}
           className="flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
           aria-label="Settings"
           title="Settings"
@@ -104,7 +127,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </button>
         <button
           type="button"
-          onClick={toggleTheme}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleTheme();
+          }}
           className="flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
           aria-label="Toggle theme"
           title="Toggle theme"
