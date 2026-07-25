@@ -1,5 +1,6 @@
 "use client";
 
+import type { UIMessage } from "ai";
 import { useMemo, type FC, type PropsWithChildren, type ReactNode } from "react";
 import {
   RuntimeAdapterProvider,
@@ -18,6 +19,18 @@ import {
 import { createAssistantStream } from "assistant-stream";
 
 const PREFIX = "aether:";
+export const ACTIVE_THREAD_KEY = `${PREFIX}active-thread`;
+
+export function clearActiveThreadIf(remoteId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    if (localStorage.getItem(ACTIVE_THREAD_KEY) === remoteId) {
+      localStorage.removeItem(ACTIVE_THREAD_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
 
 type StoredThread = {
   remoteId: string;
@@ -68,6 +81,27 @@ const storage = {
 
 const threadsKey = `${PREFIX}threads`;
 const messagesKey = (id: string) => `${PREFIX}messages:${id}`;
+const AI_SDK_FORMAT = "ai-sdk/v6";
+
+/** Load persisted UI messages for a thread (used to bootstrap chat on switch/refresh). */
+export function loadThreadUIMessages(remoteId: string): UIMessage[] {
+  const repo = loadFormatRepo(remoteId);
+  const messages: UIMessage[] = [];
+
+  for (const entry of repo.entries) {
+    if (entry.format !== AI_SDK_FORMAT) continue;
+    try {
+      messages.push({
+        id: entry.id,
+        ...(entry.content as Omit<UIMessage, "id">),
+      });
+    } catch {
+      // skip corrupt rows
+    }
+  }
+
+  return messages;
+}
 
 function loadThreads(): StoredThread[] {
   const raw = storage.getItem(threadsKey);
@@ -145,6 +179,7 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
     return {
       async load(): Promise<MessageFormatRepository<TMessage>> {
         const remoteId = getRemoteId();
+        // Empty when the thread is still optimistic (no remoteId yet).
         if (!remoteId) return { messages: [] };
 
         const repo = loadFormatRepo(remoteId);
@@ -304,6 +339,7 @@ export function createAetherThreadListAdapter(): RemoteThreadListAdapter {
     async delete(remoteId: string) {
       saveThreads(loadThreads().filter((t) => t.remoteId !== remoteId));
       storage.removeItem(messagesKey(remoteId));
+      clearActiveThreadIf(remoteId);
     },
 
     async fetch(threadId: string) {
