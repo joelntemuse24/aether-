@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import {
   AuiIf,
   ThreadListItemPrimitive,
@@ -16,9 +17,12 @@ import {
   MessageSquareIcon,
   SunIcon,
   MoonIcon,
+  LogOutIcon,
+  LogInIcon,
 } from "lucide-react";
 import { useSettings } from "@/providers/settings-provider";
 import { useTheme } from "@/providers/theme-provider";
+import { useSession, signOut } from "@/providers/session-provider";
 import { Label } from "@/components/ui/label";
 import type { FC } from "react";
 
@@ -30,6 +34,9 @@ type SidebarProps = {
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { setOpenSettings } = useSettings();
   const { theme, toggleTheme } = useTheme();
+  const { data: session, status } = useSession();
+  const user = session?.user;
+  const isAuthenticated = status === "authenticated" && !!user;
 
   if (collapsed) {
     return (
@@ -54,6 +61,15 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <PlusIcon className="size-4" />
           </button>
         </ThreadListPrimitive.New>
+        {isAuthenticated && user?.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={user.image}
+            alt=""
+            className="mb-2 size-7 rounded-full object-cover"
+            title={user.email || user.name || "Account"}
+          />
+        ) : null}
         <button
           type="button"
           onClick={() => setOpenSettings(true)}
@@ -128,6 +144,50 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       <div className="border-t border-[var(--border)] p-3">
+        {isAuthenticated ? (
+          <div className="mb-2 flex items-center gap-2.5 rounded-md px-2 py-1.5">
+            {user?.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={user.image}
+                alt=""
+                className="size-7 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--elevated-deep)] text-xs font-medium text-[var(--muted)]">
+                {(user?.email || user?.name || "?")[0]?.toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12px] text-[var(--text)]">
+                {user?.name || "Signed in"}
+              </div>
+              {user?.email && (
+                <div className="truncate text-[10px] text-[var(--muted-soft)]">
+                  {user.email}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => void signOut({ callbackUrl: "/" })}
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOutIcon className="size-3.5" />
+            </button>
+          </div>
+        ) : (
+          <Link
+            href="/auth/signin"
+            className="mb-2 flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+          >
+            <LogInIcon className="size-3.5 shrink-0" />
+            <span className="text-[12px]">Sign in</span>
+          </Link>
+        )}
+
         <div className="flex items-center gap-1">
           <button
             type="button"

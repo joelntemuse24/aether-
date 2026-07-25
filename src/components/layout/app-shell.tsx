@@ -6,6 +6,12 @@ import dynamic from "next/dynamic";
 import { Thread } from "@/components/assistant-ui/thread";
 import { Sidebar } from "@/components/layout/sidebar";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
+import { DriveBrowserModal } from "@/components/drive/drive-browser-modal";
+import { useArtifact } from "@/providers/artifact-provider";
+import { useAttachments } from "@/providers/attachments-provider";
+import { useDrive } from "@/providers/drive-provider";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 // Lazy-loaded: pulls in highlight.js + marked only when an artifact is shown.
 const ArtifactPanel = dynamic(
@@ -13,14 +19,14 @@ const ArtifactPanel = dynamic(
     import("@/components/layout/artifact-panel").then((m) => m.ArtifactPanel),
   { ssr: false },
 );
-import { useArtifact } from "@/providers/artifact-provider";
-import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 
 export function AppShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebar, setMobileSidebar] = useState(false);
   const { open: artifactOpen } = useArtifact();
+  const { browserOpen, setBrowserOpen } = useDrive();
+  const { addAttachments } = useAttachments();
+  const [driveErrors, setDriveErrors] = useState<string[]>([]);
 
   useEffect(() => {
     const stored = localStorage.getItem("aether:sidebar-collapsed");
@@ -87,6 +93,35 @@ export function AppShell() {
       </main>
 
       <SettingsDialog />
+
+      <DriveBrowserModal
+        open={browserOpen}
+        onClose={() => setBrowserOpen(false)}
+        onSelect={(attachments, errors) => {
+          if (attachments.length > 0) addAttachments(attachments);
+          if (errors.length > 0) setDriveErrors(errors);
+        }}
+      />
+
+      {driveErrors.length > 0 && (
+        <div className="fixed bottom-4 left-1/2 z-[120] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-[var(--error-border)] bg-[var(--error-bg)] px-3 py-2 text-xs text-[var(--error-text)] shadow-none">
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1">
+              {driveErrors.map((err) => (
+                <div key={err}>{err}</div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setDriveErrors([])}
+              className="shrink-0 text-[var(--muted)] hover:text-[var(--text)]"
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

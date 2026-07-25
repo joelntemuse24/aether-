@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ToolCallPart, type ToolPartLike } from "@/components/assistant-ui/tool-ui";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
@@ -11,16 +11,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/providers/settings-provider";
 import { useAttachments } from "@/providers/attachments-provider";
-import type { PendingAttachment } from "@/lib/attachments";
-import {
-  loadGoogleApis,
-  getAccessToken,
-  openPicker,
-  downloadDriveFile,
-  onDriveConnectionChange,
-  hasValidToken,
-  type DriveConnectionState,
-} from "@/lib/google-drive";
+import { useDrive } from "@/providers/drive-provider";
 import {
   ActionBarPrimitive,
   AuiIf,
@@ -194,22 +185,13 @@ function AttachmentChips() {
 /* ─── Composer ─── */
 
 const Composer: FC = () => {
-  const { hasKey, setOpenSettings, settings } = useSettings();
-  const { addFiles, addAttachments } = useAttachments();
+  const { hasKey, setOpenSettings } = useSettings();
+  const { addFiles } = useAttachments();
+  const { connected: driveConnected, email: driveEmail, setBrowserOpen } =
+    useDrive();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<string[]>([]);
-  const [driveLoading, setDriveLoading] = useState(false);
-  const [driveConnected, setDriveConnected] = useState(false);
-  const [driveEmail, setDriveEmail] = useState<string | undefined>();
   const isRunning = useAuiState((s) => s.thread.isRunning);
-
-  // Subscribe to Drive connection state changes
-  useEffect(() => {
-    return onDriveConnectionChange((state: DriveConnectionState) => {
-      setDriveConnected(state.connected);
-      setDriveEmail(state.email);
-    });
-  }, []);
 
   // Reset transient state when thread stops running (after send/stop/error)
   useEffect(() => {
@@ -226,114 +208,6 @@ const Composer: FC = () => {
     setErrors(errs);
     e.target.value = "";
   };
-
-  const handleDriveClick = useCallback(async () => {
-    const clientId = settings.googleClientId?.trim();
-    if (!clientId) {
-      setErrors(["Add a Google Client ID in Settings to use Drive."]);
-      setOpenSettings(true);
-      return;
-    }
-
-    if (driveLoading) return;
-    setDriveLoading(true);
-    setErrors([]);
-
-    const finish = () => setDriveLoading(false);
-
-    try {
-      await loadGoogleApis();
-
-      // If not connected yet, show the Google account picker (like ChatGPT)
-      // If already connected, use silent auth (cached token or silent refresh)
-      const needAccountSelection = !driveConnected;
-
-      let accessToken: string;
-      if (hasValidToken()) {
-        accessToken = await getAccessToken(clientId);
-      } else {
-        const tokenTimeout = window.setTimeout(() => {
-          finish();
-          setErrors(["Google sign-in timed out. Please try again."]);
-        }, 30_000);
-
-        accessToken = await getAccessToken(
-          clientId,
-          (err) => {
-            window.clearTimeout(tokenTimeout);
-            finish();
-            setErrors([`Google sign-in failed: ${err}`]);
-          },
-          needAccountSelection, // select_account prompt on first sign-in
-        );
-
-        window.clearTimeout(tokenTimeout);
-      }
-
-      // Open the picker with the token
-      openPicker(
-        accessToken,
-        async (docs) => {
-          try {
-            if (!docs.length) {
-              finish();
-              return;
-            }
-
-            const newAttachments: PendingAttachment[] = [];
-            const downloadErrors: string[] = [];
-
-            for (const doc of docs) {
-              const result = await downloadDriveFile(
-                doc.id,
-                doc.name,
-                doc.mimeType,
-                accessToken,
-              );
-              if (result.attachment) {
-                newAttachments.push(result.attachment);
-              }
-              if (result.error) {
-                downloadErrors.push(result.error);
-              }
-            }
-
-            if (newAttachments.length > 0) {
-              addAttachments(newAttachments);
-            }
-
-            if (downloadErrors.length > 0) {
-              setErrors(downloadErrors);
-            } else if (newAttachments.length === 0) {
-              setErrors([
-                "Could not download the selected file(s). Try downloading them manually and using the paperclip.",
-              ]);
-            }
-          } catch (err) {
-            console.error("[drive] download", err);
-            setErrors([
-              err instanceof Error
-                ? err.message
-                : "Failed to download files from Drive.",
-            ]);
-          } finally {
-            finish();
-          }
-        },
-        () => {
-          finish();
-        },
-      );
-    } catch (err) {
-      console.error("[drive]", err);
-      setErrors([
-        err instanceof Error
-          ? err.message
-          : "Could not open Google Drive. Check your Client ID and try again.",
-      ]);
-      finish();
-    }
-  }, [settings.googleClientId, setOpenSettings, driveLoading, addAttachments, driveConnected]);
 
   return (
     <ComposerPrimitive.Root className="relative flex w-full flex-col border-0 bg-transparent">
@@ -368,11 +242,9 @@ const Composer: FC = () => {
 
         <ComposerAction
           onAttachClick={() => fileInputRef.current?.click()}
-          onDriveClick={handleDriveClick}
-          driveLoading={driveLoading}
+          onDriveClick={() => setBrowserOpen(true)}
           driveConnected={driveConnected}
           driveEmail={driveEmail}
-          hasDriveClientId={!!settings.googleClientId?.trim()}
         />
       </div>
 
@@ -388,15 +260,6 @@ const Composer: FC = () => {
   );
 };
 
-const GoogleIcon: FC<{ className?: string }> = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-  </svg>
-);
-
 const GoogleDriveIcon: FC<{ className?: string }> = ({ className }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M9.3 2L14.7 2L22 15.5L19.3 20.5L12.7 20.5L9.3 2Z" fill="#0F9D58"/>
@@ -410,21 +273,9 @@ const GoogleDriveIcon: FC<{ className?: string }> = ({ className }) => (
 const ComposerAction: FC<{
   onAttachClick: () => void;
   onDriveClick: () => void;
-  driveLoading: boolean;
   driveConnected: boolean;
-  driveEmail?: string;
-  hasDriveClientId: boolean;
-}> = ({ onAttachClick, onDriveClick, driveLoading, driveConnected, driveEmail, hasDriveClientId }) => {
-  const driveTooltip = driveLoading
-    ? "Opening Drive…"
-    : driveConnected && driveEmail
-      ? `Drive: ${driveEmail}`
-      : driveConnected
-        ? "Google Drive (connected)"
-        : hasDriveClientId
-          ? "Sign in to Google Drive"
-          : "Add Google Client ID in Settings";
-
+  driveEmail?: string | null;
+}> = ({ onAttachClick, onDriveClick, driveConnected, driveEmail }) => {
   return (
     <div className="flex items-center justify-between gap-2 px-0.5">
       <div className="flex items-center gap-1">
@@ -436,33 +287,16 @@ const ComposerAction: FC<{
           <PaperclipIcon className="size-3.5" />
         </TooltipIconButton>
 
-        {hasDriveClientId && !driveConnected && !driveLoading ? (
-          // Show "Sign in with Google" button when Drive is set up but not connected
-          <button
-            type="button"
-            onClick={onDriveClick}
-            className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-medium text-[var(--text)] transition-colors hover:bg-[var(--hover-overlay)]"
-          >
-            <GoogleIcon className="size-3.5" />
-            <span>Connect Drive</span>
-          </button>
-        ) : (
+        {/* Drive only appears when connected — connect from Settings */}
+        {driveConnected && (
           <TooltipIconButton
-            tooltip={driveTooltip}
+            tooltip={
+              driveEmail ? `Google Drive · ${driveEmail}` : "Google Drive"
+            }
             onClick={onDriveClick}
-            disabled={driveLoading}
             className="size-7"
           >
-            {driveLoading ? (
-              <RefreshCwIcon className="size-3.5 animate-spin text-[var(--muted)]" />
-            ) : (
-              <GoogleDriveIcon
-                className={cn(
-                  "size-4",
-                  !driveConnected && "opacity-60",
-                )}
-              />
-            )}
+            <GoogleDriveIcon className="size-4" />
           </TooltipIconButton>
         )}
 

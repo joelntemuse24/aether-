@@ -5,6 +5,8 @@ import {
   Inter,
   JetBrains_Mono,
 } from "next/font/google";
+import { SessionProvider } from "@/providers/session-provider";
+import { ThemeProvider } from "@/providers/theme-provider";
 import "./globals.css";
 
 const cormorant = Cormorant_Garamond({
@@ -59,7 +61,9 @@ export default function RootLayout({
       <body
         className={`${cormorant.variable} ${cormorantSC.variable} ${inter.variable} ${jetbrainsMono.variable} antialiased`}
       >
-        {children}
+        <SessionProvider>
+          <ThemeProvider>{children}</ThemeProvider>
+        </SessionProvider>
       </body>
     </html>
   );

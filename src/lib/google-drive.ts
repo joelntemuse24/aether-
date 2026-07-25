@@ -1,651 +1,134 @@
 /**
- * Google Drive Picker + download helpers.
- * Requires a Google Cloud OAuth 2.0 Client ID (Web application)
- * with the Google Picker API and Google Drive API enabled.
+ * Client-side Google Drive helpers.
+ * Uses server API routes backed by OAuth (not Google Picker / GIS token client).
  */
 
 import type { PendingAttachment } from "./attachments";
-import { isImageFile, isTextFile } from "./attachments";
 
-/* ─── Minimal ambient types for the Google scripts we load at runtime ─── */
-
-type GapiClient = {
-  load: (libraries: string, callback: () => void) => void;
-};
-
-type GoogleAccountsOauth2 = {
-  initTokenClient: (config: {
-    client_id: string;
-    scope: string;
-    callback: (resp: { access_token?: string; error?: string }) => void;
-  }) => {
-    requestAccessToken: (opts: { prompt?: string }) => void;
-  };
-};
-
-type GooglePickerDocsView = {
-  setIncludeFolders: (v: boolean) => GooglePickerDocsView;
-  setSelectFolderEnabled: (v: boolean) => GooglePickerDocsView;
-};
-
-type GooglePickerBuilder = {
-  addView: (view: GooglePickerDocsView) => GooglePickerBuilder;
-  enableFeature: (feature: string) => GooglePickerBuilder;
-  setOAuthToken: (token: string) => GooglePickerBuilder;
-  setCallback: (cb: (data: GooglePickerCallbackData) => void) => GooglePickerBuilder;
-  build: () => { setVisible: (v: boolean) => void };
-};
-
-type GooglePickerCallbackData = {
-  action: string;
-  docs?: Array<{
-    id: string;
-    name: string;
-    mimeType: string;
-    sizeBytes?: string;
-    url?: string;
-  }>;
-};
-
-type GooglePickerNamespace = {
-  DocsView: new (viewId?: string) => GooglePickerDocsView;
-  PickerBuilder: new () => GooglePickerBuilder;
-  ViewId: { DOCS_IMAGES: string; PDFS: string };
-  Feature: { MULTISELECT_ENABLED: string };
-  Action: { PICKED: string; CANCEL: string };
-};
-
-type GoogleNamespace = {
-  accounts: { oauth2: GoogleAccountsOauth2 };
-  picker: GooglePickerNamespace;
-};
-
-declare global {
-  interface Window {
-    gapi: GapiClient;
-    google: GoogleNamespace;
-  }
-}
-
-const SCOPES = "https://www.googleapis.com/auth/drive.readonly";
-
-let gapiLoaded = false;
-let gisLoaded = false;
-let gapiLoading: Promise<void> | null = null;
-let tokenClient: {
-  requestAccessToken: (opts: { prompt?: string }) => void;
-} | null = null;
-let currentClientId: string | null = null;
-let pendingTokenCallback: ((token: string) => void) | null = null;
-let pendingTokenError: ((error: string) => void) | null = null;
-
-// Token cache — avoids re-prompting the user on every Drive click
-let cachedToken: string | null = null;
-let cachedTokenExpiry = 0; // epoch ms
-const TOKEN_SAFETY_MARGIN = 60_000; // refresh 60s before actual expiry
-
-// Callbacks for token state changes (connected/disconnected)
 export type DriveConnectionState = {
   connected: boolean;
-  email?: string;
+  authenticated: boolean;
+  email?: string | null;
+  googleConfigured?: boolean;
 };
-let connectionListeners: ((state: DriveConnectionState) => void)[] = [];
-let currentConnectionState: DriveConnectionState = { connected: false };
 
-export function onDriveConnectionChange(cb: (state: DriveConnectionState) => void): () => void {
-  connectionListeners.push(cb);
-  // Immediately call with current state
-  cb(currentConnectionState);
-  return () => {
-    connectionListeners = connectionListeners.filter((c) => c !== cb);
-  };
-}
-
-function setConnectionState(state: DriveConnectionState) {
-  currentConnectionState = state;
-  connectionListeners.forEach((cb) => cb(state));
-}
-
-/** Check if we have a valid cached token. */
-export function hasValidToken(): boolean {
-  return !!cachedToken && Date.now() < cachedTokenExpiry;
-}
-
-/** Get cached token if valid, null otherwise. */
-export function getCachedToken(): string | null {
-  if (hasValidToken()) return cachedToken;
-  cachedToken = null;
-  cachedTokenExpiry = 0;
-  return null;
-}
-
-/** Clear the cached token (e.g. on 401 or explicit disconnect). */
-export function clearTokenCache(): void {
-  cachedToken = null;
-  cachedTokenExpiry = 0;
-  setConnectionState({ connected: false });
-}
-
-/** Fetch the user's email from the token info endpoint. */
-async function fetchTokenInfo(token: string): Promise<string | undefined> {
-  try {
-    const res = await fetch(
-      `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${encodeURIComponent(token)}`,
-    );
-    if (res.ok) {
-      const data = await res.json();
-      return data.email;
-    }
-  } catch {
-    // non-critical
-  }
-  return undefined;
-}
-
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(
-      `script[src="${src}"]`,
-    ) as HTMLScriptElement | null;
-    if (existing) {
-      if (existing.dataset.loaded === "true") {
-        resolve();
-      } else {
-        existing.addEventListener("load", () => resolve(), { once: true });
-        existing.addEventListener("error", () =>
-          reject(new Error(`Failed to load ${src}`)), { once: true });
-      }
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = src;
-    s.async = true;
-    s.onload = () => {
-      s.dataset.loaded = "true";
-      resolve();
-    };
-    s.onerror = () => reject(new Error(`Failed to load ${src}`));
-    document.head.appendChild(s);
-  });
-}
-
-export async function loadGoogleApis(): Promise<void> {
-  if (gapiLoaded && gisLoaded && window.gapi && window.google) {
-    return;
-  }
-
-  // Avoid double-loading if already in progress
-  if (gapiLoading) return gapiLoading;
-
-  gapiLoading = (async () => {
-    await Promise.all([
-      loadScript("https://apis.google.com/js/api.js"),
-      loadScript("https://accounts.google.com/gsi/client"),
-    ]);
-
-    await new Promise<void>((resolve) => {
-      window.gapi.load("client:picker", () => {
-        gapiLoaded = true;
-        resolve();
-      });
-    });
-
-    gisLoaded = true;
-  })();
-
-  return gapiLoading;
-}
-
-function ensureTokenClient(clientId: string) {
-  if (tokenClient && currentClientId === clientId) return;
-
-  currentClientId = clientId;
-  tokenClient = window.google.accounts.oauth2.initTokenClient({
-    client_id: clientId,
-    scope: SCOPES,
-    callback: (resp) => {
-      const cb = pendingTokenCallback;
-      const errCb = pendingTokenError;
-      pendingTokenCallback = null;
-      pendingTokenError = null;
-      if (resp.error || !resp.access_token) {
-        console.error("[google-drive] token error", resp);
-        errCb?.(resp.error || "Failed to get access token");
-        return;
-      }
-      // Cache the token with expiry (Google returns expires_in seconds)
-      const expiresIn = (resp as { expires_in?: number }).expires_in || 3600;
-      cachedToken = resp.access_token;
-      cachedTokenExpiry = Date.now() + expiresIn * 1000 - TOKEN_SAFETY_MARGIN;
-      // Update connection state
-      setConnectionState({ connected: true });
-      // Try to fetch email (non-blocking)
-      fetchTokenInfo(resp.access_token).then((email) => {
-        setConnectionState({ connected: true, email });
-      });
-      cb?.(resp.access_token);
-    },
-  });
-}
-
-/**
- * Get a valid access token. Uses cached token if available.
- * Only prompts the user if a new token is needed.
- * Returns a promise that resolves with the token.
- *
- * @param selectAccount - If true, shows the Google account picker (for first sign-in).
- *                        If false, uses silent auth (no popup if already consented).
- */
-export function getAccessToken(
-  clientId: string,
-  onError?: (error: string) => void,
-  selectAccount = false,
-): Promise<string> {
-  // Return cached token if still valid
-  const cached = getCachedToken();
-  if (cached) return Promise.resolve(cached);
-
-  return new Promise<string>((resolve, reject) => {
-    ensureTokenClient(clientId);
-    if (!tokenClient) {
-      reject(new Error("Token client not initialized"));
-      return;
-    }
-    pendingTokenCallback = (token) => resolve(token);
-    pendingTokenError = (err) => {
-      onError?.(err);
-      reject(new Error(err));
-    };
-    // "select_account" shows the account picker (like ChatGPT's sign-in flow)
-    // "" is silent — only shows popup if consent is actually needed
-    tokenClient.requestAccessToken({
-      prompt: selectAccount ? "select_account" : "",
-    });
-  });
-}
-
-/** Request an access token and run the callback when it arrives. */
-export function requestAccessToken(
-  clientId: string,
-  onToken: (token: string) => void,
-  onError?: (error: string) => void,
-  forceConsent = false,
-): void {
-  ensureTokenClient(clientId);
-  if (!tokenClient) throw new Error("Token client not initialized");
-  pendingTokenCallback = onToken;
-  pendingTokenError = onError || null;
-  tokenClient.requestAccessToken({
-    prompt: forceConsent ? "consent" : "",
-  });
-}
-
-type PickerDoc = {
+export type DriveFileItem = {
   id: string;
   name: string;
   mimeType: string;
-  sizeBytes?: string;
-  url?: string;
+  modifiedTime?: string;
+  size?: string;
+  thumbnailLink?: string;
+  iconLink?: string;
+  parents?: string[];
+  webViewLink?: string;
+  isFolder: boolean;
 };
 
-export function openPicker(
-  accessToken: string,
-  onPicked: (docs: PickerDoc[]) => void,
-  onCancel?: () => void,
-): void {
-  const view = new window.google.picker.DocsView()
-    .setIncludeFolders(false)
-    .setSelectFolderEnabled(false);
+export type DriveListResult = {
+  files: DriveFileItem[];
+  nextPageToken: string | null;
+  folderId: string;
+  folderName: string;
+};
 
-  const picker = new window.google.picker.PickerBuilder()
-    .addView(view)
-    .addView(
-      new window.google.picker.DocsView(window.google.picker.ViewId.DOCS_IMAGES),
-    )
-    .addView(new window.google.picker.DocsView(window.google.picker.ViewId.PDFS))
-    .enableFeature(window.google.picker.Feature.MULTISELECT_ENABLED)
-    .setOAuthToken(accessToken)
-    .setCallback((data) => {
-      if (data.action === window.google.picker.Action.PICKED) {
-        const docs: PickerDoc[] = (data.docs || []).map((d) => ({
-          id: d.id,
-          name: d.name,
-          mimeType: d.mimeType,
-          sizeBytes: d.sizeBytes,
-          url: d.url,
-        }));
-        onPicked(docs);
-      } else if (data.action === window.google.picker.Action.CANCEL) {
-        onCancel?.();
-      }
-    })
-    .build();
-
-  picker.setVisible(true);
+export async function fetchDriveStatus(): Promise<DriveConnectionState> {
+  const res = await fetch("/api/drive/status", { cache: "no-store" });
+  if (!res.ok) {
+    return { connected: false, authenticated: false };
+  }
+  return (await res.json()) as DriveConnectionState;
 }
 
-async function fetchWithAuth(
-  url: string,
-  accessToken: string,
-  timeoutMs = 20_000,
-): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
+export async function disconnectDrive(): Promise<void> {
+  await fetch("/api/drive/disconnect", { method: "POST" });
 }
 
-function explain403(name: string, reason?: string): string {
-  if (reason === "cannotDownloadAbusiveFile") {
-    return `"${name}" was flagged by Google's abuse detection and downloaded with acknowledgeAbuse. If this still fails, download it manually and use the paperclip.`;
-  }
-  if (reason === "insufficientFilePermissions" || reason === "forbidden") {
-    return `Cannot download "${name}" — you don't have download permission for this file. The owner may have disabled downloads. Download it manually and use the paperclip button instead.`;
-  }
-  return (
-    `Cannot download "${name}" (403). ` +
-    `Either the file owner disabled downloads, or Google needs a fresh permission grant. ` +
-    `Try: (1) a file you own with download enabled, or (2) download it and use the paperclip button instead.`
-  );
+/** Navigate to Google OAuth to connect Drive (requires login). */
+export function connectDrive(): void {
+  window.location.href = "/api/drive/connect";
 }
 
-/** Parse Google Drive API error JSON to extract the reason. */
-function parseDriveError(body: string): { reason?: string; message?: string } {
-  try {
-    const parsed = JSON.parse(body);
-    const err = parsed?.error;
-    if (err?.errors?.[0]?.reason) {
-      return { reason: err.errors[0].reason, message: err.message || err.errors[0].message };
-    }
-    if (err?.status) {
-      return { reason: err.status, message: err.message };
-    }
-  } catch {
-    // not JSON
+export type DriveListParams = {
+  folderId?: string;
+  q?: string;
+  type?: "all" | "recent" | "pdf" | "image" | "doc" | "sheet";
+  pageToken?: string;
+};
+
+export async function listDriveFiles(
+  params: DriveListParams = {},
+): Promise<DriveListResult> {
+  const sp = new URLSearchParams();
+  if (params.folderId) sp.set("folderId", params.folderId);
+  if (params.q) sp.set("q", params.q);
+  if (params.type) sp.set("type", params.type);
+  if (params.pageToken) sp.set("pageToken", params.pageToken);
+
+  const res = await fetch(`/api/drive/files?${sp.toString()}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `Failed to list files (${res.status})`);
   }
-  return {};
+  return (await res.json()) as DriveListResult;
 }
 
-/** Download a Drive file and turn it into a PendingAttachment. */
 export async function downloadDriveFile(
   fileId: string,
   name: string,
   mimeType: string,
-  accessToken: string,
+  onProgress?: (pct: number) => void,
 ): Promise<{ attachment: PendingAttachment | null; error?: string }> {
-  const id = crypto.randomUUID();
+  onProgress?.(10);
 
-  const isGoogleDoc =
-    mimeType === "application/vnd.google-apps.document" ||
-    mimeType === "application/vnd.google-apps.spreadsheet" ||
-    mimeType === "application/vnd.google-apps.presentation" ||
-    mimeType === "application/vnd.google-apps.drawing";
+  const res = await fetch("/api/drive/download", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fileId, name, mimeType }),
+  });
 
-  try {
-    if (isGoogleDoc) {
-      let exportMime = "text/plain";
-      let ext = ".txt";
-      if (mimeType.includes("spreadsheet")) {
-        exportMime = "text/csv";
-        ext = ".csv";
-      } else if (mimeType.includes("presentation")) {
-        exportMime = "text/plain";
-        ext = ".txt";
-      }
+  onProgress?.(80);
 
-      let exportUrl =
-        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export` +
-        `?mimeType=${encodeURIComponent(exportMime)}&supportsAllDrives=true`;
+  const data = (await res.json()) as {
+    attachment?: PendingAttachment;
+    error?: string;
+  };
 
-      let res = await fetchWithAuth(exportUrl, accessToken);
+  onProgress?.(100);
 
-      // On any 403, retry with acknowledgeAbuse=true
-      if (res.status === 403) {
-        const body = await res.text().catch(() => "");
-        const { reason } = parseDriveError(body);
-        console.error("[google-drive] export 403, retrying with acknowledgeAbuse", reason, body);
-        exportUrl += "&acknowledgeAbuse=true";
-        res = await fetchWithAuth(exportUrl, accessToken);
-        if (!res.ok) {
-          const retryBody = await res.text().catch(() => "");
-          const retryInfo = parseDriveError(retryBody);
-          console.error("[google-drive] export acknowledgeAbuse retry failed", res.status, retryBody);
-          return {
-            attachment: {
-              id,
-              name,
-              kind: "file",
-              mime: mimeType,
-              size: 0,
-            },
-            error: explain403(name, retryInfo.reason || reason),
-          };
-        }
-      } else if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        console.error("[google-drive] export failed", res.status, body);
-        return {
-          attachment: {
-            id,
-            name,
-            kind: "file",
-            mime: mimeType,
-            size: 0,
-          },
-          error:
-            res.status === 403
-              ? explain403(name)
-              : `Could not export "${name}" (${res.status}). Attached as a reference only.`,
-        };
-      }
-
-      const text = await res.text();
-      const capped =
-        text.length > 120_000
-          ? text.slice(0, 120_000) + "\n\n[… truncated]"
-          : text;
-
-      return {
-        attachment: {
-          id,
-          name: name.endsWith(ext) ? name : name + ext,
-          kind: "text",
-          mime: exportMime,
-          size: capped.length,
-          text: capped,
-        },
-      };
-    }
-
-    // Regular files (PDF, images, uploads, etc.)
-    // Strategy 1: Drive API with acknowledgeAbuse=true from the start
-    const apiUrl =
-      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}` +
-      `?alt=media&supportsAllDrives=true&acknowledgeAbuse=true`;
-
-    let res = await fetchWithAuth(apiUrl, accessToken);
-
-    // Strategy 2: If API fails with 403, try the web download endpoint
-    // This uses a different path that sometimes bypasses API-level restrictions
-    if (res.status === 403) {
-      const body = await res.text().catch(() => "");
-      const { reason } = parseDriveError(body);
-      console.error("[google-drive] API download 403, trying web endpoint", reason, body);
-
-      const webUrl =
-        `https://drive.google.com/uc?id=${encodeURIComponent(fileId)}&export=download&confirm=t`;
-
-      const webRes = await fetchWithAuth(webUrl, accessToken);
-      if (webRes.ok) {
-        res = webRes;
-      } else {
-        // Strategy 3: Try without supportsAllDrives and with different params
-        const fallbackUrl =
-          `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}` +
-          `?alt=media&acknowledgeAbuse=true`;
-
-        const fallbackRes = await fetchWithAuth(fallbackUrl, accessToken);
-        if (fallbackRes.ok) {
-          res = fallbackRes;
-        } else {
-          // All strategies failed — return error with the file's Drive URL
-          const retryBody = await fallbackRes.text().catch(() => "");
-          console.error("[google-drive] all download strategies failed", fallbackRes.status, retryBody);
-          return {
-            attachment: {
-              id,
-              name,
-              kind: "file",
-              mime: mimeType,
-              size: 0,
-            },
-            error:
-              `Could not download "${name}" from Drive (Google blocked the download). ` +
-              `Open it in Drive and use the paperclip to upload it manually: ` +
-              `https://drive.google.com/file/d/${fileId}/view`,
-          };
-        }
-      }
-    } else if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error("[google-drive] media download failed", res.status, body);
-      if (res.status === 401) {
-        clearTokenCache();
-      }
-      return {
-        attachment: {
-          id,
-          name,
-          kind: "file",
-          mime: mimeType,
-          size: 0,
-        },
-        error:
-          res.status === 401
-            ? `Google session expired. Click the Drive button again to re-sign in.`
-            : `Could not download "${name}" (${res.status}). Try the paperclip button instead.`,
-      };
-    }
-
-    if (isImageFile(mimeType)) {
-      const blob = await res.blob();
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("Failed to read image"));
-        reader.readAsDataURL(blob);
-      });
-      return {
-        attachment: {
-          id,
-          name,
-          kind: "image",
-          mime: mimeType,
-          size: blob.size,
-          dataUrl,
-        },
-      };
-    }
-
-    if (
-      isTextFile(name, mimeType) ||
-      mimeType === "application/json" ||
-      mimeType === "application/xml" ||
-      mimeType.startsWith("text/")
-    ) {
-      const text = await res.text();
-      const capped =
-        text.length > 120_000
-          ? text.slice(0, 120_000) + "\n\n[… truncated]"
-          : text;
-      return {
-        attachment: {
-          id,
-          name,
-          kind: "text",
-          mime: mimeType || "text/plain",
-          size: capped.length,
-          text: capped,
-        },
-      };
-    }
-
-    // PDF and other binaries — we have the bytes; store as data URL so
-    // vision/PDF-capable models can receive them when the API path supports it.
-    if (
-      mimeType === "application/pdf" ||
-      name.toLowerCase().endsWith(".pdf")
-    ) {
-      const blob = await res.blob();
-      // Cap very large PDFs to avoid blowing up request size
-      if (blob.size > 25 * 1024 * 1024) {
-        return {
-          attachment: {
-            id,
-            name,
-            kind: "file",
-            mime: "application/pdf",
-            size: blob.size,
-          },
-          error: `"${name}" is larger than 25 MB — attached as a reference only. Use a smaller file or the paperclip for local upload.`,
-        };
-      }
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("Failed to read PDF"));
-        reader.readAsDataURL(blob);
-      });
-      return {
-        attachment: {
-          id,
-          name,
-          kind: "file",
-          mime: "application/pdf",
-          size: blob.size,
-          dataUrl,
-        },
-      };
-    }
-
+  if (!res.ok && !data.attachment) {
     return {
-      attachment: {
-        id,
-        name,
-        kind: "file",
-        mime: mimeType,
-        size: Number(res.headers.get("content-length") || 0),
-      },
-    };
-  } catch (err) {
-    console.error("[google-drive] download error", err);
-    const isAbort = err instanceof DOMException && err.name === "AbortError";
-    const message = isAbort
-      ? `Download of "${name}" timed out. Try a smaller file or use the paperclip.`
-      : err instanceof Error
-        ? err.message
-        : "Unknown download error";
-    return {
-      attachment: {
-        id,
-        name,
-        kind: "file",
-        mime: mimeType,
-        size: 0,
-      },
-      error: `"${name}": ${message}`,
+      attachment: null,
+      error: data.error || `Download failed (${res.status})`,
     };
   }
+
+  return {
+    attachment: data.attachment || null,
+    error: data.error,
+  };
 }
 
-export function isGoogleApisReady(): boolean {
-  return gapiLoaded && gisLoaded;
+/** Human-readable file size */
+export function formatBytes(size?: string | number): string {
+  const n = typeof size === "string" ? Number(size) : size;
+  if (!n || Number.isNaN(n)) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Pick a friendly emoji-free label for mime types */
+export function fileTypeLabel(mimeType: string): string {
+  if (mimeType === "application/vnd.google-apps.folder") return "Folder";
+  if (mimeType === "application/pdf") return "PDF";
+  if (mimeType.startsWith("image/")) return "Image";
+  if (mimeType.includes("spreadsheet") || mimeType.includes("excel") || mimeType === "text/csv")
+    return "Spreadsheet";
+  if (mimeType.includes("document") || mimeType.includes("word")) return "Doc";
+  if (mimeType.includes("presentation") || mimeType.includes("powerpoint"))
+    return "Slides";
+  return "File";
 }
