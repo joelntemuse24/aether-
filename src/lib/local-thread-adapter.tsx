@@ -1,5 +1,6 @@
 "use client";
 
+import type { UIMessage } from "ai";
 import { useMemo, type FC, type PropsWithChildren, type ReactNode } from "react";
 import {
   RuntimeAdapterProvider,
@@ -80,6 +81,27 @@ const storage = {
 
 const threadsKey = `${PREFIX}threads`;
 const messagesKey = (id: string) => `${PREFIX}messages:${id}`;
+const AI_SDK_FORMAT = "ai-sdk/v6";
+
+/** Load persisted UI messages for a thread (used to bootstrap chat on switch/refresh). */
+export function loadThreadUIMessages(remoteId: string): UIMessage[] {
+  const repo = loadFormatRepo(remoteId);
+  const messages: UIMessage[] = [];
+
+  for (const entry of repo.entries) {
+    if (entry.format !== AI_SDK_FORMAT) continue;
+    try {
+      messages.push({
+        id: entry.id,
+        ...(entry.content as Omit<UIMessage, "id">),
+      });
+    } catch {
+      // skip corrupt rows
+    }
+  }
+
+  return messages;
+}
 
 function loadThreads(): StoredThread[] {
   const raw = storage.getItem(threadsKey);
@@ -157,6 +179,7 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
     return {
       async load(): Promise<MessageFormatRepository<TMessage>> {
         const remoteId = getRemoteId();
+        // Empty when the thread is still optimistic (no remoteId yet).
         if (!remoteId) return { messages: [] };
 
         const repo = loadFormatRepo(remoteId);
