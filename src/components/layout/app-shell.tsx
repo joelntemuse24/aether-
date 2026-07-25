@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { PanelLeftIcon } from "lucide-react";
 import { Thread } from "@/components/assistant-ui/thread";
 import { Sidebar } from "@/components/layout/sidebar";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
@@ -10,7 +11,6 @@ import { DriveBrowserModal } from "@/components/drive/drive-browser-modal";
 import { useArtifact } from "@/providers/artifact-provider";
 import { useAttachments } from "@/providers/attachments-provider";
 import { useDrive } from "@/providers/drive-provider";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 // Lazy-loaded: pulls in highlight.js + marked only when an artifact is shown.
@@ -86,9 +86,10 @@ export function AppShell() {
           <button
             type="button"
             onClick={() => setMobileSidebar(true)}
-            className="rounded px-2 py-1 text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)]"
+            className="flex size-9 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+            aria-label="Open menu"
           >
-            <Label>Menu</Label>
+            <PanelLeftIcon className="size-4" />
           </button>
           <Image src="/logo.jpg" alt="Aether" width={20} height={20} className="rounded-full object-cover" />
           <span className="font-[family-name:var(--font-sc)] text-[13px] tracking-[0.08em] text-[var(--text)]">Aether</span>

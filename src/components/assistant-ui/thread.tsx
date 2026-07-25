@@ -1,13 +1,19 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState, type FC } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type FC,
+} from "react";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ToolCallPart, type ToolPartLike } from "@/components/assistant-ui/tool-ui";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { ModelPicker } from "@/components/model-picker";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/providers/settings-provider";
 import { useAttachments } from "@/providers/attachments-provider";
@@ -142,9 +148,10 @@ const ThreadWelcome: FC = () => {
       >
         How can I help you today?
       </h1>
-      <div className="mt-3">
-        <Label>Ask anything</Label>
-      </div>
+      <p className="mt-3 max-w-sm text-sm leading-relaxed text-[var(--muted)]">
+        Attach files from the paperclip, or connect Drive in Settings after you
+        sign in.
+      </p>
     </div>
   );
 };
@@ -185,12 +192,17 @@ function AttachmentChips() {
 /* ─── Composer ─── */
 
 const Composer: FC = () => {
-  const { hasKey, setOpenSettings } = useSettings();
+  const { hasKey, setOpenSettings, openConnectedAccounts } = useSettings();
   const { addFiles } = useAttachments();
-  const { connected: driveConnected, email: driveEmail, setBrowserOpen } =
-    useDrive();
+  const {
+    connected: driveConnected,
+    authenticated: driveAuthed,
+    email: driveEmail,
+    setBrowserOpen,
+  } = useDrive();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  const [dragging, setDragging] = useState(false);
   const isRunning = useAuiState((s) => s.thread.isRunning);
 
   // Reset transient state when thread stops running (after send/stop/error)
@@ -201,12 +213,20 @@ const Composer: FC = () => {
     }
   }, [isRunning]);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     const errs = await addFiles(files);
     setErrors(errs);
     e.target.value = "";
+  };
+
+  const onDrop = async (e: DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    if (!e.dataTransfer.files?.length) return;
+    const errs = await addFiles(e.dataTransfer.files);
+    setErrors(errs);
   };
 
   return (
@@ -221,7 +241,28 @@ const Composer: FC = () => {
         </button>
       )}
 
-      <div className="flex w-full flex-col gap-1 border-0 bg-transparent p-2">
+      <div
+        onDragEnter={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          setDragging(false);
+        }}
+        onDrop={(e) => void onDrop(e)}
+        className={cn(
+          "flex w-full flex-col gap-1 rounded-2xl border bg-[var(--elevated)] p-2 transition-colors",
+          dragging
+            ? "border-[var(--accent)]/50 bg-[var(--accent-muted)]"
+            : "border-[var(--border)]",
+        )}
+      >
         <AttachmentChips />
 
         {errors.length > 0 && (
@@ -242,8 +283,15 @@ const Composer: FC = () => {
 
         <ComposerAction
           onAttachClick={() => fileInputRef.current?.click()}
-          onDriveClick={() => setBrowserOpen(true)}
+          onDriveClick={() => {
+            if (driveConnected) {
+              setBrowserOpen(true);
+              return;
+            }
+            openConnectedAccounts();
+          }}
           driveConnected={driveConnected}
+          driveAvailable={driveAuthed || driveConnected}
           driveEmail={driveEmail}
         />
       </div>
@@ -274,8 +322,15 @@ const ComposerAction: FC<{
   onAttachClick: () => void;
   onDriveClick: () => void;
   driveConnected: boolean;
+  driveAvailable: boolean;
   driveEmail?: string | null;
-}> = ({ onAttachClick, onDriveClick, driveConnected, driveEmail }) => {
+}> = ({
+  onAttachClick,
+  onDriveClick,
+  driveConnected,
+  driveAvailable,
+  driveEmail,
+}) => {
   return (
     <div className="flex items-center justify-between gap-2 px-0.5">
       <div className="flex items-center gap-1">
@@ -287,8 +342,7 @@ const ComposerAction: FC<{
           <PaperclipIcon className="size-3.5" />
         </TooltipIconButton>
 
-        {/* Drive only appears when connected — connect from Settings */}
-        {driveConnected && (
+        {driveConnected ? (
           <TooltipIconButton
             tooltip={
               driveEmail ? `Google Drive · ${driveEmail}` : "Google Drive"
@@ -298,7 +352,15 @@ const ComposerAction: FC<{
           >
             <GoogleDriveIcon className="size-4" />
           </TooltipIconButton>
-        )}
+        ) : driveAvailable ? (
+          <TooltipIconButton
+            tooltip="Connect Google Drive in Settings"
+            onClick={onDriveClick}
+            className="size-7 opacity-70"
+          >
+            <GoogleDriveIcon className="size-4 grayscale" />
+          </TooltipIconButton>
+        ) : null}
 
         <ModelPicker />
       </div>
@@ -375,7 +437,7 @@ const AssistantMessage: FC = () => {
         <MessageError />
       </div>
 
-      <div className="mt-1.5 flex min-h-8 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/message:opacity-100 focus-within:opacity-100 data-[running=true]:opacity-0">
+      <div className="mt-1.5 flex min-h-8 items-center gap-1 opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover/message:opacity-100 md:focus-within:opacity-100 data-[running=true]:opacity-0">
         <BranchPicker />
         <AssistantActionBar />
       </div>
@@ -429,7 +491,7 @@ const UserMessage: FC = () => {
         <div className="rounded-2xl rounded-br-md bg-[var(--elevated-deep)] px-4 py-2.5 text-[15px] leading-relaxed text-[var(--text)] wrap-break-word">
           <MessagePrimitive.Parts />
         </div>
-        <div className="absolute -left-9 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-hover/message:opacity-100">
+        <div className="absolute -left-9 top-1/2 -translate-y-1/2 opacity-100 transition-opacity max-sm:static max-sm:mt-1 max-sm:translate-y-0 md:opacity-0 md:group-hover/message:opacity-100">
           <UserActionBar />
         </div>
       </div>
