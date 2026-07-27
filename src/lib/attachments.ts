@@ -6,10 +6,15 @@ export type PendingAttachment = {
   kind: AttachmentKind;
   mime: string;
   size: number;
-  /** base64 data URL for images */
+  /** base64 data URL for images (and rarely small files kept in state) */
   dataUrl?: string;
   /** extracted text for text files */
   text?: string;
+  /**
+   * True when binary payload lives in the off-React payload store
+   * (`attachment-payloads`) rather than `dataUrl` — used for Drive PDFs.
+   */
+  hasPayload?: boolean;
 };
 
 const TEXT_EXTENSIONS = new Set([
@@ -43,7 +48,13 @@ const TEXT_EXTENSIONS = new Set([
 ]);
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB (matches most AI provider limits)
-const MAX_ATTACHMENTS = 6;
+/** Max files pending on a message (local + Drive combined). */
+export const MAX_ATTACHMENTS = 6;
+/**
+ * Max raw bytes we'll base64-embed for a non-image file (e.g. Drive PDF).
+ * Larger files still attach as metadata-only so the UI stays responsive.
+ */
+export const MAX_EMBEDDED_FILE_BYTES = 4 * 1024 * 1024;
 
 export function isTextFile(name: string, mime: string): boolean {
   if (mime.startsWith("text/")) return true;

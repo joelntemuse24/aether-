@@ -20,6 +20,7 @@ import {
 import { useSettings } from "./settings-provider";
 import { useAttachments } from "./attachments-provider";
 import { buildTextAttachmentPrefix } from "@/lib/attachments";
+import { getAttachmentPayload } from "@/lib/attachment-payloads";
 import { runPython } from "@/lib/pyodide";
 import { TOOL_NAMES, type ExecutePythonInput } from "@/lib/tools";
 
@@ -76,13 +77,22 @@ function useChatThreadRuntime() {
         api: "/api/chat",
         headers: () => chatHeaders,
         body: () => {
+          // Resolve image dataUrls from state; file binaries (Drive PDFs) from
+          // the off-React payload store so composer re-renders stay cheap.
           const fileAttachments = attachments
-            .filter((a) => (a.kind === "image" || (a.kind === "file" && a.dataUrl)) && a.dataUrl)
-            .map((a) => ({
-              name: a.name,
-              mime: a.mime,
-              dataUrl: a.dataUrl!,
-            }));
+            .map((a) => {
+              const dataUrl =
+                a.dataUrl ??
+                (a.kind === "file" || a.hasPayload
+                  ? getAttachmentPayload(a.id)
+                  : undefined);
+              if (!dataUrl) return null;
+              if (a.kind !== "image" && a.kind !== "file") return null;
+              return { name: a.name, mime: a.mime, dataUrl };
+            })
+            .filter((a): a is { name: string; mime: string; dataUrl: string } =>
+              a !== null,
+            );
 
           const textPrefix = buildTextAttachmentPrefix(attachments);
 

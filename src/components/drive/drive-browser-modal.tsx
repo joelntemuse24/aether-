@@ -24,6 +24,8 @@ import {
   type DriveFileItem,
 } from "@/lib/google-drive";
 import type { PendingAttachment } from "@/lib/attachments";
+import { MAX_ATTACHMENTS } from "@/lib/attachments";
+import { useAttachments } from "@/providers/attachments-provider";
 
 type ViewMode = "grid" | "list";
 type TypeFilter = "all" | "recent" | "pdf" | "image" | "doc" | "sheet";
@@ -47,6 +49,7 @@ const TYPE_FILTERS: { id: TypeFilter; label: string }[] = [
 
 export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
   const titleId = useId();
+  const { remainingSlots } = useAttachments();
   const [view, setView] = useState<ViewMode>("grid");
   const [type, setType] = useState<TypeFilter>("all");
   const [query, setQuery] = useState("");
@@ -62,6 +65,7 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
   );
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState<Record<string, number>>({});
+  const [slotHint, setSlotHint] = useState<string | null>(null);
 
   const folderId = breadcrumbs[breadcrumbs.length - 1]?.id || "root";
 
@@ -111,15 +115,37 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
       setDebouncedQuery("");
       setType("all");
       setBreadcrumbs([{ id: "root", name: "My Drive" }]);
+      setSlotHint(null);
     }
   }, [open]);
 
   const toggleSelect = (file: DriveFileItem) => {
     if (file.isFolder) return;
+
+    const isSelected = selected.has(file.id);
+    if (isSelected) {
+      setSlotHint(null);
+      setSelected((prev) => {
+        const next = new Map(prev);
+        next.delete(file.id);
+        return next;
+      });
+      return;
+    }
+
+    if (selected.size >= remainingSlots) {
+      setSlotHint(
+        remainingSlots <= 0
+          ? `Maximum of ${MAX_ATTACHMENTS} files already attached.`
+          : `You can select up to ${remainingSlots} more file${remainingSlots === 1 ? "" : "s"}.`,
+      );
+      return;
+    }
+
+    setSlotHint(null);
     setSelected((prev) => {
       const next = new Map(prev);
-      if (next.has(file.id)) next.delete(file.id);
-      else next.set(file.id, file);
+      next.set(file.id, file);
       return next;
     });
   };
@@ -144,12 +170,13 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
   const selectedList = useMemo(() => Array.from(selected.values()), [selected]);
 
   const handleConfirm = async () => {
-    if (selectedList.length === 0 || downloading) return;
+    if (selectedList.length === 0 || downloading || remainingSlots <= 0) return;
     setDownloading(true);
     const attachments: PendingAttachment[] = [];
     const errors: string[] = [];
+    const toDownload = selectedList.slice(0, remainingSlots);
 
-    for (const file of selectedList) {
+    for (const file of toDownload) {
       setProgress((p) => ({ ...p, [file.id]: 5 }));
       try {
         const result = await downloadDriveFile(
@@ -170,6 +197,13 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
     setDownloading(false);
     onSelect(attachments, errors);
     onClose();
+    // Return focus to the composer so typing works immediately after attach
+    requestAnimationFrame(() => {
+      const input = document.querySelector<HTMLTextAreaElement>(
+        'textarea[aria-label="Message input"]',
+      );
+      input?.focus();
+    });
   };
 
   if (!open) return null;
@@ -379,9 +413,13 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
         {/* Footer */}
         <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3 sm:px-5">
           <span className="text-xs text-[var(--muted)]">
-            {selectedList.length === 0
-              ? "Select files to attach"
-              : `${selectedList.length} selected`}
+            {slotHint
+              ? slotHint
+              : selectedList.length === 0
+                ? remainingSlots <= 0
+                  ? `Maximum of ${MAX_ATTACHMENTS} files already attached`
+                  : `Select up to ${remainingSlots} file${remainingSlots === 1 ? "" : "s"}`
+                : `${selectedList.length} selected · ${remainingSlots - selectedList.length} slot${remainingSlots - selectedList.length === 1 ? "" : "s"} left`}
           </span>
           <div className="flex items-center gap-2">
             <Button
@@ -393,7 +431,11 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
             </Button>
             <Button
               onClick={() => void handleConfirm()}
-              disabled={selectedList.length === 0 || downloading}
+              disabled={
+                selectedList.length === 0 ||
+                downloading ||
+                remainingSlots <= 0
+              }
             >
               {downloading ? (
                 <span className="inline-flex items-center gap-1.5">
