@@ -65,8 +65,20 @@ const storage = {
     if (typeof window === "undefined") return;
     try {
       window.localStorage.setItem(key, value);
-    } catch {
-      /* quota */
+    } catch (err) {
+      const quota =
+        err instanceof DOMException &&
+        (err.name === "QuotaExceededError" ||
+          err.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+          err.code === 22);
+      if (quota) {
+        window.dispatchEvent(
+          new CustomEvent("aether:notice", {
+            detail:
+              "Chat history couldn't be saved — browser storage is full. Older chats may be missing after refresh.",
+          }),
+        );
+      }
     }
   },
   removeItem(key: string): void {

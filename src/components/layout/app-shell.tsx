@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import dynamic from "next/dynamic";
 import { PanelLeftIcon } from "lucide-react";
 import { Thread } from "@/components/assistant-ui/thread";
@@ -20,13 +20,30 @@ const ArtifactPanel = dynamic(
   { ssr: false },
 );
 
+function pushNotices(
+  setNotices: Dispatch<SetStateAction<string[]>>,
+  incoming: string | string[],
+) {
+  const list = (Array.isArray(incoming) ? incoming : [incoming]).filter(
+    (m): m is string => typeof m === "string" && m.trim().length > 0,
+  );
+  if (list.length === 0) return;
+  setNotices((prev) => {
+    const next = [...prev];
+    for (const message of list) {
+      if (!next.includes(message)) next.push(message);
+    }
+    return next;
+  });
+}
+
 export function AppShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebar, setMobileSidebar] = useState(false);
   const { open: artifactOpen } = useArtifact();
   const { browserOpen, setBrowserOpen } = useDrive();
   const { addAttachments } = useAttachments();
-  const [driveErrors, setDriveErrors] = useState<string[]>([]);
+  const [notices, setNotices] = useState<string[]>([]);
 
   useEffect(() => {
     const stored = localStorage.getItem("aether:sidebar-collapsed");
@@ -40,12 +57,18 @@ export function AppShell() {
         typeof detail === "string" && detail
           ? `Google Drive: ${detail}`
           : "Google Drive connection failed.";
-      setDriveErrors((prev) =>
-        prev.includes(message) ? prev : [...prev, message],
-      );
+      pushNotices(setNotices, message);
+    };
+    const onNotice = (event: Event) => {
+      const detail = (event as CustomEvent<string | string[]>).detail;
+      pushNotices(setNotices, detail);
     };
     window.addEventListener("aether:drive-error", onDriveError);
-    return () => window.removeEventListener("aether:drive-error", onDriveError);
+    window.addEventListener("aether:notice", onNotice);
+    return () => {
+      window.removeEventListener("aether:drive-error", onDriveError);
+      window.removeEventListener("aether:notice", onNotice);
+    };
   }, []);
 
   const toggleSidebar = () => {
@@ -114,22 +137,23 @@ export function AppShell() {
         open={browserOpen}
         onClose={() => setBrowserOpen(false)}
         onSelect={(attachments, errors) => {
-          if (attachments.length > 0) addAttachments(attachments);
-          if (errors.length > 0) setDriveErrors(errors);
+          const capErrors =
+            attachments.length > 0 ? addAttachments(attachments) : [];
+          pushNotices(setNotices, [...errors, ...capErrors]);
         }}
       />
 
-      {driveErrors.length > 0 && (
+      {notices.length > 0 && (
         <div className="fixed bottom-4 left-1/2 z-[120] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-[var(--error-border)] bg-[var(--error-bg)] px-3 py-2 text-xs text-[var(--error-text)] shadow-none">
           <div className="flex items-start justify-between gap-2">
             <div className="space-y-1">
-              {driveErrors.map((err) => (
+              {notices.map((err) => (
                 <div key={err}>{err}</div>
               ))}
             </div>
             <button
               type="button"
-              onClick={() => setDriveErrors([])}
+              onClick={() => setNotices([])}
               className="shrink-0 text-[var(--muted)] hover:text-[var(--text)]"
               aria-label="Dismiss"
             >

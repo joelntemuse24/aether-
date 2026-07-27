@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getValidDriveAccessToken } from "@/lib/drive-session";
-import { isImageFile, isTextFile } from "@/lib/attachments";
+import {
+  isImageFile,
+  isTextFile,
+  MAX_EMBEDDED_FILE_BYTES,
+  MAX_EMBEDDED_IMAGE_BYTES,
+} from "@/lib/attachments";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -192,6 +197,19 @@ export async function POST(req: Request) {
     }
 
     if (isImageFile(mimeType)) {
+      if (blob.size > MAX_EMBEDDED_IMAGE_BYTES) {
+        const mb = (MAX_EMBEDDED_IMAGE_BYTES / (1024 * 1024)).toFixed(0);
+        return NextResponse.json({
+          attachment: {
+            id,
+            name,
+            kind: "image",
+            mime: mimeType,
+            size: blob.size,
+          },
+          error: `"${name}" is larger than ${mb} MB, so it was attached by name only (model cannot see the image).`,
+        });
+      }
       const buf = Buffer.from(await blob.arrayBuffer());
       const dataUrl = `data:${mimeType};base64,${buf.toString("base64")}`;
       return NextResponse.json({
@@ -230,6 +248,21 @@ export async function POST(req: Request) {
     }
 
     if (mimeType === "application/pdf" || name.toLowerCase().endsWith(".pdf")) {
+      // Only embed moderately sized PDFs. Huge base64 blobs in the browser
+      // freeze the chat composer (see attachment-payloads side store).
+      if (blob.size > MAX_EMBEDDED_FILE_BYTES) {
+        const mb = (MAX_EMBEDDED_FILE_BYTES / (1024 * 1024)).toFixed(0);
+        return NextResponse.json({
+          attachment: {
+            id,
+            name,
+            kind: "file",
+            mime: "application/pdf",
+            size: blob.size,
+          },
+          error: `"${name}" is larger than ${mb} MB, so it was attached by name only (model cannot read the PDF bytes).`,
+        });
+      }
       const buf = Buffer.from(await blob.arrayBuffer());
       const dataUrl = `data:application/pdf;base64,${buf.toString("base64")}`;
       return NextResponse.json({

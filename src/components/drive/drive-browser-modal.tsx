@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   CheckIcon,
   ChevronRightIcon,
@@ -24,6 +24,8 @@ import {
   type DriveFileItem,
 } from "@/lib/google-drive";
 import type { PendingAttachment } from "@/lib/attachments";
+import { MAX_ATTACHMENTS } from "@/lib/attachments";
+import { useAttachments } from "@/providers/attachments-provider";
 
 type ViewMode = "grid" | "list";
 type TypeFilter = "all" | "recent" | "pdf" | "image" | "doc" | "sheet";
@@ -47,6 +49,7 @@ const TYPE_FILTERS: { id: TypeFilter; label: string }[] = [
 
 export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
   const titleId = useId();
+  const { remainingSlots } = useAttachments();
   const [view, setView] = useState<ViewMode>("grid");
   const [type, setType] = useState<TypeFilter>("all");
   const [query, setQuery] = useState("");
@@ -62,6 +65,8 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
   );
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState<Record<string, number>>({});
+  const [slotHint, setSlotHint] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const folderId = breadcrumbs[breadcrumbs.length - 1]?.id || "root";
 
@@ -93,16 +98,27 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
     void load();
   }, [open, load]);
 
+  const cancelDownload = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setDownloading(false);
+  }, []);
+
+  const requestClose = useCallback(() => {
+    if (downloading) cancelDownload();
+    onClose();
+  }, [downloading, cancelDownload, onClose]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !downloading) onClose();
+      if (e.key === "Escape") requestClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose, downloading]);
+  }, [open, requestClose]);
 
-  // Reset when opening
+  // Reset when opening; abort in-flight download when closing
   useEffect(() => {
     if (open) {
       setSelected(new Map());
@@ -111,21 +127,47 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
       setDebouncedQuery("");
       setType("all");
       setBreadcrumbs([{ id: "root", name: "My Drive" }]);
+      setSlotHint(null);
+    } else {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setDownloading(false);
     }
   }, [open]);
 
   const toggleSelect = (file: DriveFileItem) => {
-    if (file.isFolder) return;
+    if (file.isFolder || downloading) return;
+
+    const isSelected = selected.has(file.id);
+    if (isSelected) {
+      setSlotHint(null);
+      setSelected((prev) => {
+        const next = new Map(prev);
+        next.delete(file.id);
+        return next;
+      });
+      return;
+    }
+
+    if (selected.size >= remainingSlots) {
+      setSlotHint(
+        remainingSlots <= 0
+          ? `Maximum of ${MAX_ATTACHMENTS} files already attached.`
+          : `You can select up to ${remainingSlots} more file${remainingSlots === 1 ? "" : "s"}.`,
+      );
+      return;
+    }
+
+    setSlotHint(null);
     setSelected((prev) => {
       const next = new Map(prev);
-      if (next.has(file.id)) next.delete(file.id);
-      else next.set(file.id, file);
+      next.set(file.id, file);
       return next;
     });
   };
 
   const openFolder = (file: DriveFileItem) => {
-    if (!file.isFolder) return;
+    if (!file.isFolder || downloading) return;
     setType("all");
     setQuery("");
     setDebouncedQuery("");
@@ -134,6 +176,7 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
   };
 
   const goToBreadcrumb = (index: number) => {
+    if (downloading) return;
     setBreadcrumbs((b) => b.slice(0, index + 1));
     setType("all");
     setQuery("");
@@ -144,32 +187,58 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
   const selectedList = useMemo(() => Array.from(selected.values()), [selected]);
 
   const handleConfirm = async () => {
-    if (selectedList.length === 0 || downloading) return;
+    if (selectedList.length === 0 || downloading || remainingSlots <= 0) return;
+
+    const controller = new AbortController();
+    abortRef.current = controller;
     setDownloading(true);
+
     const attachments: PendingAttachment[] = [];
     const errors: string[] = [];
+    const toDownload = selectedList.slice(0, remainingSlots);
 
-    for (const file of selectedList) {
-      setProgress((p) => ({ ...p, [file.id]: 5 }));
-      try {
-        const result = await downloadDriveFile(
-          file.id,
-          file.name,
-          file.mimeType,
-          (pct) => setProgress((p) => ({ ...p, [file.id]: pct })),
-        );
-        if (result.attachment) attachments.push(result.attachment);
-        if (result.error) errors.push(result.error);
-      } catch (err) {
-        errors.push(
-          err instanceof Error ? err.message : `Failed to download ${file.name}`,
-        );
+    try {
+      for (const file of toDownload) {
+        if (controller.signal.aborted) break;
+        setProgress((p) => ({ ...p, [file.id]: 5 }));
+        try {
+          const result = await downloadDriveFile(
+            file.id,
+            file.name,
+            file.mimeType,
+            (pct) => setProgress((p) => ({ ...p, [file.id]: pct })),
+            controller.signal,
+          );
+          if (result.attachment) attachments.push(result.attachment);
+          if (result.error) errors.push(result.error);
+        } catch (err) {
+          if (controller.signal.aborted) {
+            errors.push("Download cancelled.");
+            break;
+          }
+          errors.push(
+            err instanceof Error
+              ? err.message
+              : `Failed to download ${file.name}`,
+          );
+        }
       }
+    } finally {
+      abortRef.current = null;
+      setDownloading(false);
     }
 
-    setDownloading(false);
-    onSelect(attachments, errors);
+    if (attachments.length > 0 || errors.length > 0) {
+      onSelect(attachments, errors);
+    }
     onClose();
+    // Return focus to the composer so typing works immediately after attach
+    requestAnimationFrame(() => {
+      const input = document.querySelector<HTMLTextAreaElement>(
+        'textarea[aria-label="Message input"]',
+      );
+      input?.focus();
+    });
   };
 
   if (!open) return null;
@@ -178,7 +247,7 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-3 sm:p-6">
       <div
         className="absolute inset-0 bg-[var(--overlay)]"
-        onClick={() => !downloading && onClose()}
+        onClick={requestClose}
         aria-hidden
       />
       <div
@@ -200,10 +269,9 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
           </div>
           <button
             type="button"
-            onClick={() => !downloading && onClose()}
-            disabled={downloading}
-            className="rounded p-1 text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)] disabled:opacity-40"
-            aria-label="Close"
+            onClick={requestClose}
+            className="rounded p-1 text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+            aria-label={downloading ? "Cancel download and close" : "Close"}
           >
             <XIcon className="size-4" />
           </button>
@@ -379,21 +447,27 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
         {/* Footer */}
         <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3 sm:px-5">
           <span className="text-xs text-[var(--muted)]">
-            {selectedList.length === 0
-              ? "Select files to attach"
-              : `${selectedList.length} selected`}
+            {downloading
+              ? "Downloading… Cancel anytime"
+              : slotHint
+                ? slotHint
+                : selectedList.length === 0
+                  ? remainingSlots <= 0
+                    ? `Maximum of ${MAX_ATTACHMENTS} files already attached`
+                    : `Select up to ${remainingSlots} file${remainingSlots === 1 ? "" : "s"}`
+                  : `${selectedList.length} selected · ${remainingSlots - selectedList.length} slot${remainingSlots - selectedList.length === 1 ? "" : "s"} left`}
           </span>
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              onClick={onClose}
-              disabled={downloading}
-            >
-              Cancel
+            <Button variant="ghost" onClick={requestClose}>
+              {downloading ? "Cancel" : "Close"}
             </Button>
             <Button
               onClick={() => void handleConfirm()}
-              disabled={selectedList.length === 0 || downloading}
+              disabled={
+                selectedList.length === 0 ||
+                downloading ||
+                remainingSlots <= 0
+              }
             >
               {downloading ? (
                 <span className="inline-flex items-center gap-1.5">

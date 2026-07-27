@@ -164,27 +164,46 @@ function AttachmentChips() {
 
   return (
     <div className="flex flex-wrap gap-1.5 px-2.5 pb-1">
-      {attachments.map((a) => (
-        <div
-          key={a.id}
-          className="group flex max-w-[14rem] items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--elevated)] px-2 py-1 text-xs text-[var(--text-secondary)]"
-        >
-          {a.kind === "image" ? (
-            <ImageIcon className="size-3.5 shrink-0 text-[var(--muted)]" />
-          ) : (
-            <FileIcon className="size-3.5 shrink-0 text-[var(--muted)]" />
-          )}
-          <span className="truncate">{a.name}</span>
-          <button
-            type="button"
-            onClick={() => removeAttachment(a.id)}
-            className="ml-0.5 rounded p-0.5 text-[var(--muted)] opacity-60 transition-opacity hover:bg-[var(--hover-overlay)] hover:opacity-100"
-            aria-label={`Remove ${a.name}`}
+      {attachments.map((a) => {
+        const readable =
+          a.kind === "text"
+            ? !!a.text
+            : !!(a.dataUrl || a.hasPayload);
+        return (
+          <div
+            key={a.id}
+            title={
+              readable
+                ? a.name
+                : `${a.name} — attached by name only; model cannot read the content`
+            }
+            className={cn(
+              "group flex max-w-[14rem] items-center gap-1.5 rounded-lg border px-2 py-1 text-xs",
+              readable
+                ? "border-[var(--border)] bg-[var(--elevated)] text-[var(--text-secondary)]"
+                : "border-[var(--error-border)] bg-[var(--error-bg)] text-[var(--error-text)]",
+            )}
           >
-            <XIcon className="size-3" />
-          </button>
-        </div>
-      ))}
+            {a.kind === "image" ? (
+              <ImageIcon className="size-3.5 shrink-0 opacity-70" />
+            ) : (
+              <FileIcon className="size-3.5 shrink-0 opacity-70" />
+            )}
+            <span className="truncate">{a.name}</span>
+            {!readable && (
+              <span className="shrink-0 text-[10px] opacity-80">name only</span>
+            )}
+            <button
+              type="button"
+              onClick={() => removeAttachment(a.id)}
+              className="ml-0.5 rounded p-0.5 opacity-60 transition-opacity hover:bg-[var(--hover-overlay)] hover:opacity-100"
+              aria-label={`Remove ${a.name}`}
+            >
+              <XIcon className="size-3" />
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }
