@@ -3,9 +3,18 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type FC,
+} from "react";
+import {
   AuiIf,
   ThreadListItemPrimitive,
   ThreadListPrimitive,
+  useAui,
   useAuiState,
 } from "@assistant-ui/react";
 import {
@@ -19,17 +28,20 @@ import {
   MoonIcon,
   LogOutIcon,
   LogInIcon,
+  SearchIcon,
+  PencilIcon,
 } from "lucide-react";
 import { useSettings } from "@/providers/settings-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { useSession, signOut } from "@/providers/session-provider";
 import { Label } from "@/components/ui/label";
-import type { FC } from "react";
 
 type SidebarProps = {
   collapsed: boolean;
   onToggle: () => void;
 };
+
+const ThreadSearchContext = createContext("");
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { setOpenSettings } = useSettings();
@@ -38,6 +50,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const user = session?.user;
   const isAuthenticated = status === "authenticated" && !!user;
   const isLoadingSession = status === "loading";
+  const [query, setQuery] = useState("");
 
   if (collapsed) {
     return (
@@ -71,12 +84,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             onClick={(e) => e.stopPropagation()}
             className="flex size-8 items-center justify-center rounded-lg text-[var(--accent)] transition-colors hover:bg-[var(--accent-muted)]"
             aria-label="New chat"
-            title="New chat"
+            title="New chat (⌘N)"
           >
             <PlusIcon className="size-4" />
           </button>
         </ThreadListPrimitive.New>
-        {/* Explicit hit target — empty flex margin does not always receive clicks */}
         <div className="min-h-4 w-full flex-1" aria-hidden />
         {isAuthenticated ? (
           <button
@@ -121,7 +133,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           }}
           className="flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
           aria-label="Settings"
-          title="Settings"
+          title="Settings (⌘,)"
         >
           <SettingsIcon className="size-4" />
         </button>
@@ -163,7 +175,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </button>
       </div>
 
-      <div className="px-3 pb-3">
+      <div className="px-3 pb-2">
         <ThreadListPrimitive.New asChild>
           <button
             type="button"
@@ -175,21 +187,36 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </ThreadListPrimitive.New>
       </div>
 
+      <div className="px-3 pb-2">
+        <div className="relative">
+          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--muted-soft)]" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search chats"
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1.5 pl-8 pr-2 text-[12px] text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)] focus:border-[var(--accent)]/35"
+            aria-label="Search conversations"
+          />
+        </div>
+      </div>
+
       <div className="px-2 pb-1 pt-0.5">
         <Label>Recent</Label>
       </div>
       <div className="flex-1 overflow-y-auto px-2 pb-2">
-        <ThreadListPrimitive.Root className="flex flex-col gap-0.5">
-          <AuiIf condition={(s) => s.threads.threadIds.length === 0}>
-            <div className="flex flex-col items-center gap-2 px-2 py-8 text-[var(--muted-soft)]">
-              <MessageSquareIcon className="size-5 opacity-40" />
-              <Label>No conversations yet</Label>
-            </div>
-          </AuiIf>
-          <ThreadListPrimitive.Items>
-            {() => <ThreadListItem />}
-          </ThreadListPrimitive.Items>
-        </ThreadListPrimitive.Root>
+        <ThreadSearchContext.Provider value={query.trim().toLowerCase()}>
+          <ThreadListPrimitive.Root className="flex flex-col gap-0.5">
+            <AuiIf condition={(s) => s.threads.threadIds.length === 0}>
+              <div className="flex flex-col items-center gap-2 px-2 py-8 text-[var(--muted-soft)]">
+                <MessageSquareIcon className="size-5 opacity-40" />
+                <Label>No conversations yet</Label>
+              </div>
+            </AuiIf>
+            <ThreadListPrimitive.Items>
+              {() => <ThreadListItem />}
+            </ThreadListPrimitive.Items>
+          </ThreadListPrimitive.Root>
+        </ThreadSearchContext.Provider>
       </div>
 
       <div className="border-t border-[var(--border)] p-3">
@@ -251,7 +278,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <SettingsIcon className="size-3.5 shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[12px] text-[var(--text)]">Settings</div>
-              <Label>Model · API key</Label>
+              <Label>Voice · model · key</Label>
             </div>
           </button>
           <button
@@ -270,13 +297,80 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 }
 
 const ThreadListItem: FC = () => {
+  const aui = useAui();
   const title = useAuiState((s) => s.threadListItem.title || "New chat");
+  const query = useContext(ThreadSearchContext);
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(title);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!renaming) setDraft(title);
+  }, [title, renaming]);
+
+  useEffect(() => {
+    if (renaming) inputRef.current?.select();
+  }, [renaming]);
+
+  if (query && !title.toLowerCase().includes(query)) {
+    return null;
+  }
+
+  const commit = () => {
+    const next = draft.trim();
+    setRenaming(false);
+    if (!next || next === title) return;
+    try {
+      aui.threadListItem().rename(next);
+    } catch {
+      setDraft(title);
+    }
+  };
+
+  if (renaming) {
+    return (
+      <div className="flex items-center gap-1 rounded-md bg-[var(--elevated-deep)] px-1.5 py-1">
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            }
+            if (e.key === "Escape") {
+              setDraft(title);
+              setRenaming(false);
+            }
+          }}
+          className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-1 text-[12px] text-[var(--text)] outline-none"
+          aria-label="Rename conversation"
+          maxLength={80}
+        />
+      </div>
+    );
+  }
 
   return (
     <ThreadListItemPrimitive.Root className="group relative flex items-center rounded-md data-[active]:bg-[var(--elevated-deep)] hover:bg-[var(--hover-overlay)]">
       <ThreadListItemPrimitive.Trigger className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left text-[13px] text-[var(--text)]">
         <span className="truncate">{title}</span>
       </ThreadListItemPrimitive.Trigger>
+
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setRenaming(true);
+        }}
+        className="flex size-6 shrink-0 items-center justify-center rounded text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--hover-overlay)] group-hover:opacity-100 group-data-[active]:opacity-100 max-md:opacity-100"
+        aria-label="Rename conversation"
+        title="Rename"
+      >
+        <PencilIcon className="size-3" />
+      </button>
 
       <ThreadListItemPrimitive.Delete asChild>
         <button

@@ -1,5 +1,6 @@
 import type { ProviderId } from "./models";
 import { DEFAULT_MODEL, providerSupportsTools } from "./models";
+import type { VoiceId } from "./voice";
 
 const STORAGE_KEY = "aether:settings:v1";
 
@@ -25,6 +26,8 @@ export type AppSettings = {
   googleClientId: string;
   /** Enable tool calling (Python, web search, artifacts). Degrades to text-only when off. */
   enableTools: boolean;
+  /** Conversation voice / personality. */
+  voice: VoiceId;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -40,6 +43,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   useCustomModel: false,
   googleClientId: "",
   enableTools: true,
+  voice: "literary",
 };
 
 export function loadSettings(): AppSettings {
@@ -48,7 +52,10 @@ export function loadSettings(): AppSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<AppSettings>;
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    const next = { ...DEFAULT_SETTINGS, ...parsed };
+    const voices = new Set(["default", "literary", "socratic", "concise"]);
+    if (!voices.has(next.voice)) next.voice = DEFAULT_SETTINGS.voice;
+    return next;
   } catch {
     return { ...DEFAULT_SETTINGS };
   }

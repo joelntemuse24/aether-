@@ -21,6 +21,7 @@ import { useSettings } from "./settings-provider";
 import { useAttachments } from "./attachments-provider";
 import { buildTextAttachmentPrefix } from "@/lib/attachments";
 import { getAttachmentPayload } from "@/lib/attachment-payloads";
+import { resolveVoicePrompt } from "@/lib/voice";
 import { runPython } from "@/lib/pyodide";
 import { TOOL_NAMES, type ExecutePythonInput } from "@/lib/tools";
 
@@ -59,11 +60,13 @@ type AddToolResult = (result: {
 }) => void;
 
 function useChatThreadRuntime() {
-  const { chatHeaders, activeModel, hasKey } = useSettings();
+  const { chatHeaders, activeModel, hasKey, settings } = useSettings();
   const { attachments, clearAttachments } = useAttachments();
   const aui = useAui();
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
+  const voiceRef = useRef(settings.voice);
+  voiceRef.current = settings.voice;
 
   // Each remote-thread runtime instance mounts for one thread. Seed that
   // thread's useChat from localStorage so refresh/switch don't depend on
@@ -103,6 +106,7 @@ function useChatThreadRuntime() {
             model: activeModel,
             attachments: fileAttachments,
             textPrefix: textPrefix || undefined,
+            system: resolveVoicePrompt(voiceRef.current),
           };
         },
       }),

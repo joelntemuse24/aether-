@@ -18,6 +18,7 @@ import { useDrive } from "@/providers/drive-provider";
 import { useSession } from "@/providers/session-provider";
 import { ACCENTS, useTheme } from "@/providers/theme-provider";
 import { PROVIDER_DEFAULTS, type ProviderId } from "@/lib/models";
+import { VOICE_OPTIONS } from "@/lib/voice";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -332,6 +333,40 @@ export function SettingsDialog() {
               ids like{" "}
               <code className="text-[var(--text)]">anthropic/claude-sonnet-4</code>.
             </p>
+          </div>
+
+          {/* Voice */}
+          <div className="space-y-2 border-t border-[var(--border)] pt-5">
+            <div className="text-sm font-medium text-[var(--text)]">Voice</div>
+            <p className="text-xs leading-relaxed text-[var(--muted-soft)]">
+              How Aether should sound — literary by default for reading, writing,
+              and careful conversation.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {VOICE_OPTIONS.map((opt) => {
+                const active = settings.voice === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => updateSettings({ voice: opt.id })}
+                    className={cn(
+                      "rounded-xl border px-3 py-2.5 text-left transition-colors",
+                      active
+                        ? "border-[var(--accent)]/50 bg-[var(--accent-muted)]"
+                        : "border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--hover-overlay)]",
+                    )}
+                  >
+                    <div className="text-[13px] font-medium text-[var(--text)]">
+                      {opt.label}
+                    </div>
+                    <div className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                      {opt.blurb}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Tools */}
