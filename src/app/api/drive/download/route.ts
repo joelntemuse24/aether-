@@ -5,6 +5,7 @@ import {
   isImageFile,
   isTextFile,
   MAX_EMBEDDED_FILE_BYTES,
+  MAX_EMBEDDED_IMAGE_BYTES,
 } from "@/lib/attachments";
 
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -196,6 +197,19 @@ export async function POST(req: Request) {
     }
 
     if (isImageFile(mimeType)) {
+      if (blob.size > MAX_EMBEDDED_IMAGE_BYTES) {
+        const mb = (MAX_EMBEDDED_IMAGE_BYTES / (1024 * 1024)).toFixed(0);
+        return NextResponse.json({
+          attachment: {
+            id,
+            name,
+            kind: "image",
+            mime: mimeType,
+            size: blob.size,
+          },
+          error: `"${name}" is larger than ${mb} MB, so it was attached by name only (model cannot see the image).`,
+        });
+      }
       const buf = Buffer.from(await blob.arrayBuffer());
       const dataUrl = `data:${mimeType};base64,${buf.toString("base64")}`;
       return NextResponse.json({

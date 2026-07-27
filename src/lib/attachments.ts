@@ -6,13 +6,13 @@ export type PendingAttachment = {
   kind: AttachmentKind;
   mime: string;
   size: number;
-  /** base64 data URL for images (and rarely small files kept in state) */
+  /** Prefer the off-React payload store; rarely kept inline for tiny payloads. */
   dataUrl?: string;
   /** extracted text for text files */
   text?: string;
   /**
    * True when binary payload lives in the off-React payload store
-   * (`attachment-payloads`) rather than `dataUrl` — used for Drive PDFs.
+   * (`attachment-payloads`) rather than `dataUrl`.
    */
   hasPayload?: boolean;
 };
@@ -55,6 +55,13 @@ export const MAX_ATTACHMENTS = 6;
  * Larger files still attach as metadata-only so the UI stays responsive.
  */
 export const MAX_EMBEDDED_FILE_BYTES = 4 * 1024 * 1024;
+/** Max raw bytes we'll embed for a single image (vision models). */
+export const MAX_EMBEDDED_IMAGE_BYTES = 4 * 1024 * 1024;
+/**
+ * Soft budget for total embedded binary payloads awaiting send.
+ * Keeps JSON.stringify of the chat request from freezing the tab.
+ */
+export const MAX_TOTAL_EMBEDDED_BYTES = 12 * 1024 * 1024;
 
 export function isTextFile(name: string, mime: string): boolean {
   if (mime.startsWith("text/")) return true;
@@ -67,6 +74,18 @@ export function isImageFile(mime: string): boolean {
   return mime.startsWith("image/");
 }
 
+export function isPdfFile(name: string, mime: string): boolean {
+  return mime === "application/pdf" || name.toLowerCase().endsWith(".pdf");
+}
+
+/** True when the model will receive file/image bytes (not just a name stub). */
+export function attachmentIsModelReadable(a: PendingAttachment): boolean {
+  if (a.kind === "text" && a.text) return true;
+  if (a.kind === "image") return !!(a.dataUrl || a.hasPayload);
+  if (a.kind === "file") return !!(a.dataUrl || a.hasPayload);
+  return false;
+}
+
 function readAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -74,6 +93,10 @@ function readAsDataURL(file: File): Promise<string> {
     reader.onerror = () => reject(new Error("Failed to read file"));
     reader.readAsDataURL(file);
   });
+}
+
+function mbLabel(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
 }
 
 export async function processFiles(
@@ -105,16 +128,31 @@ export async function processFiles(
 
     try {
       if (isImageFile(file.type)) {
-        const dataUrl = await readAsDataURL(file);
-        attachments.push({ ...base, kind: "image", dataUrl });
+        if (file.size > MAX_EMBEDDED_IMAGE_BYTES) {
+          attachments.push({ ...base, kind: "image" });
+          errors.push(
+            `"${file.name}" is larger than ${mbLabel(MAX_EMBEDDED_IMAGE_BYTES)}, so it was attached by name only (model cannot see the image).`,
+          );
+        } else {
+          const dataUrl = await readAsDataURL(file);
+          attachments.push({ ...base, kind: "image", dataUrl });
+        }
       } else if (isTextFile(file.name, file.type)) {
         const text = await file.text();
         // Cap very large text files
         const capped = text.length > 120_000 ? text.slice(0, 120_000) + "\n\n[… truncated]" : text;
         attachments.push({ ...base, kind: "text", text: capped });
-      } else {
-        // PDF and other binaries – keep as generic file for now
+      } else if (isPdfFile(file.name, file.type)) {
+        // Local PDFs are metadata-only (no client-side PDF parse / embed).
         attachments.push({ ...base, kind: "file" });
+        errors.push(
+          `"${file.name}" was attached by name only — local PDFs aren't sent to the model. Use Drive for PDFs under ${mbLabel(MAX_EMBEDDED_FILE_BYTES)}, or paste the text.`,
+        );
+      } else {
+        attachments.push({ ...base, kind: "file" });
+        errors.push(
+          `"${file.name}" was attached by name only (model cannot read this file type).`,
+        );
       }
     } catch {
       errors.push(`Could not read ${file.name}.`);
@@ -142,7 +180,13 @@ export function buildTextAttachmentPrefix(attachments: PendingAttachment[]): str
   }
 
   for (const a of fileOnes) {
-    parts.push(`[Attached file: ${a.name} (${a.mime})]`);
+    if (a.hasPayload || a.dataUrl) {
+      parts.push(`[Attached file: ${a.name} (${a.mime}) — bytes included]`);
+    } else {
+      parts.push(
+        `[Attached file: ${a.name} (${a.mime}) — name only; content was not included]`,
+      );
+    }
   }
 
   return parts.join("\n\n") + "\n\n";

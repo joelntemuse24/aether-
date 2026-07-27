@@ -80,6 +80,7 @@ export async function downloadDriveFile(
   name: string,
   mimeType: string,
   onProgress?: (pct: number) => void,
+  signal?: AbortSignal,
 ): Promise<{ attachment: PendingAttachment | null; error?: string }> {
   onProgress?.(10);
 
@@ -87,6 +88,7 @@ export async function downloadDriveFile(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fileId, name, mimeType }),
+    signal,
   });
 
   onProgress?.(80);

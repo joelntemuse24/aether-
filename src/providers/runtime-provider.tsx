@@ -62,6 +62,8 @@ function useChatThreadRuntime() {
   const { chatHeaders, activeModel, hasKey } = useSettings();
   const { attachments, clearAttachments } = useAttachments();
   const aui = useAui();
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
 
   // Each remote-thread runtime instance mounts for one thread. Seed that
   // thread's useChat from localStorage so refresh/switch don't depend on
@@ -71,19 +73,20 @@ function useChatThreadRuntime() {
     return key ? loadThreadUIMessages(key) : [];
   });
 
+  // Rebuild transport only when provider/model headers change — not on every
+  // attach. body() reads the latest attachments via ref at send time.
   const transport = useMemo(
     () =>
       new AssistantChatTransport({
         api: "/api/chat",
         headers: () => chatHeaders,
         body: () => {
-          // Resolve image dataUrls from state; file binaries (Drive PDFs) from
-          // the off-React payload store so composer re-renders stay cheap.
-          const fileAttachments = attachments
+          const current = attachmentsRef.current;
+          const fileAttachments = current
             .map((a) => {
               const dataUrl =
                 a.dataUrl ??
-                (a.kind === "file" || a.hasPayload
+                (a.hasPayload || a.kind === "image" || a.kind === "file"
                   ? getAttachmentPayload(a.id)
                   : undefined);
               if (!dataUrl) return null;
@@ -94,7 +97,7 @@ function useChatThreadRuntime() {
               a !== null,
             );
 
-          const textPrefix = buildTextAttachmentPrefix(attachments);
+          const textPrefix = buildTextAttachmentPrefix(current);
 
           return {
             model: activeModel,
@@ -103,7 +106,7 @@ function useChatThreadRuntime() {
           };
         },
       }),
-    [chatHeaders, activeModel, attachments],
+    [chatHeaders, activeModel],
   );
 
   const addToolResultRef = useRef<AddToolResult | null>(null);
