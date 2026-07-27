@@ -17,6 +17,7 @@ import {
   ACTIVE_THREAD_KEY,
   loadThreadUIMessages,
 } from "@/lib/local-thread-adapter";
+import { readThreadIdFromLocation } from "@/lib/thread-url";
 import { useSettings } from "./settings-provider";
 import { useAttachments } from "./attachments-provider";
 import { buildTextAttachmentPrefix } from "@/lib/attachments";
@@ -24,14 +25,9 @@ import { getAttachmentPayload } from "@/lib/attachment-payloads";
 import { runPython } from "@/lib/pyodide";
 import { TOOL_NAMES, type ExecutePythonInput } from "@/lib/tools";
 
-function loadActiveThreadId(): string | undefined {
-  if (typeof window === "undefined") return undefined;
-  try {
-    const raw = localStorage.getItem(ACTIVE_THREAD_KEY);
-    return raw?.trim() || undefined;
-  } catch {
-    return undefined;
-  }
+function loadInitialThreadIdFromUrl(): string | undefined {
+  // Only the URL selects the chat on boot. Bare `/` is always a new conversation.
+  return readThreadIdFromLocation();
 }
 
 function saveActiveThreadId(threadId: string) {
@@ -164,7 +160,8 @@ function useChatThreadRuntime() {
 
 export function RuntimeProvider({ children }: { children: ReactNode }) {
   const adapter = useMemo(() => createAetherThreadListAdapter(), []);
-  const [initialThreadId] = useState(() => loadActiveThreadId());
+  // `/c/<id>` deep links win; bare `/` starts a new chat.
+  const [initialThreadId] = useState(() => loadInitialThreadIdFromUrl());
   const restoredRef = useRef(false);
 
   const onThreadIdChange = useCallback((threadId: string | undefined) => {
@@ -179,7 +176,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
   });
 
   // Constructor always switchToNewThread(); initialThreadId races it and can lose.
-  // Re-apply the saved thread after the list is ready (and once more on a tick).
+  // Re-apply the URL thread after the list is ready (and once more on a tick).
   useEffect(() => {
     if (restoredRef.current) return;
     const saved = initialThreadId;
@@ -195,12 +192,11 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
         await runtime.threads.getLoadThreadsPromise();
         if (cancelled) return;
         await runtime.threads.switchToThread(saved);
-        // Beat a late switchToNewThread completion from the constructor.
         await new Promise((r) => setTimeout(r, 0));
         if (cancelled) return;
         await runtime.threads.switchToThread(saved);
       } catch {
-        // Thread may have been deleted — stay on new chat.
+        // Thread may have been deleted — ThreadUrlSync sends the user to `/`.
       } finally {
         restoredRef.current = true;
       }
