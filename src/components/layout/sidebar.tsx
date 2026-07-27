@@ -20,10 +20,12 @@ import {
   LogOutIcon,
   LogInIcon,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useSettings } from "@/providers/settings-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { useSession, signOut } from "@/providers/session-provider";
 import { Label } from "@/components/ui/label";
+import { NEW_CHAT_PATH } from "@/lib/thread-url";
 import type { FC } from "react";
 
 type SidebarProps = {
@@ -35,9 +37,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { setOpenSettings } = useSettings();
   const { theme, toggleTheme } = useTheme();
   const { data: session, status } = useSession();
+  const router = useRouter();
   const user = session?.user;
   const isAuthenticated = status === "authenticated" && !!user;
   const isLoadingSession = status === "loading";
+
+  const goNewChat = () => {
+    router.push(NEW_CHAT_PATH);
+  };
 
   if (collapsed) {
     return (
@@ -68,7 +75,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <ThreadListPrimitive.New asChild>
           <button
             type="button"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              goNewChat();
+            }}
             className="flex size-8 items-center justify-center rounded-lg text-[var(--accent)] transition-colors hover:bg-[var(--accent-muted)]"
             aria-label="New chat"
             title="New chat"
@@ -167,6 +177,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <ThreadListPrimitive.New asChild>
           <button
             type="button"
+            onClick={goNewChat}
             className="flex w-full items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--hover-overlay)]"
           >
             <PlusIcon className="size-3.5 shrink-0 text-[var(--accent)]" />
