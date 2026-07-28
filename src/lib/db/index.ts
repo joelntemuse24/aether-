@@ -1,3 +1,4 @@
+import path from "node:path";
 import { sql } from "drizzle-orm";
 import { drizzle as drizzleNeon } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
@@ -59,7 +60,9 @@ async function createDb(): Promise<AppDb> {
   }
 
   if (process.env.AETHER_PGLITE === "1") {
-    const pglite = new PGlite("./.data/aether-pglite");
+    // Absolute path — Next bundling can turn relative paths into URL objects.
+    const dataDir = path.join(process.cwd(), ".data", "aether-pglite");
+    const pglite = new PGlite(dataDir);
     await pglite.waitReady;
     const db = drizzlePglite(pglite, { schema });
     await ensureSchema(db as AppDb);

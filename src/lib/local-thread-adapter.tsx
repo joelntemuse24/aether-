@@ -246,7 +246,7 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
   constructor(
     private getRemoteId: () => string | undefined,
     private ensureRemoteId: () => Promise<string>,
-    private useCloud: () => boolean,
+    private isCloudEnabled: () => boolean,
   ) {}
 
   async load(): Promise<ExportedMessageRepository> {
@@ -264,10 +264,10 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
   ): GenericThreadHistoryAdapter<TMessage> {
     const getRemoteId = this.getRemoteId;
     const ensureRemoteId = this.ensureRemoteId;
-    const useCloud = this.useCloud;
+    const isCloudEnabled = this.isCloudEnabled;
 
     const readRepo = async (remoteId: string): Promise<StoredFormatRepo> => {
-      if (useCloud()) {
+      if (isCloudEnabled()) {
         const { cloudGetMessageRepo } = await import(
           "@/lib/conversations/cloud-client"
         );
@@ -277,7 +277,7 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
     };
 
     const writeRepo = async (remoteId: string, repo: StoredFormatRepo) => {
-      if (useCloud()) {
+      if (isCloudEnabled()) {
         const { cloudSaveMessageRepo } = await import(
           "@/lib/conversations/cloud-client"
         );
@@ -388,7 +388,7 @@ function LocalHistoryProvider({ children }: { children: ReactNode }) {
         const { remoteId } = await aui.threadListItem().initialize();
         return remoteId;
       },
-      useCloud: () => cloud,
+      isCloudEnabled: () => cloud,
     }),
     [aui, cloud],
   );
@@ -398,7 +398,7 @@ function LocalHistoryProvider({ children }: { children: ReactNode }) {
       new LocalHistoryAdapter(
         helpers.getRemoteId,
         helpers.ensureRemoteId,
-        helpers.useCloud,
+        helpers.isCloudEnabled,
       ),
     [helpers],
   );
