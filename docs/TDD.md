@@ -180,8 +180,6 @@ Auth gate (`requireCloudUser`): DB configured + session `user.id` \| `user.email
 - **Tools (when `x-tools` ≠ `"0"`):** `execute_python` (client), `web_search` (server), `create_artifact` (server ack `{ ok, kind, title }`).
 - **Search order (`runWebSearch`):** Brave if `BRAVE_SEARCH_API_KEY` → Wikipedia → DuckDuckGo Instant Answer; empty/invalid JSON bodies skip a source rather than aborting the whole search.
 
-> Note: `src/lib/web-search.ts` exists on the web-search fix branch / when merged. If that module is absent on an older revision, search logic may still live inline in `src/app/api/chat/route.ts`.
-
 ### Auth APIs
 
 | Endpoint | Behavior |
