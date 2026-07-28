@@ -16,6 +16,7 @@ import {
   createAetherThreadListAdapter,
   ACTIVE_THREAD_KEY,
   loadThreadUIMessages,
+  loadThreadUIMessagesAsync,
 } from "@/lib/local-thread-adapter";
 import { readThreadIdFromLocation } from "@/lib/thread-url";
 import { useSettings } from "./settings-provider";
@@ -147,10 +148,15 @@ function useChatThreadRuntime() {
       loadedKeyRef.current = key;
       return;
     }
-    const stored = loadThreadUIMessages(key);
-    if (stored.length === 0) return;
-    loadedKeyRef.current = key;
-    setMessages(stored);
+    let cancelled = false;
+    void loadThreadUIMessagesAsync(key).then((stored) => {
+      if (cancelled || stored.length === 0) return;
+      loadedKeyRef.current = key;
+      setMessages(stored);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [aui, messages.length, setMessages]);
 
   return useAISDKRuntime(chat, {

@@ -1,7 +1,14 @@
 "use client";
 
 import type { UIMessage } from "ai";
-import { useMemo, type FC, type PropsWithChildren, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FC,
+  type PropsWithChildren,
+  type ReactNode,
+} from "react";
 import {
   RuntimeAdapterProvider,
   useAui,
@@ -17,6 +24,11 @@ import {
   type ExportedMessageRepositoryItem,
 } from "@assistant-ui/react";
 import { createAssistantStream } from "assistant-stream";
+import { useSession } from "@/providers/session-provider";
+import {
+  fetchCloudStatus,
+  invalidateCloudStatus,
+} from "@/lib/conversations/cloud-client";
 
 const PREFIX = "aether:";
 export const ACTIVE_THREAD_KEY = `${PREFIX}active-thread`;
@@ -95,6 +107,39 @@ const threadsKey = `${PREFIX}threads`;
 const messagesKey = (id: string) => `${PREFIX}messages:${id}`;
 const AI_SDK_FORMAT = "ai-sdk/v6";
 
+export function listLocalThreads(): StoredThread[] {
+  return loadThreads();
+}
+
+export function readLocalFormatRepo(remoteId: string): StoredFormatRepo {
+  return loadFormatRepo(remoteId);
+}
+
+/** Snapshot browser-local chats for cloud import. */
+export function exportLocalConversationsForMigrate(): Array<{
+  id: string;
+  title?: string;
+  status: "regular" | "archived";
+  custom?: Record<string, unknown>;
+  repo: StoredFormatRepo;
+}> {
+  return loadThreads().map((t) => ({
+    id: t.remoteId,
+    title: t.title,
+    status: t.status,
+    custom: t.custom,
+    repo: loadFormatRepo(t.remoteId),
+  }));
+}
+
+export function clearAllLocalConversations(): void {
+  const threads = loadThreads();
+  for (const t of threads) {
+    storage.removeItem(messagesKey(t.remoteId));
+  }
+  storage.removeItem(threadsKey);
+}
+
 /** Load persisted UI messages for a thread (used to bootstrap chat on switch/refresh). */
 export function loadThreadUIMessages(remoteId: string): UIMessage[] {
   const repo = loadFormatRepo(remoteId);
@@ -113,6 +158,37 @@ export function loadThreadUIMessages(remoteId: string): UIMessage[] {
   }
 
   return messages;
+}
+
+/** Async loader — cloud when signed in + DB configured, else localStorage. */
+export async function loadThreadUIMessagesAsync(
+  remoteId: string,
+): Promise<UIMessage[]> {
+  try {
+    const { fetchCloudStatus, cloudGetMessageRepo } = await import(
+      "@/lib/conversations/cloud-client"
+    );
+    const status = await fetchCloudStatus();
+    if (status.cloud) {
+      const repo = await cloudGetMessageRepo(remoteId);
+      const messages: UIMessage[] = [];
+      for (const entry of repo.entries) {
+        if (entry.format !== AI_SDK_FORMAT) continue;
+        try {
+          messages.push({
+            id: entry.id,
+            ...(entry.content as Omit<UIMessage, "id">),
+          });
+        } catch {
+          // skip
+        }
+      }
+      return messages;
+    }
+  } catch {
+    // fall through to local
+  }
+  return loadThreadUIMessages(remoteId);
 }
 
 function loadThreads(): StoredThread[] {
@@ -170,6 +246,7 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
   constructor(
     private getRemoteId: () => string | undefined,
     private ensureRemoteId: () => Promise<string>,
+    private useCloud: () => boolean,
   ) {}
 
   async load(): Promise<ExportedMessageRepository> {
@@ -187,6 +264,28 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
   ): GenericThreadHistoryAdapter<TMessage> {
     const getRemoteId = this.getRemoteId;
     const ensureRemoteId = this.ensureRemoteId;
+    const useCloud = this.useCloud;
+
+    const readRepo = async (remoteId: string): Promise<StoredFormatRepo> => {
+      if (useCloud()) {
+        const { cloudGetMessageRepo } = await import(
+          "@/lib/conversations/cloud-client"
+        );
+        return cloudGetMessageRepo(remoteId);
+      }
+      return loadFormatRepo(remoteId);
+    };
+
+    const writeRepo = async (remoteId: string, repo: StoredFormatRepo) => {
+      if (useCloud()) {
+        const { cloudSaveMessageRepo } = await import(
+          "@/lib/conversations/cloud-client"
+        );
+        await cloudSaveMessageRepo(remoteId, repo);
+        return;
+      }
+      saveFormatRepo(remoteId, repo);
+    };
 
     return {
       async load(): Promise<MessageFormatRepository<TMessage>> {
@@ -194,7 +293,7 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
         // Empty when the thread is still optimistic (no remoteId yet).
         if (!remoteId) return { messages: [] };
 
-        const repo = loadFormatRepo(remoteId);
+        const repo = await readRepo(remoteId);
         const messages: MessageFormatItem<TMessage>[] = [];
 
         for (const entry of repo.entries) {
@@ -220,7 +319,7 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
 
       async append(item: MessageFormatItem<TMessage>): Promise<void> {
         const remoteId = await ensureRemoteId();
-        const repo = loadFormatRepo(remoteId);
+        const repo = await readRepo(remoteId);
         const id = formatAdapter.getId(item.message);
         const encoded = formatAdapter.encode(item);
 
@@ -235,7 +334,7 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
         if (idx >= 0) repo.entries[idx] = entry;
         else repo.entries.push(entry);
         repo.headId = id;
-        saveFormatRepo(remoteId, repo);
+        await writeRepo(remoteId, repo);
       },
 
       async update(
@@ -244,7 +343,7 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
       ): Promise<void> {
         const remoteId = getRemoteId();
         if (!remoteId) return;
-        const repo = loadFormatRepo(remoteId);
+        const repo = await readRepo(remoteId);
         const newId = formatAdapter.getId(item.message);
         const encoded = formatAdapter.encode(item);
         const entry: StoredFormatEntry = {
@@ -260,7 +359,7 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
         if (idx >= 0) repo.entries[idx] = entry;
         else repo.entries.push(entry);
         repo.headId = newId;
-        saveFormatRepo(remoteId, repo);
+        await writeRepo(remoteId, repo);
       },
     };
   }
@@ -268,6 +367,19 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
 
 function LocalHistoryProvider({ children }: { children: ReactNode }) {
   const aui = useAui();
+  const { status } = useSession();
+  const [cloud, setCloud] = useState(false);
+
+  useEffect(() => {
+    invalidateCloudStatus();
+    let cancelled = false;
+    void fetchCloudStatus(true).then((s) => {
+      if (!cancelled) setCloud(s.cloud);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [status]);
 
   const helpers = useMemo(
     () => ({
@@ -276,12 +388,18 @@ function LocalHistoryProvider({ children }: { children: ReactNode }) {
         const { remoteId } = await aui.threadListItem().initialize();
         return remoteId;
       },
+      useCloud: () => cloud,
     }),
-    [aui],
+    [aui, cloud],
   );
 
   const history = useMemo(
-    () => new LocalHistoryAdapter(helpers.getRemoteId, helpers.ensureRemoteId),
+    () =>
+      new LocalHistoryAdapter(
+        helpers.getRemoteId,
+        helpers.ensureRemoteId,
+        helpers.useCloud,
+      ),
     [helpers],
   );
 
@@ -295,10 +413,41 @@ function LocalHistoryProvider({ children }: { children: ReactNode }) {
 }
 
 export function createAetherThreadListAdapter(): RemoteThreadListAdapter {
+  const cloudRef = { current: false };
+  void import("@/lib/conversations/cloud-client").then(({ fetchCloudStatus }) =>
+    fetchCloudStatus().then((s) => {
+      cloudRef.current = s.cloud;
+    }),
+  );
+
+  const ensureMode = async () => {
+    const { fetchCloudStatus } = await import(
+      "@/lib/conversations/cloud-client"
+    );
+    const s = await fetchCloudStatus();
+    cloudRef.current = s.cloud;
+    return s.cloud;
+  };
+
   return {
     unstable_Provider: LocalHistoryProvider as FC<PropsWithChildren>,
 
     async list() {
+      if (await ensureMode()) {
+        const { cloudListThreads } = await import(
+          "@/lib/conversations/cloud-client"
+        );
+        const threads = await cloudListThreads();
+        return {
+          threads: threads.map((t) => ({
+            remoteId: t.remoteId,
+            externalId: t.externalId,
+            status: t.status,
+            title: t.title,
+            custom: t.custom,
+          })),
+        };
+      }
       const threads = loadThreads();
       return {
         threads: threads.map((t) => ({
@@ -313,6 +462,13 @@ export function createAetherThreadListAdapter(): RemoteThreadListAdapter {
 
     async initialize(threadId: string) {
       const remoteId = threadId;
+      if (await ensureMode()) {
+        const { cloudCreateThread } = await import(
+          "@/lib/conversations/cloud-client"
+        );
+        await cloudCreateThread({ id: remoteId });
+        return { remoteId, externalId: undefined };
+      }
       const threads = loadThreads();
       if (!threads.some((t) => t.remoteId === remoteId)) {
         threads.unshift({ remoteId, status: "regular" });
@@ -322,6 +478,13 @@ export function createAetherThreadListAdapter(): RemoteThreadListAdapter {
     },
 
     async rename(remoteId: string, newTitle: string) {
+      if (await ensureMode()) {
+        const { cloudPatchThread } = await import(
+          "@/lib/conversations/cloud-client"
+        );
+        await cloudPatchThread(remoteId, { title: newTitle });
+        return;
+      }
       const threads = loadThreads();
       const thread = threads.find((t) => t.remoteId === remoteId);
       if (thread) {
@@ -331,6 +494,13 @@ export function createAetherThreadListAdapter(): RemoteThreadListAdapter {
     },
 
     async archive(remoteId: string) {
+      if (await ensureMode()) {
+        const { cloudPatchThread } = await import(
+          "@/lib/conversations/cloud-client"
+        );
+        await cloudPatchThread(remoteId, { status: "archived" });
+        return;
+      }
       const threads = loadThreads();
       const thread = threads.find((t) => t.remoteId === remoteId);
       if (thread) {
@@ -340,6 +510,13 @@ export function createAetherThreadListAdapter(): RemoteThreadListAdapter {
     },
 
     async unarchive(remoteId: string) {
+      if (await ensureMode()) {
+        const { cloudPatchThread } = await import(
+          "@/lib/conversations/cloud-client"
+        );
+        await cloudPatchThread(remoteId, { status: "regular" });
+        return;
+      }
       const threads = loadThreads();
       const thread = threads.find((t) => t.remoteId === remoteId);
       if (thread) {
@@ -349,12 +526,33 @@ export function createAetherThreadListAdapter(): RemoteThreadListAdapter {
     },
 
     async delete(remoteId: string) {
+      if (await ensureMode()) {
+        const { cloudDeleteThread } = await import(
+          "@/lib/conversations/cloud-client"
+        );
+        await cloudDeleteThread(remoteId);
+        clearActiveThreadIf(remoteId);
+        return;
+      }
       saveThreads(loadThreads().filter((t) => t.remoteId !== remoteId));
       storage.removeItem(messagesKey(remoteId));
       clearActiveThreadIf(remoteId);
     },
 
     async fetch(threadId: string) {
+      if (await ensureMode()) {
+        const { cloudFetchThread } = await import(
+          "@/lib/conversations/cloud-client"
+        );
+        const thread = await cloudFetchThread(threadId);
+        return {
+          remoteId: thread.remoteId,
+          externalId: thread.externalId,
+          status: thread.status,
+          title: thread.title,
+          custom: thread.custom,
+        };
+      }
       const thread = loadThreads().find((t) => t.remoteId === threadId);
       if (!thread) {
         throw new Error(`Thread "${threadId}" not found`);
@@ -370,11 +568,18 @@ export function createAetherThreadListAdapter(): RemoteThreadListAdapter {
 
     async generateTitle(remoteId: string, messages: readonly ThreadMessage[]) {
       const title = simpleTitle(messages);
-      const threads = loadThreads();
-      const thread = threads.find((t) => t.remoteId === remoteId);
-      if (thread) {
-        thread.title = title;
-        saveThreads(threads);
+      if (await ensureMode()) {
+        const { cloudPatchThread } = await import(
+          "@/lib/conversations/cloud-client"
+        );
+        await cloudPatchThread(remoteId, { title });
+      } else {
+        const threads = loadThreads();
+        const thread = threads.find((t) => t.remoteId === remoteId);
+        if (thread) {
+          thread.title = title;
+          saveThreads(threads);
+        }
       }
       return createAssistantStream((controller) => {
         controller.appendText(title);
