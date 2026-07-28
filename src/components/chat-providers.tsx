@@ -7,6 +7,7 @@ import { ArtifactProvider } from "@/providers/artifact-provider";
 import { AttachmentsProvider } from "@/providers/attachments-provider";
 import { DriveProvider } from "@/providers/drive-provider";
 import { AppShell } from "@/components/layout/app-shell";
+import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
 import { ThreadUrlSync } from "@/components/thread-url-sync";
 
 /** Shared provider tree for `/` and `/c/[threadId]`. */
@@ -18,6 +19,7 @@ export function ChatProviders({ children }: { children?: ReactNode }) {
           <RuntimeProvider>
             <ThreadUrlSync />
             <ArtifactProvider>
+              <KeyboardShortcuts />
               <AppShell />
               {children}
             </ArtifactProvider>

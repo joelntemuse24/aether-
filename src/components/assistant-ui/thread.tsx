@@ -12,9 +12,12 @@ import {
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ToolCallPart, type ToolPartLike } from "@/components/assistant-ui/tool-ui";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { ThreadHeader } from "@/components/assistant-ui/thread-header";
+import { AgentStatusStrip } from "@/components/assistant-ui/agent-status-strip";
 import { ModelPicker } from "@/components/model-picker";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { STARTER_PROMPTS } from "@/lib/voice";
 import { useSettings } from "@/providers/settings-provider";
 import { useAttachments } from "@/providers/attachments-provider";
 import { useDrive } from "@/providers/drive-provider";
@@ -65,10 +68,11 @@ export const Thread: FC = () => {
         turnAnchor="top"
         className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth"
       >
+        <ThreadHeader />
         <div
           className={cn(
-            "mx-auto flex w-full max-w-[var(--thread-max-width)] flex-1 flex-col px-4 pt-6 sm:px-6",
-            isEmpty && "justify-center",
+            "mx-auto flex w-full max-w-[var(--thread-max-width)] flex-1 flex-col px-4 pt-2 sm:px-6 sm:pt-4",
+            isEmpty && "justify-center pt-6",
           )}
         >
           <AuiIf condition={isNewChatView}>
@@ -127,30 +131,63 @@ const ThreadScrollToBottom: FC = () => {
 
 const ThreadWelcome: FC = () => {
   return (
-    <div className="mb-10 flex flex-col items-center px-4 text-center">
+    <div className="mb-8 flex flex-col items-center px-2 text-center sm:mb-10">
       <Image
         src="/logo.jpg"
         alt="Aether"
         width={56}
         height={56}
-        className="mb-6 rounded-full object-cover"
+        className="mb-5 rounded-full object-cover shadow-[0_0_0_1px_var(--border)]"
       />
       <h1
         className="font-[family-name:var(--font-serif)] text-[var(--text)]"
         style={{
-          fontSize: "clamp(1.9rem, 4vw, 2.4rem)",
+          fontSize: "clamp(1.85rem, 4vw, 2.35rem)",
           fontWeight: 400,
           fontStyle: "italic",
           letterSpacing: "-0.015em",
           lineHeight: 1.2,
-          maxWidth: "26rem",
+          maxWidth: "28rem",
         }}
       >
-        How can I help you today?
+        Think with me.
       </h1>
-      <p className="mt-3 max-w-sm text-sm leading-relaxed text-[var(--muted)]">
-        Attach files from the paperclip, or connect Drive in Settings after you
-        sign in.
+      <p className="mt-3 max-w-md text-sm leading-relaxed text-[var(--muted)]">
+        Essays, close readings, research, and living documents — with tools when
+        the work needs them.
+      </p>
+
+      <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
+        {STARTER_PROMPTS.map((starter) => (
+          <ThreadPrimitive.Suggestion
+            key={starter.id}
+            prompt={starter.prompt}
+            send
+            className="group flex flex-col items-start gap-1 rounded-xl border border-[var(--border)] bg-[var(--elevated)]/60 px-3.5 py-3 text-left transition-colors hover:border-[var(--accent)]/35 hover:bg-[var(--accent-muted)]"
+          >
+            <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--muted-soft)]">
+              {starter.category}
+            </span>
+            <span className="text-[13px] leading-snug text-[var(--text-secondary)] group-hover:text-[var(--text)]">
+              {starter.label}
+            </span>
+          </ThreadPrimitive.Suggestion>
+        ))}
+      </div>
+
+      <p className="mt-5 text-[11px] tracking-wide text-[var(--muted-soft)]">
+        <kbd className="rounded border border-[var(--border)] bg-[var(--elevated)] px-1 py-0.5 font-[family-name:var(--font-mono)] text-[10px]">
+          ⌘N
+        </kbd>{" "}
+        new ·{" "}
+        <kbd className="rounded border border-[var(--border)] bg-[var(--elevated)] px-1 py-0.5 font-[family-name:var(--font-mono)] text-[10px]">
+          ⌘K
+        </kbd>{" "}
+        focus ·{" "}
+        <kbd className="rounded border border-[var(--border)] bg-[var(--elevated)] px-1 py-0.5 font-[family-name:var(--font-mono)] text-[10px]">
+          ⌘,
+        </kbd>{" "}
+        settings
       </p>
     </div>
   );
@@ -259,6 +296,8 @@ const Composer: FC = () => {
           Add an API key in Settings to start chatting →
         </button>
       )}
+
+      <AgentStatusStrip />
 
       <div
         onDragEnter={(e) => {
@@ -465,6 +504,8 @@ const AssistantMessage: FC = () => {
 };
 
 const AssistantActionBar: FC = () => {
+  const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
+
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
@@ -486,16 +527,34 @@ const AssistantActionBar: FC = () => {
           <RefreshCwIcon className="size-3.5" />
         </TooltipIconButton>
       </ActionBarPrimitive.Reload>
-      <ActionBarPrimitive.FeedbackPositive asChild>
-        <TooltipIconButton tooltip="Good response">
-          <ThumbsUpIcon className="size-3.5" />
-        </TooltipIconButton>
-      </ActionBarPrimitive.FeedbackPositive>
-      <ActionBarPrimitive.FeedbackNegative asChild>
-        <TooltipIconButton tooltip="Bad response">
-          <ThumbsDownIcon className="size-3.5" />
-        </TooltipIconButton>
-      </ActionBarPrimitive.FeedbackNegative>
+      <TooltipIconButton
+        tooltip={feedback === "up" ? "Thanks" : "Good response"}
+        onClick={() => {
+          setFeedback("up");
+          window.dispatchEvent(
+            new CustomEvent("aether:notice", {
+              detail: "Thanks — noted for this response.",
+            }),
+          );
+        }}
+        className={feedback === "up" ? "text-[var(--accent)]" : undefined}
+      >
+        <ThumbsUpIcon className="size-3.5" />
+      </TooltipIconButton>
+      <TooltipIconButton
+        tooltip={feedback === "down" ? "Noted" : "Bad response"}
+        onClick={() => {
+          setFeedback("down");
+          window.dispatchEvent(
+            new CustomEvent("aether:notice", {
+              detail: "Thanks — we'll use that to improve.",
+            }),
+          );
+        }}
+        className={feedback === "down" ? "text-[var(--accent)]" : undefined}
+      >
+        <ThumbsDownIcon className="size-3.5" />
+      </TooltipIconButton>
     </ActionBarPrimitive.Root>
   );
 };
@@ -510,7 +569,7 @@ const UserMessage: FC = () => {
         <div className="rounded-2xl rounded-br-md bg-[var(--elevated-deep)] px-4 py-2.5 text-[15px] leading-relaxed text-[var(--text)] wrap-break-word">
           <MessagePrimitive.Parts />
         </div>
-        <div className="absolute -left-9 top-1/2 -translate-y-1/2 opacity-100 transition-opacity max-sm:static max-sm:mt-1 max-sm:translate-y-0 md:opacity-0 md:group-hover/message:opacity-100">
+        <div className="absolute -left-16 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-100 transition-opacity max-sm:static max-sm:mt-1 max-sm:translate-y-0 md:opacity-0 md:group-hover/message:opacity-100">
           <UserActionBar />
         </div>
       </div>
@@ -526,6 +585,16 @@ const UserActionBar: FC = () => {
       autohide="not-last"
       className="flex items-center"
     >
+      <ActionBarPrimitive.Copy asChild>
+        <TooltipIconButton tooltip="Copy">
+          <AuiIf condition={(s) => s.message.isCopied}>
+            <CheckIcon className="size-3.5 text-emerald-600" />
+          </AuiIf>
+          <AuiIf condition={(s) => !s.message.isCopied}>
+            <CopyIcon className="size-3.5" />
+          </AuiIf>
+        </TooltipIconButton>
+      </ActionBarPrimitive.Copy>
       <ActionBarPrimitive.Edit asChild>
         <TooltipIconButton tooltip="Edit">
           <PencilIcon className="size-3.5" />
