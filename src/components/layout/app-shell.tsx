@@ -8,6 +8,7 @@ import { Thread } from "@/components/assistant-ui/thread";
 import { Sidebar } from "@/components/layout/sidebar";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { DriveBrowserModal } from "@/components/drive/drive-browser-modal";
+import { SyncLocalChatsBanner } from "@/components/sync-local-chats-banner";
 import { useArtifact } from "@/providers/artifact-provider";
 import { useAttachments } from "@/providers/attachments-provider";
 import { useDrive } from "@/providers/drive-provider";
@@ -142,6 +143,8 @@ export function AppShell() {
           pushNotices(setNotices, [...errors, ...capErrors]);
         }}
       />
+
+      <SyncLocalChatsBanner />
 
       {notices.length > 0 && (
         <div className="fixed bottom-4 left-1/2 z-[120] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-[var(--border)] bg-[var(--elevated)] px-3 py-2 text-xs text-[var(--text-secondary)] shadow-none backdrop-blur-md">
