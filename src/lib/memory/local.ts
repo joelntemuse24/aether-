@@ -80,3 +80,36 @@ export function searchLocalMemories(query: string, limit = 8): MemoryDTO[] {
 export function localMemoryContextForChat(): string {
   return formatMemoryForPrompt(loadLocalMemories().slice(0, 8));
 }
+
+export function clearLocalMemories(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export function exportLocalMemoriesForMigrate(): MemoryDTO[] {
+  return loadLocalMemories();
+}
+
+const MEMORY_MIGRATED_KEY = "aether:memory-migrated";
+
+export function wasLocalMemoryMigrated(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return localStorage.getItem(MEMORY_MIGRATED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function markLocalMemoryMigrated(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(MEMORY_MIGRATED_KEY, "1");
+  } catch {
+    // ignore
+  }
+}

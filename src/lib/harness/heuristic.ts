@@ -125,3 +125,14 @@ export function heuristicClassify(message: string): HarnessClassification {
     rationale: "heuristic",
   });
 }
+
+/**
+ * Skip the BYOK model classify call for cheap shallow turns.
+ * Still use the model for standard/deep (plan quality) and clarify paths
+ * where a better question set is worth the latency.
+ */
+export function shouldSkipModelClassify(
+  classification: HarnessClassification,
+): boolean {
+  return classification.depth === "shallow" && !classification.needsClarify;
+}

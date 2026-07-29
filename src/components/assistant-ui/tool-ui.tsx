@@ -3,9 +3,13 @@
 import { useEffect, useRef, useState, type FC } from "react";
 import {
   AlertTriangleIcon,
+  BrainIcon,
   CheckIcon,
   ChevronDownIcon,
   ExternalLinkIcon,
+  FileIcon,
+  GlobeIcon,
+  HardDriveIcon,
   Loader2Icon,
   PanelRightOpenIcon,
   SearchIcon,
@@ -47,6 +51,11 @@ const ICONS: Record<string, FC<{ className?: string }>> = {
   [TOOL_NAMES.executePython]: TerminalIcon,
   [TOOL_NAMES.webSearch]: SearchIcon,
   [TOOL_NAMES.createArtifact]: SparklesIcon,
+  [TOOL_NAMES.memorySearch]: BrainIcon,
+  [TOOL_NAMES.memoryWrite]: BrainIcon,
+  [TOOL_NAMES.driveSearch]: HardDriveIcon,
+  [TOOL_NAMES.driveRead]: HardDriveIcon,
+  [TOOL_NAMES.fetchUrl]: GlobeIcon,
 };
 
 const ToolShell: FC<{
@@ -312,6 +321,256 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   );
 };
 
+/* ─── Memory ─── */
+
+type MemoryRow = {
+  id?: string;
+  type?: string;
+  title?: string;
+  body?: string;
+};
+
+const MemorySearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = partIsRunning(part);
+  const input = part.args as { query?: string } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    results?: MemoryRow[];
+  } | undefined;
+  const error = part.isError || (output ? output.ok === false : false);
+  const results = output?.results ?? [];
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.memorySearch}
+      running={running}
+      error={error}
+      subtitle={input?.query}
+      defaultOpen={!running && results.length > 0}
+    >
+      {results.length === 0 && !running ? (
+        <p className="text-[12px] text-[var(--muted)]">No memories matched.</p>
+      ) : (
+        <ul className="space-y-2">
+          {results.map((r, i) => (
+            <li
+              key={r.id || i}
+              className="rounded-lg border border-[var(--border)] bg-[var(--elevated)] px-2.5 py-2"
+            >
+              <div className="flex items-center gap-2">
+                <span className="truncate text-[12px] font-medium text-[var(--text)]">
+                  {r.title || "Memory"}
+                </span>
+                {r.type && (
+                  <span className="shrink-0 text-[10px] uppercase tracking-wide text-[var(--muted-soft)]">
+                    {r.type}
+                  </span>
+                )}
+              </div>
+              {r.body && (
+                <p className="mt-1 line-clamp-3 text-[12px] text-[var(--muted)]">
+                  {r.body}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </ToolShell>
+  );
+};
+
+const MemoryWriteToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = partIsRunning(part);
+  const input = part.args as {
+    title?: string;
+    type?: string;
+    body?: string;
+  } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    memory?: MemoryRow;
+  } | undefined;
+  const error = part.isError || (output ? output.ok === false : false);
+  const saved = output?.memory;
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.memoryWrite}
+      running={running}
+      error={error}
+      subtitle={input?.title || saved?.title}
+      defaultOpen={!running && !!saved}
+    >
+      {(saved || input) && (
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--elevated)] px-2.5 py-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] font-medium text-[var(--text)]">
+              {saved?.title || input?.title}
+            </span>
+            {(saved?.type || input?.type) && (
+              <span className="text-[10px] uppercase tracking-wide text-[var(--muted-soft)]">
+                {saved?.type || input?.type}
+              </span>
+            )}
+          </div>
+          {(saved?.body || input?.body) && (
+            <p className="mt-1 text-[12px] text-[var(--muted)]">
+              {saved?.body || input?.body}
+            </p>
+          )}
+        </div>
+      )}
+    </ToolShell>
+  );
+};
+
+/* ─── Drive ─── */
+
+type DriveFileRow = {
+  id: string;
+  name: string;
+  mimeType?: string;
+  isFolder?: boolean;
+};
+
+const DriveSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = partIsRunning(part);
+  const input = part.args as { query?: string } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    error?: string;
+    files?: DriveFileRow[];
+  } | undefined;
+  const error = part.isError || (output ? output.ok === false : false);
+  const files = output?.files ?? [];
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.driveSearch}
+      running={running}
+      error={error}
+      subtitle={input?.query}
+      defaultOpen={!running}
+    >
+      {output?.error && (
+        <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
+          {output.error}
+        </div>
+      )}
+      {files.length > 0 && (
+        <ul className="space-y-1.5">
+          {files.map((f) => (
+            <li
+              key={f.id}
+              className="flex items-center gap-2 text-[12px] text-[var(--text)]"
+            >
+              <FileIcon className="size-3.5 shrink-0 text-[var(--muted)]" />
+              <span className="min-w-0 truncate font-medium">{f.name}</span>
+              {f.isFolder && (
+                <span className="shrink-0 text-[10px] text-[var(--muted-soft)]">
+                  folder
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!running && !output?.error && files.length === 0 && (
+        <p className="text-[12px] text-[var(--muted)]">No Drive files found.</p>
+      )}
+    </ToolShell>
+  );
+};
+
+const DriveReadToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = partIsRunning(part);
+  const input = part.args as { fileId?: string } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    error?: string;
+    name?: string;
+    text?: string;
+  } | undefined;
+  const error = part.isError || (output ? output.ok === false : false);
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.driveRead}
+      running={running}
+      error={error}
+      subtitle={output?.name || input?.fileId}
+      defaultOpen={!running && !!output?.text}
+    >
+      {output?.error && (
+        <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
+          {output.error}
+        </div>
+      )}
+      {output?.text && (
+        <CodeSnippet
+          code={
+            output.text.length > 4000
+              ? `${output.text.slice(0, 4000)}…`
+              : output.text
+          }
+          label={output.name || "File text"}
+        />
+      )}
+    </ToolShell>
+  );
+};
+
+/* ─── Fetch URL ─── */
+
+const FetchUrlToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = partIsRunning(part);
+  const input = part.args as { url?: string } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    error?: string;
+    title?: string;
+    text?: string;
+    url?: string;
+  } | undefined;
+  const error = part.isError || (output ? output.ok === false : false);
+  const href = output?.url || input?.url;
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.fetchUrl}
+      running={running}
+      error={error}
+      subtitle={output?.title || href}
+      defaultOpen={!running && (!!output?.text || !!output?.error)}
+    >
+      {href && (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="mb-2 inline-flex items-center gap-1 text-[12px] font-medium text-[var(--accent)] hover:underline"
+        >
+          {href}
+          <ExternalLinkIcon className="size-3" />
+        </a>
+      )}
+      {output?.error && (
+        <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
+          {output.error}
+        </div>
+      )}
+      {output?.text && (
+        <p className="max-h-48 overflow-auto whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--muted)]">
+          {output.text.length > 2500
+            ? `${output.text.slice(0, 2500)}…`
+            : output.text}
+        </p>
+      )}
+    </ToolShell>
+  );
+};
+
 /* ─── Generic fallback ─── */
 
 const GenericToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
@@ -342,6 +601,16 @@ export const ToolCallPart: FC<{ part: ToolPartLike }> = ({ part }) => {
       return <WebSearchToolCall part={part} />;
     case TOOL_NAMES.createArtifact:
       return <CreateArtifactToolCall part={part} />;
+    case TOOL_NAMES.memorySearch:
+      return <MemorySearchToolCall part={part} />;
+    case TOOL_NAMES.memoryWrite:
+      return <MemoryWriteToolCall part={part} />;
+    case TOOL_NAMES.driveSearch:
+      return <DriveSearchToolCall part={part} />;
+    case TOOL_NAMES.driveRead:
+      return <DriveReadToolCall part={part} />;
+    case TOOL_NAMES.fetchUrl:
+      return <FetchUrlToolCall part={part} />;
     default:
       return <GenericToolCall part={part} />;
   }
