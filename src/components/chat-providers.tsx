@@ -9,6 +9,7 @@ import { DriveProvider } from "@/providers/drive-provider";
 import { AppShell } from "@/components/layout/app-shell";
 import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
 import { ThreadUrlSync } from "@/components/thread-url-sync";
+import { HarnessProvider } from "@/providers/harness-provider";
 
 /** Shared provider tree for `/` and `/c/[threadId]`. */
 export function ChatProviders({ children }: { children?: ReactNode }) {
@@ -16,14 +17,16 @@ export function ChatProviders({ children }: { children?: ReactNode }) {
     <SettingsProvider>
       <AttachmentsProvider>
         <DriveProvider>
-          <RuntimeProvider>
-            <ThreadUrlSync />
-            <ArtifactProvider>
-              <KeyboardShortcuts />
-              <AppShell />
-              {children}
-            </ArtifactProvider>
-          </RuntimeProvider>
+          <HarnessProvider>
+            <RuntimeProvider>
+              <ThreadUrlSync />
+              <ArtifactProvider>
+                <KeyboardShortcuts />
+                <AppShell />
+                {children}
+              </ArtifactProvider>
+            </RuntimeProvider>
+          </HarnessProvider>
         </DriveProvider>
       </AttachmentsProvider>
     </SettingsProvider>
