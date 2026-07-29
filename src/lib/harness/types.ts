@@ -46,6 +46,8 @@ export type HarnessChatContext = {
   runId?: string;
   /** Answers keyed by question id (option id or free text). */
   clarifications?: Record<string, string>;
+  /** Deep-path plan from classify — injected into the chat system prompt. */
+  planSteps?: string[];
 };
 
 export type HarnessRunStatus =

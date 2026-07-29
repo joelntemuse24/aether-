@@ -180,6 +180,12 @@ export async function POST(req: Request) {
       typeof rawHarness.clarifications === "object"
         ? rawHarness.clarifications
         : undefined;
+    const harnessPlanSteps = Array.isArray(rawHarness?.planSteps)
+      ? rawHarness.planSteps
+          .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+          .map((s) => s.trim().slice(0, 200))
+          .slice(0, 6)
+      : undefined;
     const harnessRunId =
       typeof rawHarness?.runId === "string" ? rawHarness.runId : undefined;
     const budget = budgetForDepth(harnessDepth);
@@ -187,6 +193,7 @@ export async function POST(req: Request) {
       depth: harnessDepth,
       intent: harnessIntent,
       clarifications: harnessClarifications,
+      planSteps: harnessPlanSteps,
     });
 
     const session = await auth();
@@ -209,17 +216,19 @@ export async function POST(req: Request) {
       }
     }
 
-    // Client may also pass a local memory preview for unsigned / no-DB use.
+    // Client local memory only when cloud memory is not the active source.
     const clientMemory =
       typeof body.memoryContext === "string" && body.memoryContext.length <= 6000
         ? body.memoryContext
         : undefined;
+    const useClientMemory = !userId || !isCloudDbConfigured();
+    const memoryForPrompt = memoryBlock || (useClientMemory ? clientMemory : "");
 
     const system = [
       toolsEnabled ? TOOLS_SYSTEM_PROMPT : null,
       userSystem,
       harnessAddendum,
-      memoryBlock || clientMemory,
+      memoryForPrompt,
       projectBlock,
     ]
       .filter(Boolean)
@@ -311,11 +320,36 @@ export async function POST(req: Request) {
         : {}),
       maxOutputTokens: 8192,
       abortSignal: req.signal,
+      onFinish: () => {
+        if (harnessRunId && userId) {
+          void updateAgentRunStatus({
+            id: harnessRunId,
+            userId,
+            status: "done",
+            eventType: "chat_finished",
+            eventPayload: {
+              depth: harnessDepth,
+              intent: harnessIntent,
+            },
+          });
+        }
+      },
     });
 
     return result.toUIMessageStreamResponse({
       onError: (error) => {
         console.error("[api/chat]", error);
+        if (harnessRunId && userId) {
+          void updateAgentRunStatus({
+            id: harnessRunId,
+            userId,
+            status: "done",
+            eventType: "chat_error",
+            eventPayload: {
+              error: error instanceof Error ? error.message : "error",
+            },
+          });
+        }
         if (error instanceof Error) return error.message;
         return "An error occurred while generating a response.";
       },

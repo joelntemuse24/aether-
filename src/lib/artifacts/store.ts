@@ -40,33 +40,67 @@ export async function saveArtifact(
 ): Promise<ArtifactDTO> {
   const db = await getDb();
   const now = new Date();
-  const id = input.id || crypto.randomUUID();
-  await db
-    .insert(artifacts)
-    .values({
-      id,
-      userId,
-      kind: input.kind,
-      title: input.title.slice(0, 200),
-      language: input.language ?? null,
-      content: input.content.slice(0, 500_000),
-      projectId: input.projectId ?? null,
-      conversationId: input.conversationId ?? null,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: artifacts.id,
-      set: {
-        kind: input.kind,
-        title: input.title.slice(0, 200),
-        language: input.language ?? null,
-        content: input.content.slice(0, 500_000),
-        projectId: input.projectId ?? null,
-        conversationId: input.conversationId ?? null,
-        updatedAt: now,
-      },
-    });
+  const requestedId = input.id?.trim();
+  const kind = input.kind;
+  const title = input.title.slice(0, 200);
+  const language = input.language ?? null;
+  const content = input.content.slice(0, 500_000);
+  const projectId = input.projectId ?? null;
+  const conversationId = input.conversationId ?? null;
+
+  if (requestedId) {
+    const owned = await db
+      .select()
+      .from(artifacts)
+      .where(and(eq(artifacts.id, requestedId), eq(artifacts.userId, userId)))
+      .limit(1);
+    if (owned[0]) {
+      await db
+        .update(artifacts)
+        .set({
+          kind,
+          title,
+          language,
+          content,
+          projectId,
+          conversationId,
+          updatedAt: now,
+        })
+        .where(
+          and(eq(artifacts.id, requestedId), eq(artifacts.userId, userId)),
+        );
+      const rows = await db
+        .select()
+        .from(artifacts)
+        .where(
+          and(eq(artifacts.id, requestedId), eq(artifacts.userId, userId)),
+        )
+        .limit(1);
+      return toDto(rows[0]!);
+    }
+    const taken = await db
+      .select({ id: artifacts.id })
+      .from(artifacts)
+      .where(eq(artifacts.id, requestedId))
+      .limit(1);
+    if (taken[0]) {
+      throw new Error("Artifact id belongs to another user");
+    }
+  }
+
+  const id = requestedId || crypto.randomUUID();
+  await db.insert(artifacts).values({
+    id,
+    userId,
+    kind,
+    title,
+    language,
+    content,
+    projectId,
+    conversationId,
+    createdAt: now,
+    updatedAt: now,
+  });
   const rows = await db
     .select()
     .from(artifacts)

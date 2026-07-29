@@ -19,6 +19,10 @@ type ProjectsContextValue = {
   activeProject: ProjectDTO | null;
   refresh: () => Promise<void>;
   create: (title: string) => Promise<ProjectDTO | null>;
+  update: (
+    id: string,
+    patch: { title?: string; instructions?: string | null },
+  ) => Promise<ProjectDTO | null>;
   remove: (id: string) => Promise<void>;
   cloud: boolean;
 };
@@ -95,6 +99,24 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
     [refresh, setActiveProjectId],
   );
 
+  const update = useCallback(
+    async (
+      id: string,
+      patch: { title?: string; instructions?: string | null },
+    ) => {
+      const res = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) return null;
+      const body = (await res.json()) as { project: ProjectDTO };
+      await refresh();
+      return body.project;
+    },
+    [refresh],
+  );
+
   const remove = useCallback(
     async (id: string) => {
       await fetch(`/api/projects/${encodeURIComponent(id)}`, {
@@ -117,6 +139,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       activeProject,
       refresh,
       create,
+      update,
       remove,
       cloud,
     }),
@@ -127,6 +150,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       activeProject,
       refresh,
       create,
+      update,
       remove,
       cloud,
     ],

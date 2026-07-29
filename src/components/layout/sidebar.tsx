@@ -31,12 +31,14 @@ import {
   SearchIcon,
   PencilIcon,
   FolderIcon,
+  FileTextIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useSettings } from "@/providers/settings-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { useSession, signOut } from "@/providers/session-provider";
 import { useProjects } from "@/providers/projects-provider";
+import { useArtifact } from "@/providers/artifact-provider";
 import { Label } from "@/components/ui/label";
 import { NEW_CHAT_PATH } from "@/lib/thread-url";
 import { cn } from "@/lib/utils";
@@ -215,6 +217,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       <ProjectsSection />
+      <SavedArtifactsSection />
 
       <div className="px-2 pb-1 pt-0.5">
         <Label>Recent</Label>
@@ -314,8 +317,16 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
 /** Compact project picker for cloud users — appears above Recent chats. */
 function ProjectsSection() {
-  const { projects, activeProjectId, setActiveProjectId, create, cloud } =
-    useProjects();
+  const {
+    projects,
+    activeProjectId,
+    setActiveProjectId,
+    activeProject,
+    create,
+    update,
+    remove,
+    cloud,
+  } = useProjects();
   const { status } = useSession();
 
   if (status !== "authenticated" || !cloud) return null;
@@ -362,10 +373,82 @@ function ProjectsSection() {
                 ? "bg-[var(--elevated-deep)] text-[var(--text)]"
                 : "text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]",
             )}
-            title={p.title}
+            title={p.instructions ? `${p.title}\n${p.instructions}` : p.title}
           >
             <FolderIcon className="size-3 shrink-0 opacity-70" />
             <span className="truncate">{p.title}</span>
+          </button>
+        ))}
+      </div>
+      {activeProject && (
+        <div className="mt-1.5 flex gap-1 px-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              const next = window.prompt(
+                "Project instructions (injected into chat)",
+                activeProject.instructions ?? "",
+              );
+              if (next === null) return;
+              void update(activeProject.id, {
+                instructions: next.trim() || null,
+              });
+            }}
+            className="flex-1 rounded-md px-2 py-1 text-left text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+          >
+            {activeProject.instructions?.trim()
+              ? "Edit instructions"
+              : "Add instructions"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!window.confirm(`Delete project “${activeProject.title}”?`)) {
+                return;
+              }
+              void remove(activeProject.id);
+            }}
+            className="rounded-md px-2 py-1 text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+            aria-label="Delete project"
+            title="Delete project"
+          >
+            <TrashIcon className="size-3" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Cloud-saved artifacts — open by id into the panel. */
+function SavedArtifactsSection() {
+  const { saved, savedCloud, openSavedById, refreshSaved } = useArtifact();
+  const { status } = useSession();
+
+  useEffect(() => {
+    if (status === "authenticated" && savedCloud) void refreshSaved();
+  }, [status, savedCloud, refreshSaved]);
+
+  if (status !== "authenticated" || !savedCloud || saved.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="px-3 pb-2">
+      <div className="mb-1.5 px-0.5">
+        <Label>Saved artifacts</Label>
+      </div>
+      <div className="flex max-h-28 flex-col gap-0.5 overflow-y-auto">
+        {saved.slice(0, 12).map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            onClick={() => void openSavedById(a.id)}
+            className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+            title={a.title}
+          >
+            <FileTextIcon className="size-3 shrink-0 opacity-70" />
+            <span className="truncate">{a.title}</span>
           </button>
         ))}
       </div>
