@@ -58,12 +58,13 @@ function isBlockedIpv6(ip: string): boolean {
     const v4 = normalized.slice("::ffff:".length);
     if (net.isIP(v4) === 4) return isBlockedIpv4(v4);
   }
-  // Unique local fc00::/7, link-local fe80::/10
+  // Unique local fc00::/7, link-local fe80::/10, multicast ff00::/8
   const first = normalized.split(":")[0] || "";
   const n = parseInt(first, 16);
   if (!Number.isNaN(n)) {
     if ((n & 0xfe00) === 0xfc00) return true;
     if ((n & 0xffc0) === 0xfe80) return true;
+    if ((n & 0xff00) === 0xff00) return true;
   }
   return false;
 }

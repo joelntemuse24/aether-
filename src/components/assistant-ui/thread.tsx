@@ -54,6 +54,10 @@ import {
 import { ClarifyCard } from "@/components/assistant-ui/clarify-card";
 import { useHarness } from "@/providers/harness-provider";
 import type { HarnessClassification } from "@/lib/harness/types";
+import {
+  heuristicClassify,
+  shouldSkipModelClassify,
+} from "@/lib/harness/heuristic";
 import { readThreadIdFromLocation } from "@/lib/thread-url";
 
 const isNewChatView = (s: AssistantState) =>
@@ -318,31 +322,45 @@ const Composer: FC = () => {
     let runId = opts?.runId;
 
     if (!opts?.skipClassify && !classification) {
-      setClassifying(true);
-      try {
-        const res = await fetch("/api/harness/classify", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...chatHeaders,
-          },
-          body: JSON.stringify({
-            message: text,
-            conversationId: readThreadIdFromLocation() ?? undefined,
-          }),
-        });
-        if (res.ok) {
-          const data = (await res.json()) as {
-            runId?: string;
-            classification?: HarnessClassification;
-          };
-          classification = data.classification;
-          runId = data.runId;
+      // Heuristics-first: skip the BYOK model call for cheap shallow turns.
+      const heuristic = text ? heuristicClassify(text) : undefined;
+      if (heuristic && shouldSkipModelClassify(heuristic)) {
+        classification = heuristic;
+        runId = crypto.randomUUID();
+      } else {
+        setClassifying(true);
+        try {
+          const res = await fetch("/api/harness/classify", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...chatHeaders,
+            },
+            body: JSON.stringify({
+              message: text,
+              conversationId: readThreadIdFromLocation() ?? undefined,
+            }),
+          });
+          if (res.ok) {
+            const data = (await res.json()) as {
+              runId?: string;
+              classification?: HarnessClassification;
+            };
+            classification = data.classification ?? heuristic;
+            runId = data.runId;
+          } else if (heuristic) {
+            classification = heuristic;
+            runId = crypto.randomUUID();
+          }
+        } catch {
+          // Fall through with heuristic if available.
+          if (heuristic) {
+            classification = heuristic;
+            runId = crypto.randomUUID();
+          }
+        } finally {
+          setClassifying(false);
         }
-      } catch {
-        // Fall through — chat still works without classification.
-      } finally {
-        setClassifying(false);
       }
     }
 

@@ -161,31 +161,34 @@ Configured via `DATABASE_URL` or `AETHER_PGLITE=1` (dir `./.data/aether-pglite`)
 | Memory Settings | localStorage | localStorage | `/api/memory` |
 | memory_* tools | Off | Off | On |
 | Prompt memory | Client `memoryContext` | Client | Server cloud (no local fallback) |
+| Memory migrate | — | — | `/api/memory/migrate` + `SyncLocalMemory` (clear only if `skipped===0`) |
 | Projects / artifacts APIs | 503 | 503 | On |
+| Project ↔ chat | Session picker | Session picker | `custom.projectId` bind/restore/inherit |
+| Artifacts | Session panel | Session | Persist + sidebar reopen; panel edits debounce-save when `persisted` |
 | Drive tools | Off | On if Drive cookie | Same |
-| fetch_url | On if tools on | On | On |
-| Harness classify/budgets | Yes | Yes | Yes + `agent_runs` |
+| fetch_url | On if tools; SSRF gate | Same | Same |
+| Classify | Heuristic shallow skip; else model | Same | Same; model path creates `agent_runs` |
+| Harness runs | No DB rows | No rows | Classify → acting/verifying → `done` |
 
 ---
 
 ## Identified Technical Debt
 
-*Only issues still visible after audit hardening.*
+*Only issues still visible after audit hardening + polish.*
 
 1. **`/api/chat` is unauthenticated and unbounded** — No session check, no rate limit, no explicit body size limit at the route.
 2. **BYOK keys in plaintext `localStorage`**.
 3. **Shared dev auth secret fallback** when `AUTH_SECRET` unset.
 4. **`allowDangerousEmailAccountLinking: true`** on OAuth providers.
 5. **Conversation message `PUT` lacks size/count caps**.
-6. **Local memory does not auto-migrate** into cloud on sign-in.
-7. **Projects are not bound to conversations** — active project is a client selection (`aether:active-project`); `pinned_file_ids` unused.
-8. **Classify-every-send latency/cost** — no shallow skip / heuristics-first path in the composer.
-9. **Prompt injection via memory / project instructions** — user/model text enters the system prompt by design; framing only.
-10. **New tools mostly use generic tool UI** (memory/drive/fetch).
-11. **Keyless `web_search` quality ceiling** without Brave.
-12. **No Next.js middleware** — per-handler auth.
-13. **Pre-existing lint** — `react-hooks/exhaustive-deps` in `model-picker.tsx`.
-14. **Example-only env vars** in `.env.example` for provider keys — not read by `src/` for chat.
+6. **`pinned_file_ids` unused** on projects; conversation list does not badge the bound project.
+7. **Prompt injection via memory / project instructions** — user/model text enters the system prompt by design; framing only.
+8. **`fetch_url` DNS TOCTOU / rebinding** — hostname resolved then fetched by name (no IP pinning).
+9. **Shallow classify skip** creates a client `runId` without an `agent_runs` row.
+10. **Keyless `web_search` quality ceiling** without Brave.
+11. **No Next.js middleware** — per-handler auth.
+12. **Pre-existing lint** — `react-hooks/exhaustive-deps` in `model-picker.tsx`.
+13. **Example-only env vars** in `.env.example` for provider keys — not read by `src/` for chat.
 
 ---
 

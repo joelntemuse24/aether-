@@ -373,7 +373,11 @@ function ProjectsSection() {
                 ? "bg-[var(--elevated-deep)] text-[var(--text)]"
                 : "text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]",
             )}
-            title={p.instructions ? `${p.title}\n${p.instructions}` : p.title}
+            title={
+              p.instructions
+                ? `${p.title} — binds to this chat\n${p.instructions}`
+                : `${p.title} — binds to this chat`
+            }
           >
             <FolderIcon className="size-3 shrink-0 opacity-70" />
             <span className="truncate">{p.title}</span>
@@ -381,39 +385,44 @@ function ProjectsSection() {
         ))}
       </div>
       {activeProject && (
-        <div className="mt-1.5 flex gap-1 px-0.5">
-          <button
-            type="button"
-            onClick={() => {
-              const next = window.prompt(
-                "Project instructions (injected into chat)",
-                activeProject.instructions ?? "",
-              );
-              if (next === null) return;
-              void update(activeProject.id, {
-                instructions: next.trim() || null,
-              });
-            }}
-            className="flex-1 rounded-md px-2 py-1 text-left text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
-          >
-            {activeProject.instructions?.trim()
-              ? "Edit instructions"
-              : "Add instructions"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (!window.confirm(`Delete project “${activeProject.title}”?`)) {
-                return;
-              }
-              void remove(activeProject.id);
-            }}
-            className="rounded-md px-2 py-1 text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
-            aria-label="Delete project"
-            title="Delete project"
-          >
-            <TrashIcon className="size-3" />
-          </button>
+        <div className="mt-1.5 space-y-1">
+          <p className="px-0.5 text-[10px] leading-snug text-[var(--muted-soft)]">
+            Bound to this conversation
+          </p>
+          <div className="flex gap-1 px-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                const next = window.prompt(
+                  "Project instructions (injected into chat)",
+                  activeProject.instructions ?? "",
+                );
+                if (next === null) return;
+                void update(activeProject.id, {
+                  instructions: next.trim() || null,
+                });
+              }}
+              className="flex-1 rounded-md px-2 py-1 text-left text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+            >
+              {activeProject.instructions?.trim()
+                ? "Edit instructions"
+                : "Add instructions"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!window.confirm(`Delete project “${activeProject.title}”?`)) {
+                  return;
+                }
+                void remove(activeProject.id);
+              }}
+              className="rounded-md px-2 py-1 text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+              aria-label="Delete project"
+              title="Delete project"
+            >
+              <TrashIcon className="size-3" />
+            </button>
+          </div>
         </div>
       )}
     </div>

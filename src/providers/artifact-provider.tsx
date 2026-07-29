@@ -49,6 +49,8 @@ type ArtifactContextValue = {
   savedCloud: boolean;
   refreshSaved: () => Promise<void>;
   openSavedById: (id: string) => Promise<boolean>;
+  /** Persist current artifact content when it was saved to the cloud. */
+  persistArtifactContent: (content: string) => Promise<boolean>;
 };
 
 const ArtifactContext = createContext<ArtifactContextValue | null>(null);
@@ -151,6 +153,35 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
     [openArtifact],
   );
 
+  const persistArtifactContent = useCallback(
+    async (content: string) => {
+      const current = artifact;
+      if (!current?.persisted || !current.id) return false;
+      try {
+        const res = await fetch("/api/artifacts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: current.id,
+            kind: current.kind || "document",
+            title: current.title,
+            language: current.language,
+            content,
+          }),
+        });
+        if (!res.ok) return false;
+        setArtifact((prev) =>
+          prev && prev.id === current.id ? { ...prev, code: content } : prev,
+        );
+        void refreshSaved();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [artifact, refreshSaved],
+  );
+
   const value = useMemo(
     () => ({
       artifact,
@@ -162,6 +193,7 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
       savedCloud,
       refreshSaved,
       openSavedById,
+      persistArtifactContent,
     }),
     [
       artifact,
@@ -173,6 +205,7 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
       savedCloud,
       refreshSaved,
       openSavedById,
+      persistArtifactContent,
     ],
   );
 

@@ -321,12 +321,17 @@ const BarChart: FC<{ series: { label: string; value: number }[] }> = ({
 /* ─── Panel ─── */
 
 export function ArtifactPanel() {
-  const { artifact, open, closeArtifact } = useArtifact();
+  const { artifact, open, closeArtifact, persistArtifactContent } =
+    useArtifact();
   const [copied, setCopied] = useState(false);
   const [content, setContent] = useState("");
   const [debounced, setDebounced] = useState("");
   const [tab, setTab] = useState<Tab>("code");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">(
+    "idle",
+  );
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const lastPersisted = useRef<string>("");
 
   const kind: ArtifactKind = artifact?.kind ?? "code";
   const lang = (artifact?.language || "").toLowerCase();
@@ -353,7 +358,9 @@ export function ArtifactPanel() {
     if (!artifact) return;
     setContent(artifact.code);
     setDebounced(artifact.code);
+    lastPersisted.current = artifact.code;
     setCopied(false);
+    setSaveState("idle");
     setTab(tabs[0] ?? "code");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artifact?.id]);
@@ -363,6 +370,25 @@ export function ArtifactPanel() {
     const t = setTimeout(() => setDebounced(content), 400);
     return () => clearTimeout(t);
   }, [content]);
+
+  // Debounced write-back for cloud-persisted artifacts.
+  useEffect(() => {
+    if (!artifact?.persisted) return;
+    if (content === lastPersisted.current) return;
+    setSaveState("saving");
+    const t = setTimeout(() => {
+      void (async () => {
+        const ok = await persistArtifactContent(content);
+        if (ok) {
+          lastPersisted.current = content;
+          setSaveState("saved");
+        } else {
+          setSaveState("error");
+        }
+      })();
+    }, 900);
+    return () => clearTimeout(t);
+  }, [content, artifact?.persisted, artifact?.id, persistArtifactContent]);
 
   if (!open || !artifact) return null;
 
@@ -442,6 +468,15 @@ export function ArtifactPanel() {
             <div className="text-[11px] lowercase text-[var(--muted-soft)]">
               {kind}
               {kind === "code" && lang ? ` · ${lang}` : ""}
+              {artifact.persisted
+                ? saveState === "saving"
+                  ? " · saving…"
+                  : saveState === "saved"
+                    ? " · saved"
+                    : saveState === "error"
+                      ? " · save failed"
+                      : " · cloud"
+                : " · session only"}
             </div>
           </div>
         </div>
