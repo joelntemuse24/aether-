@@ -4,22 +4,12 @@ import {
   convertToModelMessages,
   stepCountIs,
   streamText,
-  tool,
-  type ToolSet,
   type UIMessage,
 } from "ai";
-import {
-  TOOL_NAMES,
-  TOOLS_SYSTEM_PROMPT,
-  createArtifactInput,
-  executePythonInput,
-  webSearchInput,
-  type CreateArtifactOutput,
-  type WebSearchOutput,
-} from "@/lib/tools";
-import { runWebSearch } from "@/lib/web-search";
+import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
 import { budgetForDepth, harnessSystemAddendum } from "@/lib/harness/budgets";
 import { updateAgentRunStatus } from "@/lib/harness/runs-store";
+import { buildToolRegistry } from "@/lib/harness/tool-registry";
 import {
   HARNESS_DEPTHS,
   HARNESS_INTENTS,
@@ -28,6 +18,13 @@ import {
   type HarnessIntent,
 } from "@/lib/harness/types";
 import { auth } from "@/auth";
+import { relevantMemoryPrompt } from "@/lib/memory/store";
+import {
+  formatProjectForPrompt,
+  getProject,
+} from "@/lib/projects/store";
+import { getValidDriveAccessToken } from "@/lib/drive-session";
+import { isCloudDbConfigured } from "@/lib/db";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -111,36 +108,18 @@ function enrichMessagesWithAttachments(
   return next;
 }
 
-/** Build the tool set offered to the model. */
-function buildTools(): ToolSet {
-  return {
-    // Client-executed (no `execute`): run in the browser via Pyodide.
-    [TOOL_NAMES.executePython]: tool({
-      description:
-        "Execute Python code in a sandboxed in-browser Pyodide runtime and return stdout and the final expression value. Use for math, data processing, or verifying code.",
-      inputSchema: executePythonInput,
-    }),
-    // Server-executed: keyless web search.
-    [TOOL_NAMES.webSearch]: tool({
-      description:
-        "Search the web for current or factual information and return a list of result snippets.",
-      inputSchema: webSearchInput,
-      execute: async ({ query }): Promise<WebSearchOutput> =>
-        runWebSearch(query),
-    }),
-    // Server-executed acknowledgement: the artifact body travels in the tool
-    // call input, which the client renders in the artifact panel.
-    [TOOL_NAMES.createArtifact]: tool({
-      description:
-        "Create a rich artifact (code, document, data, image, or svg) shown in the side panel for the user to view, edit, preview, or export. Use for substantial, reusable content.",
-      inputSchema: createArtifactInput,
-      execute: async ({ kind, title }): Promise<CreateArtifactOutput> => ({
-        ok: true,
-        kind,
-        title,
-      }),
-    }),
-  };
+/** Last user text for memory relevance. */
+function lastUserText(messages: UIMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "user") continue;
+    const parts = Array.isArray(m.parts) ? m.parts : [];
+    const texts = parts
+      .filter((p): p is { type: "text"; text: string } => p.type === "text")
+      .map((p) => p.text);
+    if (texts.length) return texts.join("\n");
+  }
+  return "";
 }
 
 export async function POST(req: Request) {
@@ -210,10 +189,38 @@ export async function POST(req: Request) {
       clarifications: harnessClarifications,
     });
 
+    const session = await auth();
+    const userId = session?.user?.id || session?.user?.email || null;
+    const projectId =
+      typeof body.projectId === "string" ? body.projectId : undefined;
+    const conversationId =
+      typeof body.conversationId === "string" ? body.conversationId : null;
+
+    let memoryBlock = "";
+    let projectBlock = "";
+    if (userId && isCloudDbConfigured()) {
+      memoryBlock = await relevantMemoryPrompt(
+        userId,
+        lastUserText(messages),
+      );
+      if (projectId) {
+        const project = await getProject(userId, projectId);
+        projectBlock = formatProjectForPrompt(project);
+      }
+    }
+
+    // Client may also pass a local memory preview for unsigned / no-DB use.
+    const clientMemory =
+      typeof body.memoryContext === "string" && body.memoryContext.length <= 6000
+        ? body.memoryContext
+        : undefined;
+
     const system = [
       toolsEnabled ? TOOLS_SYSTEM_PROMPT : null,
       userSystem,
       harnessAddendum,
+      memoryBlock || clientMemory,
+      projectBlock,
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -268,8 +275,6 @@ export async function POST(req: Request) {
     );
 
     if (harnessRunId) {
-      const session = await auth();
-      const userId = session?.user?.id || session?.user?.email;
       if (userId) {
         void updateAgentRunStatus({
           id: harnessRunId,
@@ -285,13 +290,22 @@ export async function POST(req: Request) {
       }
     }
 
+    const hasDrive = userId
+      ? !!(await getValidDriveAccessToken(userId))
+      : false;
+
     const result = streamText({
       model,
       messages: await convertToModelMessages(enrichedMessages),
       ...(system ? { system } : {}),
       ...(toolsEnabled
         ? {
-            tools: buildTools(),
+            tools: buildToolRegistry({
+              userId,
+              conversationId,
+              projectId: projectId ?? null,
+              hasDrive,
+            }),
             stopWhen: stepCountIs(budget.maxSteps),
           }
         : {}),

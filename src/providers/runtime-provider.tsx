@@ -27,6 +27,8 @@ import { resolveVoicePrompt } from "@/lib/voice";
 import { runPython } from "@/lib/pyodide";
 import { TOOL_NAMES, type ExecutePythonInput } from "@/lib/tools";
 import { useHarness } from "./harness-provider";
+import { useProjects } from "./projects-provider";
+import { localMemoryContextForChat } from "@/lib/memory/local";
 
 function loadInitialThreadIdFromUrl(): string | undefined {
   // Only the URL selects the chat on boot. Bare `/` is always a new conversation.
@@ -61,6 +63,7 @@ function useChatThreadRuntime() {
   const { chatHeaders, activeModel, hasKey, settings } = useSettings();
   const { attachments, clearAttachments } = useAttachments();
   const { peekChatContext, clearChatContext } = useHarness();
+  const { activeProjectId } = useProjects();
   const aui = useAui();
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
@@ -68,6 +71,10 @@ function useChatThreadRuntime() {
   voiceRef.current = settings.voice;
   const peekHarnessRef = useRef(peekChatContext);
   peekHarnessRef.current = peekChatContext;
+  const projectIdRef = useRef(activeProjectId);
+  projectIdRef.current = activeProjectId;
+  const threadIdRef = useRef<string | undefined>(undefined);
+  threadIdRef.current = readThreadStorageKey(aui) ?? readThreadIdFromLocation();
 
   // Each remote-thread runtime instance mounts for one thread. Seed that
   // thread's useChat from localStorage so refresh/switch don't depend on
@@ -103,6 +110,7 @@ function useChatThreadRuntime() {
 
           const textPrefix = buildTextAttachmentPrefix(current);
           const harness = peekHarnessRef.current();
+          const memoryContext = localMemoryContextForChat();
 
           return {
             model: activeModel,
@@ -110,6 +118,9 @@ function useChatThreadRuntime() {
             textPrefix: textPrefix || undefined,
             system: resolveVoicePrompt(voiceRef.current),
             harness: harness ?? undefined,
+            memoryContext: memoryContext || undefined,
+            projectId: projectIdRef.current ?? undefined,
+            conversationId: threadIdRef.current ?? undefined,
           };
         },
       }),

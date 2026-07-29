@@ -11,6 +11,11 @@ export const TOOL_NAMES = {
   executePython: "execute_python",
   webSearch: "web_search",
   createArtifact: "create_artifact",
+  memorySearch: "memory_search",
+  memoryWrite: "memory_write",
+  driveSearch: "drive_search",
+  driveRead: "drive_read",
+  fetchUrl: "fetch_url",
 } as const;
 
 export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -97,7 +102,47 @@ export type CreateArtifactOutput = {
   ok: boolean;
   kind: ArtifactKind;
   title: string;
+  id?: string;
+  persisted?: boolean;
 };
+
+export const memorySearchInput = z.object({
+  query: z
+    .string()
+    .describe("Search query for the user's curated long-term memory."),
+});
+
+export const memoryWriteInput = z.object({
+  id: z.string().optional().describe("Existing memory id to update."),
+  type: z
+    .enum([
+      "preference",
+      "person",
+      "project",
+      "belief_or_practice",
+      "open_question",
+      "writing_voice",
+      "constraint",
+      "note",
+    ])
+    .optional(),
+  title: z.string().describe("Short memory title."),
+  body: z.string().describe("Memory body / details."),
+  importance: z.enum(["low", "normal", "high"]).optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export const driveSearchInput = z.object({
+  query: z.string().describe("Drive file name search query."),
+});
+
+export const driveReadInput = z.object({
+  fileId: z.string().describe("Google Drive file id."),
+});
+
+export const fetchUrlInput = z.object({
+  url: z.string().url().describe("Public http(s) URL to fetch as text."),
+});
 
 // ─── Display metadata (client rendering) ───
 
@@ -119,6 +164,26 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Artifact",
     runningLabel: "Creating artifact…",
   },
+  [TOOL_NAMES.memorySearch]: {
+    label: "Memory",
+    runningLabel: "Searching memory…",
+  },
+  [TOOL_NAMES.memoryWrite]: {
+    label: "Memory",
+    runningLabel: "Saving memory…",
+  },
+  [TOOL_NAMES.driveSearch]: {
+    label: "Drive",
+    runningLabel: "Searching Drive…",
+  },
+  [TOOL_NAMES.driveRead]: {
+    label: "Drive",
+    runningLabel: "Reading Drive file…",
+  },
+  [TOOL_NAMES.fetchUrl]: {
+    label: "Fetch URL",
+    runningLabel: "Fetching page…",
+  },
 };
 
 export function getToolDisplay(name: string): ToolDisplay {
@@ -134,12 +199,15 @@ export function getToolDisplay(name: string): ToolDisplay {
 export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an artifact panel.
 
 Guidelines:
-- Use tools when they help answer accurately. Available tools:
-  - "execute_python": run Python (in-browser Pyodide) for calculations, data work, or verifying code. Prefer this over guessing numeric results.
+- Use tools when they help answer accurately. Available tools (some require sign-in / Drive):
+  - "execute_python": run Python (in-browser Pyodide) for calculations, data work, or verifying code.
   - "web_search": look up current or factual information you are unsure about.
-  - "create_artifact": produce substantial, standalone content the user will want to keep, edit, or preview — complete code files (kind "code"), long-form documents (kind "document", markdown), JSON/tabular data (kind "data"), SVG diagrams (kind "svg"), or images (kind "image").
-- For multi-step work, briefly narrate what you are doing before each tool call ("Searching…", "Drafting an artifact…") so the user can follow along.
-- For short inline snippets keep them in the chat; use "create_artifact" when content is large, iterative, or meant to be reused (essays, plans, codebases).
+  - "fetch_url": read a specific public page as text after you have a URL.
+  - "create_artifact": substantial reusable content (code, documents, data, svg, image).
+  - "memory_search" / "memory_write": curated long-term facts about the user (preferences, people, constraints). Write only durable things.
+  - "drive_search" / "drive_read": search/read the user's Google Drive when connected.
+- For multi-step work, briefly narrate what you are doing before each tool call so the user can follow along.
+- For short inline snippets keep them in the chat; use "create_artifact" when content is large, iterative, or meant to be reused.
 - After a tool returns, incorporate its result into your answer rather than dumping raw output.
 - Prefer living documents for essays and projects the user will revise across turns.
 - If tools are unavailable, answer normally as a text-only assistant.`;

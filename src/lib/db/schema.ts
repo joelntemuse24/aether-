@@ -95,3 +95,79 @@ export const agentRunEvents = pgTable(
 
 export type AgentRunRow = typeof agentRuns.$inferSelect;
 export type AgentRunEventRow = typeof agentRunEvents.$inferSelect;
+
+export const MEMORY_TYPES = [
+  "preference",
+  "person",
+  "project",
+  "belief_or_practice",
+  "open_question",
+  "writing_voice",
+  "constraint",
+  "note",
+] as const;
+
+/** Long-term curated memory the agent can write/search. */
+export const memoryRecords = pgTable(
+  "memory_records",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    type: text("type").notNull().default("note"),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    importance: text("importance").notNull().default("normal"),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("memory_records_user_updated_idx").on(t.userId, t.updatedAt)],
+);
+
+export const projects = pgTable(
+  "projects",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    title: text("title").notNull(),
+    instructions: text("instructions"),
+    pinnedFileIds: jsonb("pinned_file_ids").$type<string[]>().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("projects_user_updated_idx").on(t.userId, t.updatedAt)],
+);
+
+/** Persisted artifacts (living documents) for a user. */
+export const artifacts = pgTable(
+  "artifacts",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    projectId: text("project_id"),
+    conversationId: text("conversation_id"),
+    kind: text("kind").notNull().default("document"),
+    title: text("title").notNull(),
+    language: text("language"),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("artifacts_user_updated_idx").on(t.userId, t.updatedAt)],
+);
+
+export type MemoryRecordRow = typeof memoryRecords.$inferSelect;
+export type ProjectRow = typeof projects.$inferSelect;
+export type ArtifactRow = typeof artifacts.$inferSelect;
