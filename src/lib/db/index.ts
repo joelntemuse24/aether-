@@ -11,7 +11,7 @@ export type AppDb =
   | ReturnType<typeof drizzlePglite<typeof schema>>;
 
 let dbPromise: Promise<AppDb> | null = null;
-let migrated = false;
+let schemaPromise: Promise<void> | null = null;
 
 /** True when cloud conversation sync can run (Neon URL or local PGlite). */
 export function isCloudDbConfigured(): boolean {
@@ -22,7 +22,9 @@ export function isCloudDbConfigured(): boolean {
 }
 
 async function ensureSchema(db: AppDb): Promise<void> {
-  if (migrated) return;
+  // Idempotent DDL — re-run safe CREATE IF NOT EXISTS after deploys/HMR.
+  if (!schemaPromise) {
+    schemaPromise = (async () => {
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS conversations (
       id TEXT PRIMARY KEY,
@@ -77,7 +79,62 @@ async function ensureSchema(db: AppDb): Promise<void> {
     CREATE INDEX IF NOT EXISTS agent_run_events_run_idx
       ON agent_run_events (run_id, created_at)
   `);
-  migrated = true;
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS memory_records (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'note',
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      importance TEXT NOT NULL DEFAULT 'normal',
+      tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS memory_records_user_updated_idx
+      ON memory_records (user_id, updated_at DESC)
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      instructions TEXT,
+      pinned_file_ids JSONB DEFAULT '[]'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS projects_user_updated_idx
+      ON projects (user_id, updated_at DESC)
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS artifacts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      project_id TEXT,
+      conversation_id TEXT,
+      kind TEXT NOT NULL DEFAULT 'document',
+      title TEXT NOT NULL,
+      language TEXT,
+      content TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS artifacts_user_updated_idx
+      ON artifacts (user_id, updated_at DESC)
+  `);
+    })().catch((err) => {
+      schemaPromise = null;
+      throw err;
+    });
+  }
+  await schemaPromise;
 }
 
 async function createDb(): Promise<AppDb> {

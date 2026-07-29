@@ -20,6 +20,7 @@ import {
   getToolDisplay,
   type ArtifactKind,
   type CreateArtifactInput,
+  type CreateArtifactOutput,
   type ExecutePythonInput,
   type ExecutePythonOutput,
   type WebSearchOutput,
@@ -253,13 +254,15 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const { openArtifact } = useArtifact();
   const running = partIsRunning(part);
   const input = part.args as Partial<CreateArtifactInput> | undefined;
+  const result = part.result as CreateArtifactOutput | undefined;
   const complete =
     part.result !== undefined && !!input?.content && !!input?.title;
   const openedRef = useRef(false);
 
+  const artifactId = result?.id || part.toolCallId;
   const artifact =
     input?.content && input?.title
-      ? toArtifact(part.toolCallId, input as CreateArtifactInput)
+      ? toArtifact(artifactId, input as CreateArtifactInput)
       : null;
 
   // Auto-open the panel once when the artifact is fully created.
@@ -275,7 +278,13 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     <ToolShell
       name={TOOL_NAMES.createArtifact}
       running={running}
-      subtitle={input?.title}
+      subtitle={
+        input?.title
+          ? result?.persisted
+            ? `${input.title} · saved`
+            : input.title
+          : undefined
+      }
       headerAction={
         artifact ? (
           <button

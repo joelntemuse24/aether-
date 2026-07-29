@@ -22,6 +22,7 @@ import { VOICE_OPTIONS } from "@/lib/voice";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { MemorySettingsPanel } from "@/components/settings/memory-settings-panel";
 
 const PROVIDERS: ProviderId[] = ["openrouter", "openai", "anthropic", "custom"];
 
@@ -102,7 +103,7 @@ export function SettingsDialog() {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--canvas)] p-0 shadow-none"
+        className="relative z-10 w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--canvas)] p-0 shadow-none"
       >
         <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
           <div className="flex items-center gap-2">
@@ -480,6 +481,8 @@ export function SettingsDialog() {
               </div>
             )}
           </div>
+
+          <MemorySettingsPanel />
         </div>
 
         <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">

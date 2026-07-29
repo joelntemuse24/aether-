@@ -30,13 +30,16 @@ import {
   LogInIcon,
   SearchIcon,
   PencilIcon,
+  FolderIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useSettings } from "@/providers/settings-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { useSession, signOut } from "@/providers/session-provider";
+import { useProjects } from "@/providers/projects-provider";
 import { Label } from "@/components/ui/label";
 import { NEW_CHAT_PATH } from "@/lib/thread-url";
+import { cn } from "@/lib/utils";
 
 type SidebarProps = {
   collapsed: boolean;
@@ -211,6 +214,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       </div>
 
+      <ProjectsSection />
+
       <div className="px-2 pb-1 pt-0.5">
         <Label>Recent</Label>
       </div>
@@ -304,6 +309,67 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       </div>
     </aside>
+  );
+}
+
+/** Compact project picker for cloud users — appears above Recent chats. */
+function ProjectsSection() {
+  const { projects, activeProjectId, setActiveProjectId, create, cloud } =
+    useProjects();
+  const { status } = useSession();
+
+  if (status !== "authenticated" || !cloud) return null;
+
+  return (
+    <div className="px-3 pb-2">
+      <div className="mb-1.5 flex items-center justify-between px-0.5">
+        <Label>Projects</Label>
+        <button
+          type="button"
+          onClick={() => {
+            const title = window.prompt("Project name");
+            if (!title?.trim()) return;
+            void create(title.trim());
+          }}
+          className="flex size-6 items-center justify-center rounded text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+          aria-label="New project"
+          title="New project"
+        >
+          <PlusIcon className="size-3.5" />
+        </button>
+      </div>
+      <div className="flex max-h-36 flex-col gap-0.5 overflow-y-auto">
+        <button
+          type="button"
+          onClick={() => setActiveProjectId(null)}
+          className={cn(
+            "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors",
+            !activeProjectId
+              ? "bg-[var(--elevated-deep)] text-[var(--text)]"
+              : "text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]",
+          )}
+        >
+          No project
+        </button>
+        {projects.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => setActiveProjectId(p.id)}
+            className={cn(
+              "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors",
+              activeProjectId === p.id
+                ? "bg-[var(--elevated-deep)] text-[var(--text)]"
+                : "text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]",
+            )}
+            title={p.title}
+          >
+            <FolderIcon className="size-3 shrink-0 opacity-70" />
+            <span className="truncate">{p.title}</span>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
