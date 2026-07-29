@@ -31,6 +31,7 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
   useAuiState,
+  useComposerRuntime,
 } from "@assistant-ui/react";
 import {
   ArrowDownIcon,
@@ -41,6 +42,7 @@ import {
   CopyIcon,
   FileIcon,
   ImageIcon,
+  Loader2Icon,
   PaperclipIcon,
   PencilIcon,
   RefreshCwIcon,
@@ -49,6 +51,10 @@ import {
   ThumbsUpIcon,
   XIcon,
 } from "lucide-react";
+import { ClarifyCard } from "@/components/assistant-ui/clarify-card";
+import { useHarness } from "@/providers/harness-provider";
+import type { HarnessClassification } from "@/lib/harness/types";
+import { readThreadIdFromLocation } from "@/lib/thread-url";
 
 const isNewChatView = (s: AssistantState) =>
   s.thread.messages.length === 0 &&
@@ -248,7 +254,8 @@ function AttachmentChips() {
 /* ─── Composer ─── */
 
 const Composer: FC = () => {
-  const { hasKey, setOpenSettings, openConnectedAccounts } = useSettings();
+  const { hasKey, setOpenSettings, openConnectedAccounts, chatHeaders } =
+    useSettings();
   const { addFiles } = useAttachments();
   const {
     connected: driveConnected,
@@ -256,9 +263,19 @@ const Composer: FC = () => {
     email: driveEmail,
     setBrowserOpen,
   } = useDrive();
+  const {
+    pending,
+    setPending,
+    armChatContext,
+    classifying,
+    setClassifying,
+    setLastPlanSteps,
+  } = useHarness();
+  const composerRuntime = useComposerRuntime();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [resumeBusy, setResumeBusy] = useState(false);
   const isRunning = useAuiState((s) => s.thread.isRunning);
 
   // Reset transient state when thread stops running (after send/stop/error)
@@ -285,6 +302,108 @@ const Composer: FC = () => {
     setErrors(errs);
   };
 
+  const sendWithHarness = async (opts?: {
+    text?: string;
+    classification?: HarnessClassification;
+    runId?: string;
+    clarifications?: Record<string, string>;
+    skipClassify?: boolean;
+  }) => {
+    if (!hasKey || isRunning || classifying || resumeBusy) return;
+    const state = composerRuntime.getState();
+    const text = (opts?.text ?? state.text).trim();
+    if (!text && !state.attachments?.length) return;
+
+    let classification = opts?.classification;
+    let runId = opts?.runId;
+
+    if (!opts?.skipClassify && !classification) {
+      setClassifying(true);
+      try {
+        const res = await fetch("/api/harness/classify", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...chatHeaders,
+          },
+          body: JSON.stringify({
+            message: text,
+            conversationId: readThreadIdFromLocation() ?? undefined,
+          }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as {
+            runId?: string;
+            classification?: HarnessClassification;
+          };
+          classification = data.classification;
+          runId = data.runId;
+        }
+      } catch {
+        // Fall through — chat still works without classification.
+      } finally {
+        setClassifying(false);
+      }
+    }
+
+    if (
+      classification?.needsClarify &&
+      (classification.questions?.length ?? 0) > 0 &&
+      !opts?.clarifications
+    ) {
+      setLastPlanSteps(classification.planSteps);
+      setPending({
+        text,
+        runId: runId || crypto.randomUUID(),
+        classification,
+      });
+      return;
+    }
+
+    armChatContext({
+      intent: classification?.intent ?? "chat",
+      depth: classification?.depth ?? "standard",
+      runId,
+      clarifications: opts?.clarifications,
+    });
+    setLastPlanSteps(classification?.planSteps);
+    setPending(null);
+
+    if (opts?.text != null) {
+      composerRuntime.setText(opts.text);
+    }
+    if (composerRuntime.getState().canSend) {
+      composerRuntime.send();
+    }
+  };
+
+  const onClarifySubmit = (answers: Record<string, string>) => {
+    if (!pending) return;
+    setResumeBusy(true);
+    void sendWithHarness({
+      text: pending.text,
+      classification: pending.classification,
+      runId: pending.runId,
+      clarifications: answers,
+      skipClassify: true,
+    }).finally(() => setResumeBusy(false));
+  };
+
+  const onClarifySkip = () => {
+    if (!pending) return;
+    setResumeBusy(true);
+    void sendWithHarness({
+      text: pending.text,
+      classification: {
+        ...pending.classification,
+        needsClarify: false,
+        questions: [],
+      },
+      runId: pending.runId,
+      skipClassify: true,
+    }).finally(() => setResumeBusy(false));
+  };
+
   return (
     <ComposerPrimitive.Root className="relative flex w-full flex-col border-0 bg-transparent">
       {!hasKey && (
@@ -298,6 +417,15 @@ const Composer: FC = () => {
       )}
 
       <AgentStatusStrip />
+
+      {pending && (
+        <ClarifyCard
+          classification={pending.classification}
+          busy={resumeBusy || isRunning}
+          onSubmit={onClarifySubmit}
+          onSkip={onClarifySkip}
+        />
+      )}
 
       <div
         onDragEnter={(e) => {
@@ -337,6 +465,20 @@ const Composer: FC = () => {
           rows={1}
           autoFocus
           aria-label="Message input"
+          submitMode="none"
+          onKeyDown={(e) => {
+            if (
+              e.key === "Enter" &&
+              !e.shiftKey &&
+              !e.nativeEvent.isComposing &&
+              !classifying &&
+              !pending &&
+              !isRunning
+            ) {
+              e.preventDefault();
+              void sendWithHarness();
+            }
+          }}
         />
 
         <ComposerAction
@@ -351,6 +493,9 @@ const Composer: FC = () => {
           driveConnected={driveConnected}
           driveAvailable={driveAuthed || driveConnected}
           driveEmail={driveEmail}
+          classifying={classifying}
+          harnessBlocked={!!pending}
+          onHarnessSend={() => void sendWithHarness()}
         />
       </div>
 
@@ -382,12 +527,18 @@ const ComposerAction: FC<{
   driveConnected: boolean;
   driveAvailable: boolean;
   driveEmail?: string | null;
+  classifying?: boolean;
+  harnessBlocked?: boolean;
+  onHarnessSend: () => void;
 }> = ({
   onAttachClick,
   onDriveClick,
   driveConnected,
   driveAvailable,
   driveEmail,
+  classifying,
+  harnessBlocked,
+  onHarnessSend,
 }) => {
   return (
     <div className="flex items-center justify-between gap-2 px-0.5">
@@ -425,15 +576,20 @@ const ComposerAction: FC<{
 
       <div className="flex items-center gap-1">
         <AuiIf condition={(s) => !s.thread.isRunning}>
-          <ComposerPrimitive.Send asChild>
-            <button
-              type="button"
-              className="flex size-8 items-center justify-center rounded-full bg-[var(--accent)] text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
-              aria-label="Send message"
-            >
+          <button
+            type="button"
+            onClick={onHarnessSend}
+            disabled={!!classifying || !!harnessBlocked}
+            className="flex size-8 items-center justify-center rounded-full bg-[var(--accent)] text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+            aria-label={classifying ? "Planning…" : "Send message"}
+            title={classifying ? "Planning…" : "Send"}
+          >
+            {classifying ? (
+              <Loader2Icon className="size-4 animate-spin" />
+            ) : (
               <ArrowUpIcon className="size-4" strokeWidth={2.5} />
-            </button>
-          </ComposerPrimitive.Send>
+            )}
+          </button>
         </AuiIf>
         <AuiIf condition={(s) => s.thread.isRunning}>
           <ComposerPrimitive.Cancel asChild>

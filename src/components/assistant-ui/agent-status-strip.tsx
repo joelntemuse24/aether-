@@ -4,6 +4,7 @@ import { type FC } from "react";
 import { useAuiState } from "@assistant-ui/react";
 import { Loader2Icon } from "lucide-react";
 import { getToolDisplay } from "@/lib/tools";
+import { useHarness } from "@/providers/harness-provider";
 
 type ToolishPart = {
   type?: string;
@@ -32,10 +33,11 @@ function runningToolLabel(
 }
 
 /**
- * Composer-adjacent status while the assistant is running —
+ * Composer-adjacent status while classifying or the assistant is running —
  * Claude/ChatGPT-style "Searching…" / "Running Python…" strip.
  */
 export const AgentStatusStrip: FC = () => {
+  const { classifying } = useHarness();
   const isRunning = useAuiState((s) => s.thread.isRunning);
   const text = useAuiState((s) => {
     if (!s.thread.isRunning) return null;
@@ -46,6 +48,19 @@ export const AgentStatusStrip: FC = () => {
       }>,
     );
   });
+
+  if (classifying) {
+    return (
+      <div
+        className="mb-1.5 flex items-center gap-2 px-2.5 text-[12px] text-[var(--muted)] animate-[fadeIn_150ms_ease-out]"
+        role="status"
+        aria-live="polite"
+      >
+        <Loader2Icon className="size-3 animate-spin text-[var(--accent)]" />
+        <span className="tracking-wide">Planning how deep to go…</span>
+      </div>
+    );
+  }
 
   if (!isRunning || !text) return null;
 

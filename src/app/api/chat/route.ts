@@ -18,6 +18,16 @@ import {
   type WebSearchOutput,
 } from "@/lib/tools";
 import { runWebSearch } from "@/lib/web-search";
+import { budgetForDepth, harnessSystemAddendum } from "@/lib/harness/budgets";
+import { updateAgentRunStatus } from "@/lib/harness/runs-store";
+import {
+  HARNESS_DEPTHS,
+  HARNESS_INTENTS,
+  type HarnessChatContext,
+  type HarnessDepth,
+  type HarnessIntent,
+} from "@/lib/harness/types";
+import { auth } from "@/auth";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -172,9 +182,41 @@ export async function POST(req: Request) {
       typeof body.system === "string" && body.system.length <= 8000
         ? body.system
         : undefined;
-    const system = toolsEnabled
-      ? [TOOLS_SYSTEM_PROMPT, userSystem].filter(Boolean).join("\n\n")
-      : userSystem;
+
+    const rawHarness = body.harness as HarnessChatContext | undefined;
+    const harnessDepth: HarnessDepth =
+      rawHarness &&
+      typeof rawHarness.depth === "string" &&
+      (HARNESS_DEPTHS as readonly string[]).includes(rawHarness.depth)
+        ? rawHarness.depth
+        : "standard";
+    const harnessIntent: HarnessIntent =
+      rawHarness &&
+      typeof rawHarness.intent === "string" &&
+      (HARNESS_INTENTS as readonly string[]).includes(rawHarness.intent)
+        ? rawHarness.intent
+        : "chat";
+    const harnessClarifications =
+      rawHarness?.clarifications &&
+      typeof rawHarness.clarifications === "object"
+        ? rawHarness.clarifications
+        : undefined;
+    const harnessRunId =
+      typeof rawHarness?.runId === "string" ? rawHarness.runId : undefined;
+    const budget = budgetForDepth(harnessDepth);
+    const harnessAddendum = harnessSystemAddendum({
+      depth: harnessDepth,
+      intent: harnessIntent,
+      clarifications: harnessClarifications,
+    });
+
+    const system = [
+      toolsEnabled ? TOOLS_SYSTEM_PROMPT : null,
+      userSystem,
+      harnessAddendum,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
     const modelId = resolveModel(
       provider,
       (typeof body.model === "string" && body.model) || headerModel,
@@ -225,12 +267,33 @@ export async function POST(req: Request) {
       textPrefix,
     );
 
+    if (harnessRunId) {
+      const session = await auth();
+      const userId = session?.user?.id || session?.user?.email;
+      if (userId) {
+        void updateAgentRunStatus({
+          id: harnessRunId,
+          userId,
+          status: harnessDepth === "deep" ? "verifying" : "acting",
+          eventType: "chat_started",
+          eventPayload: {
+            depth: harnessDepth,
+            intent: harnessIntent,
+            maxSteps: budget.maxSteps,
+          },
+        });
+      }
+    }
+
     const result = streamText({
       model,
       messages: await convertToModelMessages(enrichedMessages),
       ...(system ? { system } : {}),
       ...(toolsEnabled
-        ? { tools: buildTools(), stopWhen: stepCountIs(5) }
+        ? {
+            tools: buildTools(),
+            stopWhen: stepCountIs(budget.maxSteps),
+          }
         : {}),
       maxOutputTokens: 8192,
       abortSignal: req.signal,

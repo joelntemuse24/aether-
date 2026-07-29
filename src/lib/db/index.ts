@@ -46,6 +46,37 @@ async function ensureSchema(db: AppDb): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS agent_runs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      conversation_id TEXT,
+      intent TEXT NOT NULL,
+      depth TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'acting',
+      plan_json JSONB,
+      classification_json JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS agent_runs_user_created_idx
+      ON agent_runs (user_id, created_at DESC)
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS agent_run_events (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      payload_json JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS agent_run_events_run_idx
+      ON agent_run_events (run_id, created_at)
+  `);
   migrated = true;
 }
 
