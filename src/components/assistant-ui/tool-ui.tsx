@@ -251,7 +251,7 @@ function toArtifact(id: string, input: CreateArtifactInput): Artifact {
 }
 
 const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const { openArtifact } = useArtifact();
+  const { openArtifact, refreshSaved } = useArtifact();
   const running = partIsRunning(part);
   const input = part.args as Partial<CreateArtifactInput> | undefined;
   const result = part.result as CreateArtifactOutput | undefined;
@@ -269,7 +269,11 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   useEffect(() => {
     if (complete && artifact && !openedRef.current) {
       openedRef.current = true;
-      openArtifact(artifact);
+      openArtifact({
+        ...artifact,
+        persisted: !!result?.persisted,
+      });
+      if (result?.persisted) void refreshSaved();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [complete]);

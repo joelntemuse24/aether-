@@ -40,13 +40,19 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const memory = await writeMemory(gate.userId, {
-    id: body.id,
-    type: body.type,
-    title: body.title.trim(),
-    body: body.body.trim(),
-    importance: body.importance,
-    tags: body.tags,
-  });
-  return NextResponse.json({ memory });
+  try {
+    const memory = await writeMemory(gate.userId, {
+      id: body.id,
+      type: body.type,
+      title: body.title.trim(),
+      body: body.body.trim(),
+      importance: body.importance,
+      tags: body.tags,
+    });
+    return NextResponse.json({ memory });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Write failed";
+    const status = message.includes("another user") ? 403 : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
 }

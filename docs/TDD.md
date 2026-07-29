@@ -6,7 +6,7 @@
 
 ## System Overview
 
-**Aether** is a Next.js 15 (App Router) bring-your-own-key (BYOK) AI chat application: the browser holds provider API keys and (when unsigned-in or without a DB) conversation history; the Next.js server proxies chat to LLM providers, optionally runs tools (`web_search`, artifact ack), and—when configured—persists signed-in users’ conversations in Postgres (Neon or PGlite). Optional Auth.js sign-in enables Google Drive readonly attach and cloud conversation sync; there is no application database for API keys or general app state beyond auth cookies, Drive token cookies, and optional conversation tables.
+**Aether** is a Next.js 15 (App Router) bring-your-own-key (BYOK) AI chat application: the browser holds provider API keys; the Next.js server proxies chat to LLM providers and runs tools. Optional Auth.js sign-in plus Postgres (`DATABASE_URL` Neon or `AETHER_PGLITE=1`) enables cloud conversation sync, curated memory, projects, persisted artifacts, and harness run records. BYOK keys are never stored in the application database. Unsigned / no-DB users keep history and local memory in `localStorage` (`aether:` prefix).
 
 ---
 
@@ -35,62 +35,68 @@ src/app/layout.tsx
          SettingsProvider
            AttachmentsProvider
              DriveProvider
-               RuntimeProvider          ← useChat → POST /api/chat
-                 ThreadUrlSync
-                 ArtifactProvider
-                   KeyboardShortcuts
-                   AppShell             ← Sidebar + Thread + Settings dialog + Drive modal
+               ProjectsProvider
+                 HarnessProvider
+                   RuntimeProvider          ← useChat → POST /api/chat
+                     ThreadUrlSync
+                     ArtifactProvider
+                       KeyboardShortcuts
+                       AppShell             ← Sidebar + Thread + Settings + Drive modal
 ```
 
 | Concern | Primary modules |
 |---------|-----------------|
 | Chat transport & thread runtime | `src/providers/runtime-provider.tsx` |
-| Thread list / history persistence adapter | `src/lib/local-thread-adapter.tsx` |
+| Harness classify / clarify / budgets | `src/lib/harness/*`, `src/providers/harness-provider.tsx` |
+| Tool registry | `src/lib/harness/tool-registry.ts`, `src/lib/tools.ts` |
+| Memory | `src/lib/memory/*`, `api/memory/*`, Settings panel |
+| Projects | `src/lib/projects/*`, `api/projects/*`, sidebar |
+| Artifacts | `src/lib/artifacts/*`, `api/artifacts/*`, artifact panel + sidebar list |
+| Thread list / history adapter | `src/lib/local-thread-adapter.tsx` |
 | URL ↔ active thread | `src/components/thread-url-sync.tsx`, `src/lib/thread-url.ts` |
 | Settings / BYOK headers | `src/lib/settings.ts`, `src/providers/settings-provider.tsx` |
-| Tools (schemas + prompts) | `src/lib/tools.ts` |
-| Web search implementation | `src/lib/web-search.ts` (used by `/api/chat`) |
-| Attachments | `src/lib/attachments.ts`, `src/lib/attachment-payloads.ts`, `attachments-provider.tsx` |
-| Drive | `src/lib/drive-session.ts`, `src/lib/google-drive.ts`, `api/drive/*` |
+| Web search | `src/lib/web-search.ts` |
+| URL fetch safety | `src/lib/connectors/url-safety.ts` |
+| Drive | `src/lib/drive-session.ts`, `src/lib/connectors/web-and-drive.ts`, `api/drive/*` |
 | Cloud conversations | `src/lib/db/*`, `src/lib/conversations/*`, `api/conversations/*` |
 | Voices | `src/lib/voice.ts` |
 | Models list (OpenRouter public) | `src/lib/models.ts` |
 
 ### Data flow — chat turn
 
-1. User configures provider + API key in Settings → stored in `localStorage` key `aether:settings:v1`.
-2. Composer send builds messages; attachments resolve payloads from an in-memory `Map` (`attachment-payloads`); text stubs become `textPrefix`; images/files with data URLs become message `file` parts.
-3. Client `AssistantChatTransport` `POST`s `/api/chat` with headers:
-   - `x-api-key`, `x-provider`, `x-base-url`, `x-model`, `x-tools` (`"1"`|`"0"`)
-4. Body includes `messages`, optional `model`, optional `system` (voice prompt, ≤ 8000 chars), `attachments[]`, `textPrefix`.
-5. Server validates API key presence (**401** if missing), enriches last user message with attachments, builds Anthropic or OpenAI-compatible model client, optionally attaches tools with `stopWhen: stepCountIs(5)`, streams via `streamText` → `toUIMessageStreamResponse` (`maxOutputTokens: 8192`, `maxDuration: 60`).
-6. Client tools: `execute_python` runs in-browser via Pyodide (`onToolCall`); server tools: `web_search`, `create_artifact` (ack only).
-7. History adapter writes the format repo either to `localStorage` (`aether:messages:<id>`) or to `PUT /api/conversations/[id]/messages` when cloud mode is active.
+1. User configures provider + API key in Settings → `localStorage` key `aether:settings:v1`.
+2. Composer send classifies via `POST /api/harness/classify` (unless skipped after clarify). May show clarify cards; then arms `HarnessChatContext` (`intent`, `depth`, `runId`, `clarifications`, `planSteps`).
+3. Attachments resolve from an in-memory `Map`; text stubs → `textPrefix`; images/files with data URLs → message `file` parts.
+4. Client `AssistantChatTransport` `POST`s `/api/chat` with headers `x-api-key`, `x-provider`, `x-base-url`, `x-model`, `x-tools`.
+5. Body includes `messages`, optional `model`, `system` (voice, ≤ 8000), `attachments[]`, `textPrefix`, `harness`, `memoryContext`, `projectId`, `conversationId`.
+6. Server validates API key (**401** if missing), injects harness addendum (including `planSteps`), memory (server cloud or client local when no cloud), and project instructions; builds tools via `buildToolRegistry`; `stopWhen: stepCountIs(budget.maxSteps)` where budgets are shallow=2 / standard=8 / deep=16; streams (`maxOutputTokens: 8192`, `maxDuration: 60`). Marks harness run `done` on finish when applicable.
+7. Client tool: `execute_python` (Pyodide). Server tools (gated): `web_search`, `fetch_url` (SSRF-hardened), `create_artifact` (acks + may persist), `memory_search` / `memory_write` (signed-in + DB), `drive_search` / `drive_read` (Drive connected).
+8. History adapter writes format repo to `localStorage` or `PUT /api/conversations/[id]/messages` when cloud mode is active.
 
 ### Data flow — auth & Drive
 
-1. Sign-in: OAuth (Google/GitHub/Apple when env set) or email magic link (`POST /api/auth/email` → JWT → `/auth/verify` → Credentials provider `email-magic`).
-2. Session: JWT strategy, 30-day `maxAge`; `user.id` derived from id or email.
-3. Drive connect: authenticated `GET /api/drive/connect` → Google OAuth (readonly Drive scope) → `GET /api/drive/callback` stores tokens in httpOnly cookie `aether.drive` → redirect `/?drive_connected=1` or `/?connect=drive` for Settings.
-4. Download: `POST /api/drive/download` with `{ fileId, name?, mimeType? }` returns an attachment-shaped payload under size caps.
+1. Sign-in: OAuth (Google/GitHub/Apple when env set) or email magic link (`POST /api/auth/email` → JWT → `/auth/verify` → Credentials `email-magic`).
+2. Session: JWT strategy, 30-day `maxAge`; `user.id` from id or email.
+3. Drive connect: authenticated `GET /api/drive/connect` → Google OAuth (readonly) → callback stores httpOnly cookie `aether.drive` → `/?drive_connected=1` or `/?connect=drive`.
+4. Download: `POST /api/drive/download` returns attachment-shaped payload under size caps. Tools `drive_search` / `drive_read` use the same token.
 
 ### Data flow — conversation URLs & cloud
 
-- `/` = new chat; `/c/<threadId>` = that conversation (`ThreadUrlSync` keeps URL and active thread aligned).
-- Cloud enabled when `isCloudDbConfigured()` **and** signed in (`GET /api/conversations/status` → `{ configured, signedIn, cloud }`).
-- On sign-in with local chats: `SyncLocalChatsBanner` can `POST /api/conversations/migrate` then clear local threads.
+- `/` = new chat; `/c/<threadId>` = that conversation (`ThreadUrlSync`).
+- Cloud when `isCloudDbConfigured()` **and** signed in (`GET /api/conversations/status` → `{ configured, signedIn, cloud }`).
+- On sign-in with local chats: `SyncLocalChatsBanner` can migrate then clear local threads.
 
 ### Integration points
 
 | External system | How used |
 |-----------------|----------|
 | OpenRouter / OpenAI-compatible / Anthropic | Chat completions streaming via user-supplied key |
-| OpenRouter `GET /api/v1/models` | Client model picker (no key); cache `aether:models-cache:v2` |
-| Resend | Optional magic-link email (`AUTH_RESEND_KEY` / `RESEND_API_KEY`) |
-| Google OAuth + Drive API | Sign-in + readonly file browse/download |
+| OpenRouter `GET /api/v1/models` | Client model picker; cache `aether:models-cache:v2` |
+| Resend | Optional magic-link email |
+| Google OAuth + Drive API | Sign-in + readonly browse/download + Drive tools |
 | GitHub / Apple OAuth | Sign-in only (when env set) |
-| Wikipedia / DuckDuckGo Instant Answer / optional Brave Search | `web_search` tool |
-| Neon Postgres or local PGlite | Optional conversation store |
+| Wikipedia / DuckDuckGo Instant Answer / optional Brave | `web_search` |
+| Neon Postgres or local PGlite | Optional cloud store |
 
 ### App routes (as implemented)
 
@@ -100,16 +106,14 @@ src/app/layout.tsx
 | `/c/[threadId]` | `src/app/(chat)/c/[threadId]/page.tsx` |
 | `/auth/signin` | `src/app/auth/signin/page.tsx` |
 | `/auth/verify` | `src/app/auth/verify/page.tsx` |
-| `GET/POST /api/auth/[...nextauth]` | `src/app/api/auth/[...nextauth]/route.ts` |
-| `POST /api/auth/email` | `src/app/api/auth/email/route.ts` |
-| `GET /api/auth/configured` | `src/app/api/auth/configured/route.ts` |
+| Auth APIs | `src/app/api/auth/*` |
 | `POST /api/chat` | `src/app/api/chat/route.ts` |
-| `GET /api/conversations/status` | `src/app/api/conversations/status/route.ts` |
-| `GET/POST /api/conversations` | `src/app/api/conversations/route.ts` |
-| `GET/PATCH/DELETE /api/conversations/[id]` | `src/app/api/conversations/[id]/route.ts` |
-| `GET/PUT /api/conversations/[id]/messages` | `src/app/api/conversations/[id]/messages/route.ts` |
-| `POST /api/conversations/migrate` | `src/app/api/conversations/migrate/route.ts` |
-| Drive routes (`connect`, `callback`, `status`, `files`, `download`, `disconnect`) | `src/app/api/drive/*/route.ts` |
+| `POST /api/harness/classify` | `src/app/api/harness/classify/route.ts` |
+| Conversations APIs | `src/app/api/conversations/*` |
+| `GET/POST /api/memory`, `DELETE /api/memory/[id]` | memory routes |
+| `GET/POST /api/projects`, `GET/PATCH/DELETE /api/projects/[id]` | projects routes |
+| `GET/POST/DELETE /api/artifacts` | artifacts route |
+| Drive routes | `src/app/api/drive/*/route.ts` |
 
 There is no `/settings` route — Settings is a dialog. Drive connect deep-link uses `/?connect=drive`.
 
@@ -119,151 +123,69 @@ There is no `/settings` route — Settings is a dialog. Drive connect deep-link 
 
 ### Client settings (`AppSettings`)
 
-Persisted at `aether:settings:v1`:
+Persisted at `aether:settings:v1`: provider keys, `baseURL`, `model`, `enableTools`, `voice` (`default` \| `literary` \| `socratic` \| `concise`), etc. Defaults: provider `openrouter`, `enableTools: true`, `voice: "literary"`.
 
-`provider`, `apiKey`, `openrouterKey`, `openaiKey`, `anthropicKey`, `customKey`, `baseURL`, `model`, `customModel`, `useCustomModel`, `googleClientId` (deprecated), `enableTools`, `voice` (`default` \| `literary` \| `socratic` \| `concise`).
+### Local blobs
 
-Defaults in code: provider `openrouter`, baseURL `https://openrouter.ai/api/v1`, `enableTools: true`, `voice: "literary"`.
-
-Chat header builder maps settings → `x-api-key` / `x-provider` / `x-base-url` / `x-model` / `x-tools`.
-
-### Local thread / message blobs
-
-- `aether:threads`: array of `{ remoteId, status, title?, externalId?, custom? }`
-- `aether:messages:<remoteId>`: `{ headId?, entries: [{ id, parent_id, format, content }] }` with `format` typically `"ai-sdk/v6"`
-- `aether:active-thread`: last active id
+- `aether:threads`, `aether:messages:<remoteId>`, `aether:active-thread`
+- `aether:memory:v1` — local curated memory when cloud off
+- `aether:active-project` — selected project id
+- Theme/accent/sidebar/models-cache keys as before
 
 ### Database schema (Drizzle + runtime `CREATE TABLE IF NOT EXISTS`)
 
-**`conversations`**
+Cloud tables (when DB configured):
 
-| Column | Notes |
-|--------|--------|
-| `id` TEXT PK | Conversation id (same as client `remoteId`) |
-| `user_id` TEXT NOT NULL | Session user id or email |
-| `title` TEXT | |
-| `status` TEXT NOT NULL DEFAULT `'regular'` | `'regular'` \| `'archived'` |
-| `custom` JSONB | |
-| `created_at` / `updated_at` TIMESTAMPTZ | |
-| Index | `(user_id, updated_at)` |
+| Table | Purpose |
+|-------|---------|
+| `conversations` / `conversation_messages` | Chat list + message repos |
+| `agent_runs` / `agent_run_events` | Harness classify/run lifecycle |
+| `memory_records` | Curated long-term memory |
+| `projects` | Project title + instructions (+ unused `pinned_file_ids`) |
+| `artifacts` | Persisted artifact content |
 
-**`conversation_messages`**
-
-| Column | Notes |
-|--------|--------|
-| `conversation_id` TEXT PK FK → `conversations(id)` ON DELETE CASCADE | |
-| `repo` JSONB NOT NULL | Same shape as local format repo |
-| `updated_at` TIMESTAMPTZ | |
-
-Configured via `DATABASE_URL` (postgres URL) or `AETHER_PGLITE=1` (dir `./.data/aether-pglite`). `@electric-sql/pglite` is listed in `serverExternalPackages`.
-
-### Conversation DTO / API contracts
-
-Auth gate (`requireCloudUser`): DB configured + session `user.id` \| `user.email`; else **503** / **401**.
-
-| Method | Path | Contract (as implemented) |
-|--------|------|---------------------------|
-| GET | `/api/conversations/status` | `{ configured, signedIn, cloud }` — ungated |
-| GET | `/api/conversations` | `{ threads: ConversationDTO[] }` |
-| POST | `/api/conversations` | body `{ id, title?, status?, custom? }` → `{ thread }` |
-| GET/PATCH/DELETE | `/api/conversations/[id]` | PATCH `{ title?, status?, custom? }` |
-| GET/PUT | `/api/conversations/[id]/messages` | PUT requires `{ repo }` with `entries` array |
-| POST | `/api/conversations/migrate` | `{ items: [...] }` sliced to **100** → `{ imported, skipped }` |
-
-`ConversationDTO`: `remoteId`, `title?`, `status`, `externalId?`, `custom?`, `updatedAt?`.
+Configured via `DATABASE_URL` or `AETHER_PGLITE=1` (dir `./.data/aether-pglite`).
 
 ### Chat API (`POST /api/chat`)
 
 - **Auth:** none (API key header only).
 - **Headers:** `x-api-key` (required), `x-provider`, `x-base-url`, `x-model`, `x-tools`.
-- **Body:** `messages` (required), `model?`, `system?` (truncated to 8000), `attachments?: { name, mime, dataUrl }[]`, `textPrefix?`.
-- **Tools (when `x-tools` ≠ `"0"`):** `execute_python` (client), `web_search` (server), `create_artifact` (server ack `{ ok, kind, title }`).
-- **Search order (`runWebSearch`):** Brave if `BRAVE_SEARCH_API_KEY` → Wikipedia → DuckDuckGo Instant Answer; empty/invalid JSON bodies skip a source rather than aborting the whole search.
+- **Body:** `messages`, `model?`, `system?`, `attachments?`, `textPrefix?`, `harness?`, `memoryContext?`, `projectId?`, `conversationId?`.
+- **Tools (when tools on):** see tool registry; `fetch_url` rejects private/link-local/metadata hosts and validates DNS + redirects (`url-safety.ts`).
+- **Search order:** Brave if `BRAVE_SEARCH_API_KEY` → Wikipedia → DuckDuckGo Instant Answer.
 
-### Auth APIs
+### Behavior matrix (summary)
 
-| Endpoint | Behavior |
-|----------|----------|
-| `/api/auth/[...nextauth]` | Auth.js handlers |
-| `POST /api/auth/email` | `{ email, callbackUrl? }` → Resend or `devLink` / **503** |
-| `GET /api/auth/configured` | `{ google, github, apple, email: true }` |
-
-Magic-link JWT: purpose `aether-email-magic`, **15 minutes**, HS256 with auth secret.
-
-### Drive APIs
-
-| Endpoint | Notes |
-|----------|--------|
-| `GET /api/drive/connect` | Requires session; else redirect sign-in with `callbackUrl=/?connect=drive` |
-| `GET /api/drive/callback` | Sets `aether.drive` cookie |
-| `GET /api/drive/status` | Soft status flags |
-| `GET /api/drive/files` | `folderId`, `q`, `type`, `pageToken` |
-| `POST /api/drive/download` | `{ fileId, name?, mimeType? }` |
-| `POST /api/drive/disconnect` | Revoke + clear cookie |
-
-Drive cookie: httpOnly JWT purpose `aether-drive-tokens`, fields include `userId`, `refreshToken`, `accessToken`, `expiresAt`, `email?`; must match session user.
-
-### Attachment caps (code constants)
-
-Max **6** attachments; file **25 MB**; embed image/file **4 MB**; total embed budget **12 MB**; text truncate **120_000** chars. Local PDFs are name-only (not byte-embedded); Drive PDFs embed under caps.
-
-### Other localStorage
-
-`aether:theme`, `aether:accent`, `aether:sidebar-collapsed`, `aether:models-cache:v2`, `aether:migrate-dismissed`.
-
-Artifacts: React state only (not persisted).
-
-### Env vars referenced in `src/`
-
-| Variable | Where used |
-|----------|------------|
-| `AUTH_SECRET` | `auth-secret.ts` |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (+ `AUTH_GOOGLE_*`) | auth, drive, configured |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` (+ `AUTH_GITHUB_*`) | auth, configured |
-| `APPLE_ID` / `APPLE_SECRET` (+ `AUTH_APPLE_*`) | auth, configured |
-| `AUTH_RESEND_KEY` / `RESEND_API_KEY` | email route |
-| `AUTH_EMAIL_FROM` / `EMAIL_FROM` | email route |
-| `AUTH_ALLOW_DEV_MAGIC_LINK` | email route |
-| `NODE_ENV` | email dev-link policy; cookie `secure` |
-| `DATABASE_URL` | `db/index.ts` |
-| `AETHER_PGLITE` | `db/index.ts` |
-| `BRAVE_SEARCH_API_KEY` | `web-search.ts` (when present) |
+| Surface | Unsigned | Signed, no DB | Signed + DB |
+|---------|----------|---------------|-------------|
+| Memory Settings | localStorage | localStorage | `/api/memory` |
+| memory_* tools | Off | Off | On |
+| Prompt memory | Client `memoryContext` | Client | Server cloud (no local fallback) |
+| Projects / artifacts APIs | 503 | 503 | On |
+| Drive tools | Off | On if Drive cookie | Same |
+| fetch_url | On if tools on | On | On |
+| Harness classify/budgets | Yes | Yes | Yes + `agent_runs` |
 
 ---
 
 ## Identified Technical Debt
 
-*Only issues visible in current source.*
+*Only issues still visible after audit hardening.*
 
-1. **`/api/chat` is unauthenticated and unbounded** — No session check, no rate limit, no explicit body/attachment size limit at the route (client caps exist; server trusts the request). Anyone who can hit the deployment can proxy with a key supplied in headers.
-
-2. **BYOK keys in plaintext `localStorage`** — `aether:settings:v1` stores provider secrets in the browser with no encryption.
-
-3. **Shared dev auth secret fallback** — `DEV_AUTH_SECRET = "aether-dev-secret-change-me"` used when `AUTH_SECRET` unset (`auth-secret.ts`), affecting Auth.js, magic links, and Drive cookie encryption.
-
-4. **`allowDangerousEmailAccountLinking: true`** on Google/GitHub/Apple providers — accounts with the same email can be linked across IdPs without additional verification.
-
-5. **Conversation message `PUT` lacks size/count caps** — Validates `repo.entries` is an array only; migrate caps **items** at 100, not message payload size. Large repos can stress DB/JSON paths.
-
-6. **`createConversation` conflict handling** — `onConflictDoNothing` then re-read; cross-user id collision surfaces as a generic create failure, not an explicit **409**.
-
-7. **Cloud message GET soft-fails** — Client `cloudGetMessageRepo` returns empty repo on non-OK responses, masking 401/404.
-
-8. **Chat client errors under-surfaced** — `runtime-provider` logs chat `onError` to console; Drive/attachment paths emit `aether:notice` / `aether:drive-error`, but chat failures lack the same user-visible pattern.
-
-9. **Keyless `web_search` quality ceiling** — Without `BRAVE_SEARCH_API_KEY`, results are Wikipedia-centric (entity-ranked) plus sparse DDG Instant Answer; not a general web index.
-
-10. **No Next.js middleware** — Route protection is per-handler; easy to add a new API without a gate.
-
-11. **Drive query string construction** — Search `q` is embedded into the Drive query with limited escaping (single-quote handling only).
-
-12. **Artifacts & agent state not durable** — Artifact panel is memory-only; no cross-session agent memory beyond chat message repos.
-
-13. **Tool loop hard-capped** — `stepCountIs(5)` is fixed; no mode-specific orchestration beyond voice system prompts.
-
-14. **Pre-existing lint debt** — `react-hooks/exhaustive-deps` warning in `src/components/model-picker.tsx` (documented in `AGENTS.md`).
-
-15. **Example-only env vars** — `.env.example` lists `OPENROUTER_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `NEXT_PUBLIC_DEFAULT_MODEL` / `AUTH_URL`, but they are **not** read by `src/` (chat keys come from request headers / localStorage).
+1. **`/api/chat` is unauthenticated and unbounded** — No session check, no rate limit, no explicit body size limit at the route.
+2. **BYOK keys in plaintext `localStorage`**.
+3. **Shared dev auth secret fallback** when `AUTH_SECRET` unset.
+4. **`allowDangerousEmailAccountLinking: true`** on OAuth providers.
+5. **Conversation message `PUT` lacks size/count caps**.
+6. **Local memory does not auto-migrate** into cloud on sign-in.
+7. **Projects are not bound to conversations** — active project is a client selection (`aether:active-project`); `pinned_file_ids` unused.
+8. **Classify-every-send latency/cost** — no shallow skip / heuristics-first path in the composer.
+9. **Prompt injection via memory / project instructions** — user/model text enters the system prompt by design; framing only.
+10. **New tools mostly use generic tool UI** (memory/drive/fetch).
+11. **Keyless `web_search` quality ceiling** without Brave.
+12. **No Next.js middleware** — per-handler auth.
+13. **Pre-existing lint** — `react-hooks/exhaustive-deps` in `model-picker.tsx`.
+14. **Example-only env vars** in `.env.example` for provider keys — not read by `src/` for chat.
 
 ---
 
@@ -271,48 +193,25 @@ Artifacts: React state only (not persisted).
 
 ### Authentication & authorization
 
-| Surface | Control present in code |
-|---------|-------------------------|
+| Surface | Control |
+|---------|---------|
 | Chat | `x-api-key` required; **no** login |
-| Conversations APIs (except status) | Session + DB configured |
-| Drive mutate/list/download/connect | Session; Drive token `userId` must match |
-| Email magic link | Public endpoint; token purpose + expiry checked |
-| OAuth callbacks | State cookie for Drive; Auth.js for IdP |
-
-Session is JWT (30 days). Sign-out clears Drive cookie. Callback URLs for email/verify are restricted to same-origin relative paths in the email/verify flows.
-
-Cookies used: Auth.js session cookies; `aether.drive` (httpOnly, `sameSite: "lax"`, `secure` in production); short-lived `aether.drive.oauth_state`.
-
-### Data validation
-
-- Tool inputs: Zod schemas in `tools.ts` (`executePythonInput`, `webSearchInput`, `createArtifactInput`).
-- Chat `system` truncated to 8000 characters.
-- Conversation POST requires non-empty `id`; messages PUT requires `repo.entries` array.
-- Magic-link email validated before send.
-- Attachment size/type rules enforced primarily on the **client** (`attachments.ts`); Drive download applies server-side embed caps.
-- Web search rejects empty query; JSON bodies are read as text first where `web-search.ts` is present, so empty bodies skip that source.
+| Conversations / memory / projects / artifacts | Session + DB configured |
+| Drive | Session; Drive token `userId` must match |
+| Memory/artifact upserts | Owned-row update; foreign id → **403** |
+| `fetch_url` | Public http(s) only; DNS + IP blocklist; max 3 redirects |
 
 ### What is / is not stored server-side
 
 | Stored on server | Not stored on server |
 |------------------|----------------------|
-| Auth session JWT (cookie) | BYOK API keys (browser only; present in chat request memory while proxied) |
-| Drive OAuth tokens (httpOnly cookie) | Artifacts |
-| Conversations + message repos (if DB + signed in) | Unsigned-in / no-DB chat history (`localStorage`) |
-| | In-memory attachment payload `Map` |
+| Auth session JWT | BYOK API keys |
+| Drive OAuth tokens (httpOnly cookie) | Unsigned / no-DB chat history |
+| Conversations, memory, projects, artifacts, harness runs (if DB + signed in) | In-memory attachment payload `Map` |
 
-### Load & scaling characteristics (from structure)
+### Production configuration dependencies
 
-- **Stateless chat path:** Each `/api/chat` is an independent streaming proxy (`maxDuration: 60`). Horizontal scale is that of the Next.js deployment + upstream provider limits; no server-side chat queue or shared session store for messages.
-- **No rate limiting** in application code on chat, search, email, or Drive.
-- **Cloud DB:** Neon HTTP driver suits serverless; PGlite is local/dev. Schema is per-user rows with an index on `(user_id, updated_at)`; message history is one JSONB blob per conversation (simple, but updates rewrite the whole repo).
-- **Client fan-in:** Model may issue multiple `web_search` calls per turn (bounded by `stepCountIs(5)` total steps); each search does sequential source attempts (Brave → Wikipedia variants → DDG).
-- **Heavy local work:** Pyodide runs in the browser; large Drive embeds are capped to protect main-thread/UI (payload side-store), but large message histories still live in React/localStorage or JSONB.
-- **Caching:** OpenRouter model list cached 1 hour in localStorage; conversation cloud status is client-cached in `cloud-client.ts` until invalidated.
-
-### Production configuration dependencies (explicit in code/env example)
-
-For a locked-down deploy, code expects at least: real `AUTH_SECRET`; for cloud history `DATABASE_URL`; for email without `devLink` a Resend key; for OAuth/Drive the matching client ids/secrets; optionally `BRAVE_SEARCH_API_KEY` for stronger search. Chat itself still requires the **user’s** provider key in the browser.
+Real `AUTH_SECRET`; for cloud `DATABASE_URL`; Resend for email without `devLink`; OAuth/Drive client ids/secrets; optional `BRAVE_SEARCH_API_KEY`. Chat still requires the **user’s** provider key in the browser.
 
 ---
 

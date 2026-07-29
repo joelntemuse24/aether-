@@ -1,4 +1,8 @@
 import { getValidDriveAccessToken } from "@/lib/drive-session";
+import {
+  assertPublicHttpUrl,
+  fetchWithPublicRedirects,
+} from "@/lib/connectors/url-safety";
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
@@ -110,29 +114,24 @@ export async function fetchUrlText(url: string): Promise<{
   text?: string;
   url: string;
 }> {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return { ok: false, error: "Invalid URL", url };
-  }
-  if (!/^https?:$/i.test(parsed.protocol)) {
-    return { ok: false, error: "Only http(s) URLs are allowed", url };
+  const gate = await assertPublicHttpUrl(url);
+  if (!gate.ok) {
+    return { ok: false, error: gate.error, url };
   }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12_000);
   try {
-    const res = await fetch(parsed.toString(), {
+    const res = await fetchWithPublicRedirects(gate.url, {
       signal: controller.signal,
       headers: {
         "User-Agent": "AetherChat/1.0 (fetch_url tool)",
         Accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.1",
       },
-      redirect: "follow",
+      maxRedirects: 3,
     });
     if (!res.ok) {
-      return { ok: false, error: `Fetch failed (${res.status})`, url };
+      return { ok: false, error: `Fetch failed (${res.status})`, url: gate.url.toString() };
     }
     const ctype = res.headers.get("content-type") || "";
     const raw = (await res.text()).slice(0, 150_000);
@@ -148,7 +147,7 @@ export async function fetchUrlText(url: string): Promise<{
         .trim()
         .slice(0, 60_000);
     }
-    return { ok: true, url, title, text };
+    return { ok: true, url: gate.url.toString(), title, text };
   } catch (err) {
     return {
       ok: false,

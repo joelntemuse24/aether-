@@ -365,6 +365,7 @@ const Composer: FC = () => {
       depth: classification?.depth ?? "standard",
       runId,
       clarifications: opts?.clarifications,
+      planSteps: classification?.planSteps,
     });
     setLastPlanSteps(classification?.planSteps);
     setPending(null);

@@ -46,16 +46,22 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const artifact = await saveArtifact(gate.userId, {
-    id: body.id,
-    kind: body.kind || "document",
-    title: body.title.trim(),
-    language: body.language,
-    content: body.content,
-    projectId: body.projectId,
-    conversationId: body.conversationId,
-  });
-  return NextResponse.json({ artifact });
+  try {
+    const artifact = await saveArtifact(gate.userId, {
+      id: body.id,
+      kind: body.kind || "document",
+      title: body.title.trim(),
+      language: body.language,
+      content: body.content,
+      projectId: body.projectId,
+      conversationId: body.conversationId,
+    });
+    return NextResponse.json({ artifact });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Save failed";
+    const status = message.includes("another user") ? 403 : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
 }
 
 export async function DELETE(req: Request) {

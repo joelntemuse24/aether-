@@ -80,37 +80,68 @@ export async function writeMemory(
 ): Promise<MemoryDTO> {
   const db = await getDb();
   const now = new Date();
-  const id = input.id?.trim() || crypto.randomUUID();
+  const requestedId = input.id?.trim();
   const type =
     input.type && (MEMORY_TYPES as readonly string[]).includes(input.type)
       ? input.type
       : "note";
+  const title = input.title.slice(0, 200);
+  const body = input.body.slice(0, 8000);
+  const importance = input.importance || "normal";
+  const tags = (input.tags ?? []).slice(0, 12);
 
-  await db
-    .insert(memoryRecords)
-    .values({
-      id,
-      userId,
-      type,
-      title: input.title.slice(0, 200),
-      body: input.body.slice(0, 8000),
-      importance: input.importance || "normal",
-      tags: (input.tags ?? []).slice(0, 12),
-      createdAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: memoryRecords.id,
-      set: {
-        type,
-        title: input.title.slice(0, 200),
-        body: input.body.slice(0, 8000),
-        importance: input.importance || "normal",
-        tags: (input.tags ?? []).slice(0, 12),
-        updatedAt: now,
-      },
-    });
+  if (requestedId) {
+    const owned = await db
+      .select()
+      .from(memoryRecords)
+      .where(
+        and(eq(memoryRecords.id, requestedId), eq(memoryRecords.userId, userId)),
+      )
+      .limit(1);
+    if (owned[0]) {
+      await db
+        .update(memoryRecords)
+        .set({ type, title, body, importance, tags, updatedAt: now })
+        .where(
+          and(
+            eq(memoryRecords.id, requestedId),
+            eq(memoryRecords.userId, userId),
+          ),
+        );
+      const rows = await db
+        .select()
+        .from(memoryRecords)
+        .where(
+          and(
+            eq(memoryRecords.id, requestedId),
+            eq(memoryRecords.userId, userId),
+          ),
+        )
+        .limit(1);
+      return toDto(rows[0]!);
+    }
+    const taken = await db
+      .select({ id: memoryRecords.id })
+      .from(memoryRecords)
+      .where(eq(memoryRecords.id, requestedId))
+      .limit(1);
+    if (taken[0]) {
+      throw new Error("Memory id belongs to another user");
+    }
+  }
 
+  const id = requestedId || crypto.randomUUID();
+  await db.insert(memoryRecords).values({
+    id,
+    userId,
+    type,
+    title,
+    body,
+    importance,
+    tags,
+    createdAt: now,
+    updatedAt: now,
+  });
   const rows = await db
     .select()
     .from(memoryRecords)
