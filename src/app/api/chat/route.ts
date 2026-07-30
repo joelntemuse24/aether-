@@ -8,8 +8,12 @@ import {
 } from "ai";
 import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
 import { budgetForDepth, harnessSystemAddendum } from "@/lib/harness/budgets";
+import { createAgentLoopController } from "@/lib/harness/loop-efficiency";
 import { updateAgentRunStatus } from "@/lib/harness/runs-store";
-import { buildToolRegistry } from "@/lib/harness/tool-registry";
+import {
+  buildToolRegistry,
+  resolveAvailableToolNames,
+} from "@/lib/harness/tool-registry";
 import {
   HARNESS_DEPTHS,
   HARNESS_INTENTS,
@@ -224,10 +228,12 @@ export async function POST(req: Request) {
     const useClientMemory = !userId || !isCloudDbConfigured();
     const memoryForPrompt = memoryBlock || (useClientMemory ? clientMemory : "");
 
+    // Stable prefix first (tools + harness), volatile memory/project last —
+    // helps provider prompt caches across steps within a turn.
     const system = [
       toolsEnabled ? TOOLS_SYSTEM_PROMPT : null,
-      userSystem,
       harnessAddendum,
+      userSystem,
       memoryForPrompt,
       projectBlock,
     ]
@@ -303,18 +309,32 @@ export async function POST(req: Request) {
       ? !!(await getValidDriveAccessToken(userId))
       : false;
 
+    const availableToolNames = toolsEnabled
+      ? resolveAvailableToolNames({ userId, hasDrive })
+      : [];
+    const loop = toolsEnabled
+      ? createAgentLoopController({
+          depth: harnessDepth,
+          availableToolNames,
+        })
+      : null;
+
     const result = streamText({
       model,
       messages: await convertToModelMessages(enrichedMessages),
       ...(system ? { system } : {}),
-      ...(toolsEnabled
+      ...(toolsEnabled && loop
         ? {
             tools: buildToolRegistry({
               userId,
               conversationId,
               projectId: projectId ?? null,
               hasDrive,
+              loop,
             }),
+            activeTools: loop.initialActiveTools,
+            toolOrder: loop.toolOrder,
+            prepareStep: () => loop.prepareStep(),
             stopWhen: stepCountIs(budget.maxSteps),
           }
         : {}),

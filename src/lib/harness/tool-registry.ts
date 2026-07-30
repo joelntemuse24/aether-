@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { tool, type ToolSet } from "ai";
 import {
   TOOL_NAMES,
@@ -10,6 +9,7 @@ import {
   driveSearchInput,
   driveReadInput,
   fetchUrlInput,
+  toolSearchInput,
   type CreateArtifactOutput,
   type WebSearchOutput,
 } from "@/lib/tools";
@@ -22,13 +22,41 @@ import {
   driveSearchForUser,
   fetchUrlText,
 } from "@/lib/connectors/web-and-drive";
+import type { AgentLoopController } from "@/lib/harness/loop-efficiency";
 
 export type ToolRegistryContext = {
   userId?: string | null;
   conversationId?: string | null;
   projectId?: string | null;
   hasDrive?: boolean;
+  /** Optional per-turn loop controller (quotas, deferred discovery). */
+  loop?: AgentLoopController;
 };
+
+/** Capability-gated tool names for this request (before building the ToolSet). */
+export function resolveAvailableToolNames(ctx: {
+  userId?: string | null;
+  hasDrive?: boolean;
+}): string[] {
+  const names: string[] = [
+    TOOL_NAMES.executePython,
+    TOOL_NAMES.webSearch,
+    TOOL_NAMES.fetchUrl,
+    TOOL_NAMES.createArtifact,
+  ];
+  const hasMemory = !!(ctx.userId && isCloudDbConfigured());
+  const hasDrive = !!(ctx.userId && ctx.hasDrive);
+  if (hasMemory) {
+    names.push(TOOL_NAMES.memorySearch, TOOL_NAMES.memoryWrite);
+  }
+  if (hasDrive) {
+    names.push(TOOL_NAMES.driveSearch, TOOL_NAMES.driveRead);
+  }
+  if (hasMemory || hasDrive) {
+    names.push(TOOL_NAMES.toolSearch);
+  }
+  return names;
+}
 
 /** Build the tool set for this request (capabilities depend on auth/Drive/DB). */
 export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
@@ -40,10 +68,13 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     }),
     [TOOL_NAMES.webSearch]: tool({
       description:
-        "Search the web for current or factual information and return a list of result snippets.",
+        "Search the web for current or factual information and return a list of result snippets. Prefer few focused queries; near-duplicates are blocked.",
       inputSchema: webSearchInput,
-      execute: async ({ query }): Promise<WebSearchOutput> =>
-        runWebSearch(query),
+      execute: async ({ query }): Promise<WebSearchOutput> => {
+        const blocked = ctx.loop?.gateWebSearch(query);
+        if (blocked) return blocked;
+        return runWebSearch(query);
+      },
     }),
     [TOOL_NAMES.createArtifact]: tool({
       description:
@@ -84,7 +115,7 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
   if (ctx.userId && isCloudDbConfigured()) {
     tools[TOOL_NAMES.memorySearch] = tool({
       description:
-        "Search the user's curated long-term memory (preferences, people, projects, constraints). Use before assuming you know lasting facts about them.",
+        "Search the user's curated long-term memory (preferences, people, projects, constraints). Use before assuming you know lasting facts about them. Discover via tool_search first if not already unlocked.",
       inputSchema: memorySearchInput,
       execute: async ({ query }) => {
         const results = await searchMemories(ctx.userId!, query, 8);
@@ -93,7 +124,7 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     });
     tools[TOOL_NAMES.memoryWrite] = tool({
       description:
-        "Write or update a lasting memory about the user (preference, person, project, constraint, writing_voice, belief_or_practice, open_question, note). Only store durable facts they would want remembered across chats.",
+        "Write or update a lasting memory about the user (preference, person, project, constraint, writing_voice, belief_or_practice, open_question, note). Only store durable facts they would want remembered across chats. Discover via tool_search first if not already unlocked.",
       inputSchema: memoryWriteInput,
       execute: async (input) => {
         const memory = await writeMemory(ctx.userId!, input);
@@ -105,20 +136,33 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
   if (ctx.userId && ctx.hasDrive) {
     tools[TOOL_NAMES.driveSearch] = tool({
       description:
-        "Search the user's Google Drive by file name. Returns file ids for drive_read.",
+        "Search the user's Google Drive by file name. Returns file ids for drive_read. Discover via tool_search first if not already unlocked.",
       inputSchema: driveSearchInput,
       execute: async ({ query }) => driveSearchForUser(ctx.userId!, query),
     });
     tools[TOOL_NAMES.driveRead] = tool({
       description:
-        "Read a Google Drive file as text (Docs/Sheets export or text-like files). Pass a file id from drive_search.",
+        "Read a Google Drive file as text (Docs/Sheets export or text-like files). Pass a file id from drive_search. Discover via tool_search first if not already unlocked.",
       inputSchema: driveReadInput,
       execute: async ({ fileId }) => driveReadTextForUser(ctx.userId!, fileId),
     });
   }
 
+  // tool_search only when deferred tools exist for this session.
+  const hasDeferred =
+    !!tools[TOOL_NAMES.memorySearch] ||
+    !!tools[TOOL_NAMES.memoryWrite] ||
+    !!tools[TOOL_NAMES.driveSearch] ||
+    !!tools[TOOL_NAMES.driveRead];
+
+  if (hasDeferred && ctx.loop) {
+    tools[TOOL_NAMES.toolSearch] = tool({
+      description:
+        "Search for optional tools (memory, Google Drive) by keyword and unlock matching definitions for later steps. Call when you need a capability that is not in the core tool list.",
+      inputSchema: toolSearchInput,
+      execute: async ({ query }) => ctx.loop!.runToolSearch(query),
+    });
+  }
+
   return tools;
 }
-
-/** Keep zod available for future shared schemas in this module. */
-void z;

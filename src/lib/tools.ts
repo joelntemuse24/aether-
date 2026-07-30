@@ -16,6 +16,8 @@ export const TOOL_NAMES = {
   driveSearch: "drive_search",
   driveRead: "drive_read",
   fetchUrl: "fetch_url",
+  /** Deferred discovery — unlocks memory/Drive tools into later steps. */
+  toolSearch: "tool_search",
 } as const;
 
 export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -146,6 +148,15 @@ export const fetchUrlInput = z.object({
   url: z.string().url().describe("Public http(s) URL to fetch as text."),
 });
 
+export const toolSearchInput = z.object({
+  query: z
+    .string()
+    .describe(
+      "Keywords for the capability you need (e.g. 'memory preferences', 'google drive files').",
+    ),
+});
+export type ToolSearchInput = z.infer<typeof toolSearchInput>;
+
 // ─── Display metadata (client rendering) ───
 
 export type ToolDisplay = {
@@ -186,6 +197,10 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Fetch URL",
     runningLabel: "Fetching page…",
   },
+  [TOOL_NAMES.toolSearch]: {
+    label: "Tool search",
+    runningLabel: "Finding tools…",
+  },
 };
 
 export function getToolDisplay(name: string): ToolDisplay {
@@ -201,17 +216,20 @@ export function getToolDisplay(name: string): ToolDisplay {
 export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an artifact panel.
 
 Guidelines:
-- Use tools when they help answer accurately. Available tools (some require sign-in / Drive):
-  - "execute_python": run Python (in-browser Pyodide) for calculations, data work, or verifying code.
+- Core tools are always available when tools are on:
+  - "execute_python": sandboxed in-browser Python (Pyodide) for math, data, or verifying code.
   - "web_search": look up current or factual information you are unsure about.
   - "fetch_url": read a specific public page as text after you have a URL (IR pages, press releases, docs).
   - "create_artifact": substantial reusable content (code, documents, data, svg, image).
-  - "memory_search" / "memory_write": curated long-term facts about the user (preferences, people, constraints). Write only durable things.
+  - "tool_search": discover optional tools (memory, Google Drive) by keyword when you need them. Call this before assuming those tools exist.
+- Optional tools (unlocked via tool_search when the session supports them):
+  - "memory_search" / "memory_write": curated long-term facts about the user.
   - "drive_search" / "drive_read": search/read the user's Google Drive when connected.
-- Web research discipline (important):
-  - 1–2 focused web_search calls, then draft. Do not fire near-duplicate queries.
+- Web research discipline (enforced):
+  - Prefer 1–2 focused web_search calls, then draft. Near-duplicate queries are blocked.
+  - Depth budgets also cap searches (Quick 1 / Standard 2 / Deep 3). When blocked, fetch_url or answer.
   - If results include IR / press / filing URLs, use fetch_url on the best 1–2 links before writing numbers.
-  - If a search warning says results are encyclopedia-only, say what is uncertain and still deliver the brief — do not keep searching the same way.
+  - If a search warning says results are encyclopedia-only or the budget is exhausted, deliver the brief with clear uncertainty — do not keep searching the same way.
   - Always finish with a user-visible answer even when sources are thin.
 - For multi-step work, briefly narrate what you are doing before each tool call so the user can follow along.
 - For short inline snippets keep them in the chat; use "create_artifact" when content is large, iterative, or meant to be reused.
