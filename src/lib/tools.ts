@@ -77,6 +77,8 @@ export type WebSearchOutput = {
   source?: string;
   results: WebSearchResult[];
   error?: string;
+  /** Soft quality note (e.g. encyclopedia-only for a current-facts query). */
+  warning?: string;
 };
 
 export const createArtifactInput = z.object({
@@ -202,10 +204,15 @@ Guidelines:
 - Use tools when they help answer accurately. Available tools (some require sign-in / Drive):
   - "execute_python": run Python (in-browser Pyodide) for calculations, data work, or verifying code.
   - "web_search": look up current or factual information you are unsure about.
-  - "fetch_url": read a specific public page as text after you have a URL.
+  - "fetch_url": read a specific public page as text after you have a URL (IR pages, press releases, docs).
   - "create_artifact": substantial reusable content (code, documents, data, svg, image).
   - "memory_search" / "memory_write": curated long-term facts about the user (preferences, people, constraints). Write only durable things.
   - "drive_search" / "drive_read": search/read the user's Google Drive when connected.
+- Web research discipline (important):
+  - 1–2 focused web_search calls, then draft. Do not fire near-duplicate queries.
+  - If results include IR / press / filing URLs, use fetch_url on the best 1–2 links before writing numbers.
+  - If a search warning says results are encyclopedia-only, say what is uncertain and still deliver the brief — do not keep searching the same way.
+  - Always finish with a user-visible answer even when sources are thin.
 - For multi-step work, briefly narrate what you are doing before each tool call so the user can follow along.
 - For short inline snippets keep them in the chat; use "create_artifact" when content is large, iterative, or meant to be reused.
 - After a tool returns, incorporate its result into your answer rather than dumping raw output.

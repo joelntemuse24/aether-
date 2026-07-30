@@ -95,7 +95,7 @@ src/app/layout.tsx
 | Resend | Optional magic-link email |
 | Google OAuth + Drive API | Sign-in + readonly browse/download + Drive tools |
 | GitHub / Apple OAuth | Sign-in only (when env set) |
-| Wikipedia / DuckDuckGo Instant Answer / optional Brave | `web_search` |
+| Wikipedia / DuckDuckGo HTML / Instant Answer / optional Brave (+ IR enrichment) | `web_search` |
 | Neon Postgres or local PGlite | Optional cloud store |
 
 ### App routes (as implemented)
@@ -152,7 +152,7 @@ Configured via `DATABASE_URL` or `AETHER_PGLITE=1` (dir `./.data/aether-pglite`)
 - **Headers:** `x-api-key` (required), `x-provider`, `x-base-url`, `x-model`, `x-tools`.
 - **Body:** `messages`, `model?`, `system?`, `attachments?`, `textPrefix?`, `harness?`, `memoryContext?`, `projectId?`, `conversationId?`.
 - **Tools (when tools on):** see tool registry; `fetch_url` rejects private/link-local/metadata hosts and validates DNS + redirects (`url-safety.ts`).
-- **Search order:** Brave if `BRAVE_SEARCH_API_KEY` → Wikipedia → DuckDuckGo Instant Answer.
+- **Search order:** Brave if `BRAVE_SEARCH_API_KEY` → DuckDuckGo HTML → Wikipedia (with IR/primary-source enrichment for current-facts queries) → DuckDuckGo Instant Answer.
 
 ### Behavior matrix (summary)
 
@@ -185,7 +185,7 @@ Configured via `DATABASE_URL` or `AETHER_PGLITE=1` (dir `./.data/aether-pglite`)
 7. **Prompt injection via memory / project instructions** — user/model text enters the system prompt by design; framing only.
 8. **`fetch_url` DNS TOCTOU / rebinding** — hostname resolved then fetched by name (no IP pinning).
 9. **Shallow classify skip** creates a client `runId` without an `agent_runs` row.
-10. **Keyless `web_search` quality ceiling** without Brave.
+10. **Keyless `web_search` quality** — DDG HTML is often captcha’d from cloud IPs; Wikipedia+IR enrichment covers many company FY queries but is not a general web index. Brave remains the upgrade path.
 11. **No Next.js middleware** — per-handler auth.
 12. **Pre-existing lint** — `react-hooks/exhaustive-deps` in `model-picker.tsx`.
 13. **Example-only env vars** in `.env.example` for provider keys — not read by `src/` for chat.

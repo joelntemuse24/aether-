@@ -191,18 +191,31 @@ const WebSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const input = part.args as { query?: string } | undefined;
   const output = part.result as WebSearchOutput | undefined;
   const error = output ? !output.ok : part.isError;
+  const resultCount = output?.results?.length ?? 0;
 
   return (
     <ToolShell
       name={TOOL_NAMES.webSearch}
       running={running}
       error={error}
-      subtitle={input?.query}
-      defaultOpen={!running}
+      subtitle={
+        input?.query
+          ? resultCount > 0
+            ? `${input.query} · ${resultCount} hit${resultCount === 1 ? "" : "s"}`
+            : input.query
+          : undefined
+      }
+      // Keep collapsed by default — research turns often fire several searches.
+      defaultOpen={!!error || !!output?.warning}
     >
       {output?.error && (
         <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
           {output.error}
+        </div>
+      )}
+      {output?.warning && (
+        <div className="mb-2 rounded-lg border border-[var(--border)] bg-[var(--elevated)] p-2.5 text-[12px] text-[var(--muted)]">
+          {output.warning}
         </div>
       )}
       {output?.results && output.results.length > 0 && (
@@ -226,6 +239,9 @@ const WebSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
             </li>
           ))}
         </ul>
+      )}
+      {!running && output?.ok && resultCount === 0 && !output.error && (
+        <p className="text-[12px] text-[var(--muted)]">No results returned.</p>
       )}
       {output?.source && (
         <div className="mt-2 text-[11px] text-[var(--muted-soft)]">
