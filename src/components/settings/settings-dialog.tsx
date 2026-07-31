@@ -379,8 +379,8 @@ export function SettingsDialog() {
                     ) : null}
                   </div>
                   <p className="text-xs leading-relaxed text-[var(--muted-soft)]">
-                    Connect GitHub in one click to let Aether work with your
-                    repositories.
+                    Connect GitHub so Aether can look up repos, list files, and
+                    read source when you paste a link or ask about a codebase.
                   </p>
                   {!githubConfigured && !githubConnected ? (
                     <p className="text-xs text-[var(--error-text)]">
