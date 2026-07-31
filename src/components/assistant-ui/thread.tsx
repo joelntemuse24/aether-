@@ -86,38 +86,40 @@ export const Thread: FC = () => {
         turnAnchor="top"
         className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth"
       >
-        <ThreadHeader />
+        {!isEmpty && <ThreadHeader />}
         <div
           className={cn(
-            "mx-auto flex w-full max-w-[var(--thread-max-width)] flex-1 flex-col px-4 pt-2 sm:px-6 sm:pt-4",
-            isEmpty && "justify-center pt-6",
+            "mx-auto flex w-full max-w-[var(--thread-max-width)] flex-1 flex-col px-4 sm:px-6",
+            isEmpty
+              ? "items-center justify-center px-4 pb-10 pt-6"
+              : "pt-2 sm:pt-4",
           )}
         >
-          <AuiIf condition={isNewChatView}>
-            <ThreadWelcome />
-          </AuiIf>
+          {isEmpty ? (
+            <>
+              <ThreadWelcome />
+              <div className="mt-8 w-full max-w-[var(--thread-max-width)]">
+                <Composer />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mb-16 flex flex-col gap-y-8 empty:hidden">
+                <ThreadPrimitive.Messages>
+                  {() => <ThreadMessage />}
+                </ThreadPrimitive.Messages>
+              </div>
 
-          <div className="mb-16 flex flex-col gap-y-8 empty:hidden">
-            <ThreadPrimitive.Messages>
-              {() => <ThreadMessage />}
-            </ThreadPrimitive.Messages>
-          </div>
-
-          <ThreadPrimitive.ViewportFooter
-            className={cn(
-              "flex flex-col gap-3 overflow-visible pb-4 md:pb-6",
-              !isEmpty && "sticky bottom-0 mt-auto",
-            )}
-          >
-            {!isEmpty && (
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-x-0 -top-12 h-12 bg-gradient-to-b from-transparent to-[var(--canvas)]"
-              />
-            )}
-            <ThreadScrollToBottom />
-            <Composer />
-          </ThreadPrimitive.ViewportFooter>
+              <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto flex flex-col gap-3 overflow-visible pb-4 md:pb-6">
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 -top-12 h-12 bg-gradient-to-b from-transparent to-[var(--canvas)]"
+                />
+                <ThreadScrollToBottom />
+                <Composer />
+              </ThreadPrimitive.ViewportFooter>
+            </>
+          )}
         </div>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
@@ -157,30 +159,30 @@ function getWelcomePhrase() {
 const ThreadWelcome: FC = () => {
   const phrase = getWelcomePhrase();
 
+  // Figma empty state: italic greeting with the mark floating to its right,
+  // sitting a short gap above the composer (not a stacked logo-above-title block).
   return (
-    <div className="mb-6 flex w-full flex-col items-center px-2 text-center">
-      <div className="mb-4 flex size-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--elevated)]">
-        <Image
-          src="/logo.jpg"
-          alt="Aether"
-          width={36}
-          height={36}
-          className="rounded-full object-cover"
-        />
-      </div>
+    <div className="flex items-center justify-center gap-3 px-2">
       <h1
         className="font-[family-name:var(--font-serif)] text-[var(--text)]"
         style={{
-          fontSize: "clamp(0.95rem, 2.25vw, 1.2rem)",
+          fontSize: "clamp(1.35rem, 3.2vw, 1.85rem)",
           fontWeight: 400,
           fontStyle: "italic",
-          letterSpacing: "-0.015em",
-          lineHeight: 1.18,
-          maxWidth: "28rem",
+          letterSpacing: "-0.02em",
+          lineHeight: 1.15,
         }}
       >
         {phrase}
       </h1>
+      <Image
+        src="/logo.jpg"
+        alt=""
+        width={36}
+        height={36}
+        className="size-9 shrink-0 rounded-full object-cover shadow-[0_0_0_1px_var(--border)]"
+        aria-hidden
+      />
     </div>
   );
 };
