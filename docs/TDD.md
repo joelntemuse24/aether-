@@ -152,6 +152,11 @@ Configured via `DATABASE_URL` or `AETHER_PGLITE=1` (dir `./.data/aether-pglite`)
 - **Headers:** `x-api-key` (required), `x-provider`, `x-base-url`, `x-model`, `x-tools`.
 - **Body:** `messages`, `model?`, `system?`, `attachments?`, `textPrefix?`, `harness?`, `memoryContext?`, `projectId?`, `conversationId?`.
 - **Tools (when tools on):** see tool registry; `fetch_url` rejects private/link-local/metadata hosts and validates DNS + redirects (`url-safety.ts`).
+- **Agent-loop efficiency** (`src/lib/harness/loop-efficiency.ts`, inspired by [ChatGPT harness practice](https://blog.bytebytego.com/p/how-chatgpt-optimizes-its-agent-loop)):
+  - **Stable prefixes:** system prompt order is tools contract → harness → voice → memory/project; tools sent with a fixed `toolOrder`.
+  - **Deferred discovery:** core tools (`execute_python`, `web_search`, `fetch_url`, `create_artifact`) are always active; memory/Drive stay out of the prompt until `tool_search` unlocks them via `prepareStep` / `activeTools`.
+  - **Search quotas:** hard per-turn `web_search` caps by depth (Quick 1 / Standard 2 / Deep 3) plus near-duplicate query rejection.
+  - **Not in Aether (provider/infra):** persistent WebSockets + `previous_response_id`, delta-only tokenization, speculative decoding, prefill/decode split. **Deferred product work:** Code Mode (scripted multi-tool fan-out in a sandbox).
 - **Search order:** Brave if `BRAVE_SEARCH_API_KEY` → DuckDuckGo HTML → Wikipedia (with IR/primary-source enrichment for current-facts queries) → DuckDuckGo Instant Answer.
 
 ### Behavior matrix (summary)
@@ -189,6 +194,8 @@ Configured via `DATABASE_URL` or `AETHER_PGLITE=1` (dir `./.data/aether-pglite`)
 11. **No Next.js middleware** — per-handler auth.
 12. **Pre-existing lint** — `react-hooks/exhaustive-deps` in `model-picker.tsx`.
 13. **Example-only env vars** in `.env.example` for provider keys — not read by `src/` for chat.
+14. **No Code Mode yet** — multi-tool fan-out still costs one model round-trip per step; scripted tool programs would shrink context and latency for gather-heavy turns.
+15. **Stateless BYOK HTTP** — each provider call resends full history; no harness WebSocket / incremental `previous_response_id` (provider-dependent).
 
 ---
 

@@ -56,6 +56,7 @@ const ICONS: Record<string, FC<{ className?: string }>> = {
   [TOOL_NAMES.driveSearch]: HardDriveIcon,
   [TOOL_NAMES.driveRead]: HardDriveIcon,
   [TOOL_NAMES.fetchUrl]: GlobeIcon,
+  [TOOL_NAMES.toolSearch]: WrenchIcon,
 };
 
 const ToolShell: FC<{
@@ -587,6 +588,53 @@ const FetchUrlToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   );
 };
 
+/* ─── Tool search (deferred discovery) ─── */
+
+const ToolSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = partIsRunning(part);
+  const input = part.args as { query?: string } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    query?: string;
+    unlocked?: Array<{ name: string; description: string }>;
+    note?: string;
+  } | undefined;
+  const unlocked = output?.unlocked ?? [];
+  const error = part.isError || (output ? output.ok === false : false);
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.toolSearch}
+      running={running}
+      error={error}
+      subtitle={
+        input?.query
+          ? unlocked.length > 0
+            ? `${input.query} · ${unlocked.length} unlocked`
+            : input.query
+          : undefined
+      }
+      defaultOpen={!running && unlocked.length > 0}
+    >
+      {output?.note && (
+        <p className="mb-2 text-[12px] text-[var(--muted)]">{output.note}</p>
+      )}
+      {unlocked.length > 0 && (
+        <ul className="space-y-1.5">
+          {unlocked.map((t) => (
+            <li key={t.name} className="text-[12px]">
+              <span className="font-medium text-[var(--foreground)]">
+                {t.name}
+              </span>
+              <span className="text-[var(--muted)]"> — {t.description}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </ToolShell>
+  );
+};
+
 /* ─── Generic fallback ─── */
 
 const GenericToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
@@ -627,6 +675,8 @@ export const ToolCallPart: FC<{ part: ToolPartLike }> = ({ part }) => {
       return <DriveReadToolCall part={part} />;
     case TOOL_NAMES.fetchUrl:
       return <FetchUrlToolCall part={part} />;
+    case TOOL_NAMES.toolSearch:
+      return <ToolSearchToolCall part={part} />;
     default:
       return <GenericToolCall part={part} />;
   }
