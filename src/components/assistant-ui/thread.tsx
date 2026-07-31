@@ -17,7 +17,6 @@ import { AgentStatusStrip } from "@/components/assistant-ui/agent-status-strip";
 import { ModelPicker } from "@/components/model-picker";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { STARTER_PROMPTS } from "@/lib/voice";
 import { useSettings } from "@/providers/settings-provider";
 import { useAttachments } from "@/providers/attachments-provider";
 import { useDrive } from "@/providers/drive-provider";
@@ -157,17 +156,18 @@ function getWelcomePhrase() {
 
 const ThreadWelcome: FC = () => {
   const phrase = getWelcomePhrase();
-  const starters = STARTER_PROMPTS.slice(0, 4);
 
   return (
-    <div className="mb-8 flex flex-col items-center px-2 text-center sm:mb-10">
-      <Image
-        src="/logo.jpg"
-        alt="Aether"
-        width={40}
-        height={40}
-        className="mb-4 rounded-full object-cover"
-      />
+    <div className="mb-6 flex w-full flex-col items-center px-2 text-center">
+      <div className="mb-4 flex size-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--elevated)]">
+        <Image
+          src="/logo.jpg"
+          alt="Aether"
+          width={36}
+          height={36}
+          className="rounded-full object-cover"
+        />
+      </div>
       <h1
         className="font-[family-name:var(--font-serif)] text-[var(--text)]"
         style={{
@@ -181,24 +181,6 @@ const ThreadWelcome: FC = () => {
       >
         {phrase}
       </h1>
-
-      <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-1 sm:grid-cols-2">
-        {starters.map((starter) => (
-          <ThreadPrimitive.Suggestion
-            key={starter.id}
-            prompt={starter.prompt}
-            send
-            className="group flex flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-[var(--hover-overlay)]"
-          >
-            <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--muted-soft)]">
-              {starter.category}
-            </span>
-            <span className="text-[13px] leading-snug text-[var(--text-secondary)] group-hover:text-[var(--text)]">
-              {starter.label}
-            </span>
-          </ThreadPrimitive.Suggestion>
-        ))}
-      </div>
     </div>
   );
 };
