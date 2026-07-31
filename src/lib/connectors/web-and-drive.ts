@@ -135,38 +135,70 @@ export async function fetchUrlText(url: string): Promise<{
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12_000);
+  const timer = setTimeout(() => controller.abort(), 20_000);
   try {
     const res = await fetchWithPublicRedirects(gate.url, {
       signal: controller.signal,
       headers: {
-        "User-Agent": "AetherChat/1.0 (fetch_url tool)",
+        "User-Agent":
+          "Mozilla/5.0 (compatible; AetherChat/1.0; +https://github.com/joelntemuse24/aether-)",
         Accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.1",
       },
-      maxRedirects: 3,
+      maxRedirects: 5,
     });
     if (!res.ok) {
-      return { ok: false, error: `Fetch failed (${res.status})`, url: gate.url.toString() };
+      return {
+        ok: false,
+        error: `Fetch failed (${res.status})`,
+        url: gate.url.toString(),
+      };
     }
     const ctype = res.headers.get("content-type") || "";
-    const raw = (await res.text()).slice(0, 150_000);
+    const raw = (await res.text()).slice(0, 200_000);
     let text = raw;
     let title: string | undefined;
-    if (ctype.includes("html")) {
+    if (ctype.includes("html") || /<html[\s>]/i.test(raw.slice(0, 500))) {
       title = raw.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim();
+      title = title
+        ?.replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&#39;/g, "'")
+        .replace(/&quot;/g, '"');
       text = raw
         .replace(/<script[\s\S]*?<\/script>/gi, " ")
         .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+        .replace(/<!--[\s\S]*?-->/g, " ")
+        .replace(/<(nav|footer|header|aside)[\s\S]*?<\/\1>/gi, " ")
         .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/gi, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
         .replace(/\s+/g, " ")
         .trim()
-        .slice(0, 60_000);
+        .slice(0, 80_000);
+    }
+    if (!text) {
+      return {
+        ok: false,
+        error: "Page returned no readable text.",
+        url: gate.url.toString(),
+        title,
+      };
     }
     return { ok: true, url: gate.url.toString(), title, text };
   } catch (err) {
+    const message =
+      err instanceof Error && err.name === "AbortError"
+        ? "Fetch timed out after 20s."
+        : err instanceof Error
+          ? err.message
+          : "Fetch failed";
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Fetch failed",
+      error: message,
       url,
     };
   } finally {

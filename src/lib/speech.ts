@@ -46,8 +46,11 @@ export type SpeechSession = {
 };
 
 /**
- * Start listening. Calls `onPartial` with interim/final text, `onFinal` when
- * recognition ends with a transcript, and `onError` on permission/device errors.
+ * Start listening until the user stops the session.
+ *
+ * Chrome/Edge end recognition after short silence even with continuous=true;
+ * we restart automatically until `stop()` is called so the mic does not
+ * “time out” after a few seconds.
  */
 export function startSpeechSession(opts: {
   onPartial: (text: string) => void;
@@ -62,7 +65,7 @@ export function startSpeechSession(opts: {
   }
 
   const recognition = new Ctor();
-  recognition.continuous = false;
+  recognition.continuous = true;
   recognition.interimResults = true;
   recognition.lang =
     typeof navigator !== "undefined" && navigator.language
@@ -71,40 +74,63 @@ export function startSpeechSession(opts: {
 
   let finalText = "";
   let stopped = false;
+  let ending = false;
+
+  const emitPartial = (interim: string) => {
+    opts.onPartial((finalText + (interim ? ` ${interim}` : "")).trim());
+  };
 
   recognition.onresult = (event) => {
     let interim = "";
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const result = event.results[i];
-      const piece = result[0]?.transcript ?? "";
-      if (result.isFinal) finalText += piece;
-      else interim += piece;
+      const piece = (result[0]?.transcript ?? "").trim();
+      if (!piece) continue;
+      if (result.isFinal) {
+        finalText = finalText ? `${finalText} ${piece}` : piece;
+      } else {
+        interim += (interim ? " " : "") + piece;
+      }
     }
-    opts.onPartial((finalText + interim).trim());
+    emitPartial(interim);
   };
 
   recognition.onerror = (event) => {
     const code = event.error ?? "unknown";
+    // Silence / abort: let onend restart (or finish if user stopped).
     if (code === "aborted" || code === "no-speech") {
-      opts.onEnd();
       return;
     }
+    stopped = true;
     if (code === "not-allowed" || code === "service-not-allowed") {
       opts.onError("Microphone access was blocked. Check your browser permissions.");
+    } else if (code === "audio-capture") {
+      opts.onError("No microphone found.");
+    } else if (code === "network") {
+      opts.onError("Speech service unavailable — check your network and try again.");
     } else {
       opts.onError("Couldn’t hear that — try again.");
     }
-    opts.onEnd();
   };
 
   recognition.onend = () => {
-    if (stopped) {
+    if (stopped || ending) {
+      const text = finalText.trim();
+      if (text) opts.onFinal(text);
+      ending = true;
       opts.onEnd();
       return;
     }
-    const text = finalText.trim();
-    if (text) opts.onFinal(text);
-    opts.onEnd();
+    // Browser ended the session early (common after ~silence). Keep listening.
+    try {
+      recognition.start();
+    } catch {
+      // Already started or permanently ended.
+      const text = finalText.trim();
+      if (text) opts.onFinal(text);
+      ending = true;
+      opts.onEnd();
+    }
   };
 
   try {
@@ -117,6 +143,7 @@ export function startSpeechSession(opts: {
 
   return {
     stop: () => {
+      if (stopped) return;
       stopped = true;
       try {
         recognition.stop();
@@ -126,6 +153,10 @@ export function startSpeechSession(opts: {
         } catch {
           /* already stopped */
         }
+        const text = finalText.trim();
+        if (text) opts.onFinal(text);
+        ending = true;
+        opts.onEnd();
       }
     },
   };

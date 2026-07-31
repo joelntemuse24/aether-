@@ -434,17 +434,10 @@ const Composer: FC = () => {
     return () => document.removeEventListener("mousedown", close);
   }, [attachOpen]);
 
-  const appendTranscript = (text: string) => {
-    const current = composerRuntime.getState().text ?? "";
-    const next = current ? `${current.trimEnd()} ${text}` : text;
-    composerRuntime.setText(next);
-  };
-
   const handleMic = () => {
     if (micState !== "idle") {
+      // stop() finalizes transcript via onFinal/onEnd — don't clear state here.
       speechRef.current?.stop();
-      speechRef.current = null;
-      setMicState("idle");
       return;
     }
     if (!speechRecognitionSupported()) {
@@ -455,14 +448,25 @@ const Composer: FC = () => {
       );
       return;
     }
+    // Freeze composer prefix so live partials replace cleanly while listening.
+    const prefix = (composerRuntime.getState().text ?? "").trimEnd();
+    const applyLive = (spoken: string) => {
+      const next = prefix
+        ? spoken
+          ? `${prefix} ${spoken}`
+          : prefix
+        : spoken;
+      composerRuntime.setText(next);
+    };
+
     setMicState("listening");
     const session = startSpeechSession({
-      onPartial: () => {
-        /* interim stays in mic placeholder via micState */
+      onPartial: (text) => {
+        applyLive(text);
       },
       onFinal: (text) => {
         setMicState("transcribing");
-        appendTranscript(text);
+        applyLive(text);
         window.setTimeout(() => setMicState("idle"), 200);
       },
       onError: (message) => {
@@ -473,7 +477,7 @@ const Composer: FC = () => {
       },
       onEnd: () => {
         speechRef.current = null;
-        setMicState((s) => (s === "listening" ? "idle" : s));
+        setMicState((s) => (s === "listening" || s === "transcribing" ? "idle" : s));
       },
     });
     speechRef.current = session;
