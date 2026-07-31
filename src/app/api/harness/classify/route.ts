@@ -5,7 +5,7 @@ import { createAgentRun } from "@/lib/harness/runs-store";
 import type { HarnessClassification } from "@/lib/harness/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 type ProviderId = "openrouter" | "openai" | "anthropic" | "custom";
 
