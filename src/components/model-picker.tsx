@@ -1,14 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckIcon, ChevronDownIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-react";
 import {
   fetchOpenRouterModels,
   getCachedModels,
   setCachedModels,
   type ModelOption,
 } from "@/lib/models";
-import { rankModelsForPicker } from "@/lib/hosted/rank-models";
+import {
+  featuredModelsForPicker,
+  filterModelsByQuery,
+  rankModelsForPicker,
+} from "@/lib/hosted/rank-models";
 import { useSettings } from "@/providers/settings-provider";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -21,6 +25,8 @@ const SECTION_LABELS: Record<string, string> = {
   other: "More",
 };
 
+const SEARCH_RESULT_LIMIT = 40;
+
 export function ModelPicker({ className }: { className?: string }) {
   const {
     settings,
@@ -32,11 +38,13 @@ export function ModelPicker({ className }: { className?: string }) {
   } = useSettings();
   const hosted = settings.accessMode === "hosted";
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(!hosted && !getCachedModels());
   const [models, setModels] = useState<PickerModel[]>(
     () => (hosted ? [] : getCachedModels() ?? []),
   );
   const rootRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const didAutoSelect = useRef(false);
 
   useEffect(() => {
@@ -80,7 +88,6 @@ export function ModelPicker({ className }: { className?: string }) {
     fetchOpenRouterModels()
       .then((live) => {
         if (cancelled) return;
-        // Same capability ranking as Aether Cloud for BYOK OpenRouter picks
         const ranked = rankModelsForPicker(
           live.map((m) => ({
             id: m.id,
@@ -117,7 +124,11 @@ export function ModelPicker({ className }: { className?: string }) {
   }, [hosted, hostedStatus, hostedLoading]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setQuery("");
+      return;
+    }
+    const t = window.setTimeout(() => searchRef.current?.focus(), 0);
     const onPointer = (e: MouseEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -127,23 +138,48 @@ export function ModelPicker({ className }: { className?: string }) {
     document.addEventListener("mousedown", onPointer);
     document.addEventListener("keydown", onKey);
     return () => {
+      window.clearTimeout(t);
       document.removeEventListener("mousedown", onPointer);
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
 
+  const searching = query.trim().length > 0;
+
+  const visibleModels = useMemo(() => {
+    if (searching) {
+      return filterModelsByQuery(models, query).slice(0, SEARCH_RESULT_LIMIT);
+    }
+    const featured = featuredModelsForPicker(models);
+    // Keep the active model visible even if it isn't on the shortlist
+    if (
+      activeModel &&
+      !settings.useCustomModel &&
+      !featured.some((m) => m.id === activeModel)
+    ) {
+      const current = models.find((m) => m.id === activeModel);
+      if (current) return [current, ...featured];
+    }
+    return featured.length > 0 ? featured : models.slice(0, 12);
+  }, [models, query, searching, activeModel, settings.useCustomModel]);
+
   const sections = useMemo(() => {
     const order = ["chatgpt", "claude", "other"] as const;
     const grouped = new Map<string, PickerModel[]>();
-    for (const m of models) {
+    for (const m of visibleModels) {
       const key = m.family || "other";
       const list = grouped.get(key) ?? [];
       list.push(m);
       grouped.set(key, list);
     }
-    // If models lack family (legacy cache), show flat "Models"
     if (![...grouped.keys()].some((k) => k in SECTION_LABELS)) {
-      return [{ key: "all", label: hosted ? "Aether Cloud" : "Models", models }];
+      return [
+        {
+          key: "all",
+          label: searching ? "Results" : "Models",
+          models: visibleModels,
+        },
+      ];
     }
     return order
       .filter((key) => (grouped.get(key)?.length ?? 0) > 0)
@@ -152,7 +188,12 @@ export function ModelPicker({ className }: { className?: string }) {
         label: SECTION_LABELS[key],
         models: grouped.get(key) ?? [],
       }));
-  }, [models, hosted]);
+  }, [visibleModels, searching]);
+
+  const selectModel = (id: string) => {
+    updateSettings({ model: id, useCustomModel: false });
+    setOpen(false);
+  };
 
   return (
     <div ref={rootRef} className={cn("relative", className)}>
@@ -174,70 +215,93 @@ export function ModelPicker({ className }: { className?: string }) {
 
       {open && (
         <div
-          role="listbox"
-          className="absolute bottom-full left-0 z-50 mb-2 max-h-80 w-72 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--elevated-deep)] py-1"
+          className="absolute bottom-full left-0 z-50 mb-2 flex w-72 flex-col overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--elevated-deep)]"
         >
-          {loading ? (
-            <div className="px-3 py-3 text-center">
-              <Label>Loading models…</Label>
+          <div className="border-b border-[var(--border)] px-2 py-2">
+            <div className="flex items-center gap-2 rounded-md bg-[var(--surface)] px-2 py-1.5">
+              <SearchIcon className="size-3.5 shrink-0 text-[var(--muted-soft)]" />
+              <input
+                ref={searchRef}
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search models…"
+                className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)]"
+                aria-label="Search models"
+              />
             </div>
-          ) : models.length === 0 ? (
-            <div className="px-3 py-3 text-center">
-              <Label>
-                {hosted ? "Cloud models unavailable" : "No models loaded"}
-              </Label>
-            </div>
-          ) : (
-            <>
-              {sections.map((section) => (
-                <div key={section.key}>
-                  <div className="px-3 pb-1 pt-2">
-                    <Label>{section.label}</Label>
+          </div>
+
+          <div role="listbox" className="max-h-72 overflow-y-auto py-1">
+            {loading ? (
+              <div className="px-3 py-3 text-center">
+                <Label>Loading models…</Label>
+              </div>
+            ) : models.length === 0 ? (
+              <div className="px-3 py-3 text-center">
+                <Label>
+                  {hosted ? "Cloud models unavailable" : "No models loaded"}
+                </Label>
+              </div>
+            ) : visibleModels.length === 0 ? (
+              <div className="px-3 py-3 text-center">
+                <Label>No matches</Label>
+              </div>
+            ) : (
+              <>
+                {!searching && (
+                  <div className="px-3 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--muted-soft)]">
+                    Featured
                   </div>
-                  {section.models.map((model) => {
-                    const selected =
-                      activeModel === model.id && !settings.useCustomModel;
-                    return (
-                      <button
-                        key={model.id}
-                        type="button"
-                        role="option"
-                        aria-selected={selected}
-                        onClick={() => {
-                          updateSettings({
-                            model: model.id,
-                            useCustomModel: false,
-                          });
-                          setOpen(false);
-                        }}
-                        className={cn(
-                          "flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--hover-overlay)]",
-                          selected && "bg-[var(--accent-muted)]",
-                        )}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[13px] text-[var(--text)]">
-                            {model.label}
-                          </div>
-                          {model.description && (
-                            <Label>{model.description}</Label>
+                )}
+                {sections.map((section) => (
+                  <div key={section.key}>
+                    <div className="px-3 pb-0.5 pt-1.5">
+                      <Label>{section.label}</Label>
+                    </div>
+                    {section.models.map((model) => {
+                      const selected =
+                        activeModel === model.id && !settings.useCustomModel;
+                      return (
+                        <button
+                          key={model.id}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          onClick={() => selectModel(model.id)}
+                          className={cn(
+                            "flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-[var(--hover-overlay)]",
+                            selected && "bg-[var(--accent-muted)]",
                           )}
-                        </div>
-                        {selected && (
-                          <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-[var(--accent)]" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-              {!hosted && settings.useCustomModel && settings.customModel && (
-                <div className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--muted)]">
-                  Custom: {settings.customModel}
-                </div>
-              )}
-            </>
-          )}
+                        >
+                          <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--text)]">
+                            {model.label}
+                          </span>
+                          {selected && (
+                            <CheckIcon className="size-3.5 shrink-0 text-[var(--accent)]" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+                {searching &&
+                  filterModelsByQuery(models, query).length >
+                    SEARCH_RESULT_LIMIT && (
+                    <div className="px-3 py-2 text-[11px] text-[var(--muted-soft)]">
+                      Showing top {SEARCH_RESULT_LIMIT} matches — refine search
+                    </div>
+                  )}
+                {!hosted &&
+                  settings.useCustomModel &&
+                  settings.customModel && (
+                    <div className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--muted)]">
+                      Custom: {settings.customModel}
+                    </div>
+                  )}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
