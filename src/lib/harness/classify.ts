@@ -1,6 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
-import { generateObject } from "ai";
+import { generateObject, type LanguageModel } from "ai";
+import { createHostedLanguageModel } from "@/lib/hosted/client";
 import { heuristicClassify } from "./heuristic";
 import {
   classificationSchema,
@@ -15,13 +16,13 @@ function resolveModel(provider: ProviderId, model: string): string {
   return model;
 }
 
-function buildModel(input: {
+function buildByokModel(input: {
   provider: ProviderId;
   apiKey: string;
   baseURL?: string;
   modelId: string;
   origin?: string | null;
-}) {
+}): LanguageModel {
   const modelId = resolveModel(input.provider, input.modelId);
   if (input.provider === "anthropic") {
     return createAnthropic({ apiKey: input.apiKey })(modelId);
@@ -61,6 +62,7 @@ Be conservative with needsClarify — prefer acting when reasonable.`;
  */
 export async function classifyMessage(input: {
   message: string;
+  accessMode?: "hosted" | "byok";
   apiKey: string;
   provider: ProviderId;
   baseURL?: string;
@@ -72,18 +74,24 @@ export async function classifyMessage(input: {
     return heuristicClassify("");
   }
 
-  if (!input.apiKey || !input.modelId) {
+  const hosted = input.accessMode === "hosted";
+  if (!input.modelId || (!hosted && !input.apiKey)) {
     return heuristicClassify(trimmed);
   }
 
   try {
-    const model = buildModel({
-      provider: input.provider,
-      apiKey: input.apiKey,
-      baseURL: input.baseURL,
-      modelId: input.modelId,
-      origin: input.origin,
-    });
+    const model = hosted
+      ? createHostedLanguageModel(input.modelId, input.origin)
+      : buildByokModel({
+          provider: input.provider,
+          apiKey: input.apiKey,
+          baseURL: input.baseURL,
+          modelId: input.modelId,
+          origin: input.origin,
+        });
+    if (!model) {
+      return heuristicClassify(trimmed);
+    }
 
     const { object } = await generateObject({
       model,

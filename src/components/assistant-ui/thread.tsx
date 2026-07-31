@@ -431,7 +431,7 @@ const Composer: FC = () => {
           onClick={() => setOpenSettings(true)}
           className="mb-2 rounded-xl border border-[var(--border)] bg-[var(--elevated)] px-3 py-2 text-left text-xs text-[var(--muted)] hover:bg-[var(--elevated-deep)]"
         >
-          Add an API key in Settings to start chatting →
+          Open Settings to enable Aether Cloud or add your own API key →
         </button>
       )}
 

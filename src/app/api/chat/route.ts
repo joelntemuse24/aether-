@@ -4,6 +4,7 @@ import {
   convertToModelMessages,
   stepCountIs,
   streamText,
+  type LanguageModel,
   type UIMessage,
 } from "ai";
 import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
@@ -29,6 +30,8 @@ import {
 } from "@/lib/projects/store";
 import { getValidDriveAccessToken } from "@/lib/drive-session";
 import { isCloudDbConfigured } from "@/lib/db";
+import { listHostedCandidates } from "@/lib/hosted/client";
+import { isHostedConfigured } from "@/lib/hosted/config";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -126,14 +129,56 @@ function lastUserText(messages: UIMessage[]): string {
   return "";
 }
 
+function buildByokModel(input: {
+  provider: ProviderId;
+  apiKey: string;
+  baseURL: string;
+  modelId: string;
+  origin?: string | null;
+}): LanguageModel {
+  if (input.provider === "anthropic") {
+    return createAnthropic({ apiKey: input.apiKey })(input.modelId);
+  }
+  const openai = createOpenAI({
+    apiKey: input.apiKey,
+    baseURL:
+      input.baseURL ||
+      (input.provider === "openrouter"
+        ? "https://openrouter.ai/api/v1"
+        : input.provider === "openai"
+          ? "https://api.openai.com/v1"
+          : input.baseURL),
+    headers:
+      input.provider === "openrouter"
+        ? {
+            "HTTP-Referer": input.origin ?? "http://localhost:3000",
+            "X-Title": "Aether",
+          }
+        : undefined,
+  });
+  return openai.chat(input.modelId);
+}
+
 export async function POST(req: Request) {
   try {
+    const accessMode = getHeader(req, "x-access-mode") || "byok";
     const apiKey = getHeader(req, "x-api-key");
     const provider = (getHeader(req, "x-provider") || "openrouter") as ProviderId;
     const baseURL = getHeader(req, "x-base-url");
     const headerModel = getHeader(req, "x-model");
+    const hosted = accessMode === "hosted";
 
-    if (!apiKey) {
+    if (hosted) {
+      if (!isHostedConfigured()) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "Aether Cloud is not configured on this server. Switch to Bring your own key in Settings, or ask the operator to set OPENROUTER_API_KEY.",
+          }),
+          { status: 503, headers: { "Content-Type": "application/json" } },
+        );
+      }
+    } else if (!apiKey) {
       return new Response(
         JSON.stringify({
           error:
@@ -239,10 +284,8 @@ export async function POST(req: Request) {
     ]
       .filter(Boolean)
       .join("\n\n");
-    const modelId = resolveModel(
-      provider,
-      (typeof body.model === "string" && body.model) || headerModel,
-    );
+    const requestedModel =
+      (typeof body.model === "string" && body.model) || headerModel;
 
     const attachments = Array.isArray(body.attachments)
       ? (body.attachments as IncomingAttachment[])
@@ -250,37 +293,40 @@ export async function POST(req: Request) {
     const textPrefix =
       typeof body.textPrefix === "string" ? body.textPrefix : undefined;
 
-    if (!modelId) {
+    if (!requestedModel) {
       return new Response(
         JSON.stringify({ error: "No model selected. Pick a model from the dropdown." }),
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
 
-    let model;
-    if (provider === "anthropic") {
-      const anthropic = createAnthropic({ apiKey });
-      model = anthropic(modelId);
+    let model: LanguageModel;
+    if (hosted) {
+      const candidates = listHostedCandidates(
+        requestedModel,
+        req.headers.get("origin"),
+      );
+      if (candidates.length === 0) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "That model is not available on Aether Cloud right now. Pick another model or use Bring your own key.",
+          }),
+          { status: 503, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      // Primary upstream; specialty gateways fall back via OpenRouter on later turns
+      // once health tracking is added. For now we use the best configured route.
+      model = candidates[0].model;
     } else {
-      const openai = createOpenAI({
+      const modelId = resolveModel(provider, requestedModel);
+      model = buildByokModel({
+        provider,
         apiKey,
-        baseURL:
-          baseURL ||
-          (provider === "openrouter"
-            ? "https://openrouter.ai/api/v1"
-            : provider === "openai"
-              ? "https://api.openai.com/v1"
-              : baseURL),
-        headers:
-          provider === "openrouter"
-            ? {
-                "HTTP-Referer":
-                  req.headers.get("origin") ?? "http://localhost:3000",
-                "X-Title": "Aether",
-              }
-            : undefined,
+        baseURL,
+        modelId,
+        origin: req.headers.get("origin"),
       });
-      model = openai.chat(modelId);
     }
 
     const enrichedMessages = enrichMessagesWithAttachments(

@@ -33,6 +33,8 @@ export function SettingsDialog() {
     openSettings,
     setOpenSettings,
     hasKey,
+    hostedStatus,
+    hostedLoading,
     focusConnectedAccounts,
     clearFocusConnectedAccounts,
   } = useSettings();
@@ -128,13 +130,67 @@ export function SettingsDialog() {
         </div>
 
         <div className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-5">
-          <p className="text-sm leading-relaxed text-[var(--muted)]">
-            Bring your own key. Keys stay in this browser&apos;s localStorage and
-            are sent only to your chosen provider via the app&apos;s chat proxy.
-          </p>
+          {/* Access mode */}
+          <div className="space-y-3">
+            <div className="text-sm font-medium text-[var(--text)]">
+              Model access
+            </div>
+            <p className="text-xs leading-relaxed text-[var(--muted)]">
+              Use Aether Cloud models out of the box, or bring your own API keys.
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                onClick={() => updateSettings({ accessMode: "hosted" })}
+                className={cn(
+                  "rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
+                  settings.accessMode === "hosted"
+                    ? "border-[var(--accent)] bg-[var(--accent-muted)] text-[var(--text)]"
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--hover-overlay)]",
+                )}
+              >
+                <div className="font-medium">Aether Cloud</div>
+                <div className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                  Claude, ChatGPT-class, and more — no key needed
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => updateSettings({ accessMode: "byok" })}
+                className={cn(
+                  "rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
+                  settings.accessMode === "byok"
+                    ? "border-[var(--accent)] bg-[var(--accent-muted)] text-[var(--text)]"
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--hover-overlay)]",
+                )}
+              >
+                <div className="font-medium">Bring your own key</div>
+                <div className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                  OpenRouter, OpenAI, Anthropic, or custom
+                </div>
+              </button>
+            </div>
+            {settings.accessMode === "hosted" && (
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-xs leading-relaxed text-[var(--muted)]">
+                {hostedLoading ? (
+                  "Checking Aether Cloud…"
+                ) : hostedStatus?.available ? (
+                  <>
+                    Aether Cloud is ready. Pick a model from the composer — Claude,
+                    ChatGPT-class GPT models, and more, with no key required.
+                  </>
+                ) : (
+                  <>
+                    Aether Cloud is not configured on this server. Switch to Bring
+                    your own key, or ask the operator to enable hosted models.
+                  </>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Preferences */}
-          <div className="space-y-3">
+          <div className="space-y-3 border-t border-[var(--border)] pt-5">
             <div className="flex items-center gap-2">
               <PaletteIcon className="size-4 text-[var(--muted)]" />
               <span className="text-sm font-medium text-[var(--text)]">
@@ -216,125 +272,136 @@ export function SettingsDialog() {
             </div>
           </div>
 
-          <div className="space-y-2 border-t border-[var(--border)] pt-5">
-            <Label>Provider</Label>
-            <div className="grid grid-cols-2 gap-1.5">
-              {PROVIDERS.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() =>
+          {settings.accessMode === "byok" && (
+            <>
+              <div className="space-y-2 border-t border-[var(--border)] pt-5">
+                <p className="text-xs leading-relaxed text-[var(--muted)]">
+                  Keys stay in this browser&apos;s localStorage and are sent only
+                  to your chosen provider via the app&apos;s chat proxy.
+                </p>
+                <Label>Provider</Label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {PROVIDERS.map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() =>
+                        updateSettings({
+                          provider: id,
+                          baseURL:
+                            id === "custom"
+                              ? settings.baseURL
+                              : PROVIDER_DEFAULTS[id].baseURL,
+                        })
+                      }
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                        settings.provider === id
+                          ? "border-[var(--accent)] bg-[var(--accent-muted)] text-[var(--text)]"
+                          : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--hover-overlay)]",
+                      )}
+                    >
+                      {PROVIDER_DEFAULTS[id].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="api-key"
+                    className="text-xs font-medium uppercase tracking-wide text-[var(--muted-soft)]"
+                  >
+                    API key
+                  </label>
+                  {providerMeta.docsUrl && (
+                    <a
+                      href={providerMeta.docsUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-[var(--accent)] hover:underline"
+                    >
+                      Get a key
+                      <ExternalLinkIcon className="size-3" />
+                    </a>
+                  )}
+                </div>
+                <input
+                  id="api-key"
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={
+                    settings.provider === "openrouter"
+                      ? "sk-or-..."
+                      : settings.provider === "anthropic"
+                        ? "sk-ant-..."
+                        : "sk-..."
+                  }
+                  value={keyValue}
+                  onChange={(e) =>
+                    updateSettings({ [keyField]: e.target.value } as Partial<
+                      typeof settings
+                    >)
+                  }
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)] focus:border-[var(--accent)]/40"
+                />
+              </div>
+
+              {(settings.provider === "custom" ||
+                settings.provider === "openai") && (
+                <div className="space-y-2">
+                  <label
+                    htmlFor="base-url"
+                    className="text-xs font-medium uppercase tracking-wide text-[var(--muted-soft)]"
+                  >
+                    Base URL
+                  </label>
+                  <input
+                    id="base-url"
+                    type="url"
+                    spellCheck={false}
+                    placeholder="https://api.example.com/v1"
+                    value={settings.baseURL}
+                    onChange={(e) => updateSettings({ baseURL: e.target.value })}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)] focus:border-[var(--accent)]/40"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label
+                  htmlFor="custom-model"
+                  className="text-xs font-medium uppercase tracking-wide text-[var(--muted-soft)]"
+                >
+                  Custom model id (optional)
+                </label>
+                <input
+                  id="custom-model"
+                  type="text"
+                  spellCheck={false}
+                  placeholder="provider/model-name"
+                  value={settings.customModel}
+                  onChange={(e) =>
                     updateSettings({
-                      provider: id,
-                      baseURL:
-                        id === "custom"
-                          ? settings.baseURL
-                          : PROVIDER_DEFAULTS[id].baseURL,
+                      customModel: e.target.value,
+                      useCustomModel: e.target.value.trim().length > 0,
                     })
                   }
-                  className={cn(
-                    "rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-                    settings.provider === id
-                      ? "border-[var(--accent)] bg-[var(--accent-muted)] text-[var(--text)]"
-                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--hover-overlay)]",
-                  )}
-                >
-                  {PROVIDER_DEFAULTS[id].label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label
-                htmlFor="api-key"
-                className="text-xs font-medium uppercase tracking-wide text-[var(--muted-soft)]"
-              >
-                API key
-              </label>
-              {providerMeta.docsUrl && (
-                <a
-                  href={providerMeta.docsUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-[var(--accent)] hover:underline"
-                >
-                  Get a key
-                  <ExternalLinkIcon className="size-3" />
-                </a>
-              )}
-            </div>
-            <input
-              id="api-key"
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder={
-                settings.provider === "openrouter"
-                  ? "sk-or-..."
-                  : settings.provider === "anthropic"
-                    ? "sk-ant-..."
-                    : "sk-..."
-              }
-              value={keyValue}
-              onChange={(e) =>
-                updateSettings({ [keyField]: e.target.value } as Partial<
-                  typeof settings
-                >)
-              }
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)] focus:border-[var(--accent)]/40"
-            />
-          </div>
-
-          {(settings.provider === "custom" ||
-            settings.provider === "openai") && (
-            <div className="space-y-2">
-              <label
-                htmlFor="base-url"
-                className="text-xs font-medium uppercase tracking-wide text-[var(--muted-soft)]"
-              >
-                Base URL
-              </label>
-              <input
-                id="base-url"
-                type="url"
-                spellCheck={false}
-                placeholder="https://api.example.com/v1"
-                value={settings.baseURL}
-                onChange={(e) => updateSettings({ baseURL: e.target.value })}
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)] focus:border-[var(--accent)]/40"
-              />
-            </div>
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)] focus:border-[var(--accent)]/40"
+                />
+                <p className="text-xs text-[var(--muted-soft)]">
+                  Overrides the composer model picker when set. OpenRouter accepts
+                  ids like{" "}
+                  <code className="text-[var(--text)]">
+                    anthropic/claude-sonnet-4
+                  </code>
+                  .
+                </p>
+              </div>
+            </>
           )}
-
-          <div className="space-y-2">
-            <label
-              htmlFor="custom-model"
-              className="text-xs font-medium uppercase tracking-wide text-[var(--muted-soft)]"
-            >
-              Custom model id (optional)
-            </label>
-            <input
-              id="custom-model"
-              type="text"
-              spellCheck={false}
-              placeholder="provider/model-name"
-              value={settings.customModel}
-              onChange={(e) =>
-                updateSettings({
-                  customModel: e.target.value,
-                  useCustomModel: e.target.value.trim().length > 0,
-                })
-              }
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)] focus:border-[var(--accent)]/40"
-            />
-            <p className="text-xs text-[var(--muted-soft)]">
-              Overrides the composer model picker when set. OpenRouter accepts
-              ids like{" "}
-              <code className="text-[var(--text)]">anthropic/claude-sonnet-4</code>.
-            </p>
-          </div>
 
           {/* Voice */}
           <div className="space-y-2 border-t border-[var(--border)] pt-5">
@@ -425,8 +492,8 @@ export function SettingsDialog() {
             {!isAuthenticated ? (
               <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
                 <p className="text-xs leading-relaxed text-[var(--muted)]">
-                  Sign in to connect Google Drive. Chat still works with just an
-                  API key.
+                  Sign in to connect Google Drive. Chat still works without
+                  signing in.
                 </p>
                 <Link
                   href="/auth/signin?callbackUrl=%2F%3Fconnect%3Ddrive"
@@ -488,7 +555,11 @@ export function SettingsDialog() {
         <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
           <Button
             onClick={() => setOpenSettings(false)}
-            disabled={!keyValue.trim()}
+            disabled={
+              settings.accessMode === "byok"
+                ? !keyValue.trim()
+                : !hasKey && !hostedLoading
+            }
           >
             {hasKey ? "Done" : "Continue"}
           </Button>

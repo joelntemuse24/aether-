@@ -1,10 +1,16 @@
 import type { ProviderId } from "./models";
-import { DEFAULT_MODEL, providerSupportsTools } from "./models";
+import { providerSupportsTools } from "./models";
+import { DEFAULT_HOSTED_MODEL } from "./hosted/catalog";
 import type { VoiceId } from "./voice";
 
 const STORAGE_KEY = "aether:settings:v1";
 
+/** Hosted = Aether Cloud (server keys). BYOK = user-supplied provider keys. */
+export type AccessMode = "hosted" | "byok";
+
 export type AppSettings = {
+  /** How the user accesses models. Default: hosted (Aether Cloud). */
+  accessMode: AccessMode;
   provider: ProviderId;
   /** Active API key for the selected provider */
   apiKey: string;
@@ -31,6 +37,7 @@ export type AppSettings = {
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  accessMode: "hosted",
   provider: "openrouter",
   apiKey: "",
   openrouterKey: "",
@@ -38,7 +45,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   anthropicKey: "",
   customKey: "",
   baseURL: "https://openrouter.ai/api/v1",
-  model: DEFAULT_MODEL,
+  model: DEFAULT_HOSTED_MODEL,
   customModel: "",
   useCustomModel: false,
   googleClientId: "",
@@ -55,6 +62,13 @@ export function loadSettings(): AppSettings {
     const next = { ...DEFAULT_SETTINGS, ...parsed };
     const voices = new Set(["default", "literary", "socratic", "concise"]);
     if (!voices.has(next.voice)) next.voice = DEFAULT_SETTINGS.voice;
+    if (parsed.accessMode !== "hosted" && parsed.accessMode !== "byok") {
+      // Legacy installs (no accessMode): prefer BYOK when they already saved a key.
+      next.accessMode = resolveApiKey(next).trim() ? "byok" : "hosted";
+    }
+    if (next.accessMode === "hosted" && !next.model?.trim() && !next.useCustomModel) {
+      next.model = DEFAULT_HOSTED_MODEL;
+    }
     return next;
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -105,10 +119,19 @@ export function resolveBaseURL(settings: AppSettings): string {
   return settings.baseURL.trim().replace(/\/$/, "") || "https://openrouter.ai/api/v1";
 }
 
-/** Headers the client sends to /api/chat so the route can proxy with the user's key. */
+/** Headers the client sends to /api/chat so the route can proxy credentials. */
 export function buildChatHeaders(settings: AppSettings): Record<string, string> {
+  const mode = settings.accessMode === "byok" ? "byok" : "hosted";
+  if (mode === "hosted") {
+    return {
+      "x-access-mode": "hosted",
+      "x-model": resolveModel(settings),
+      "x-tools": settings.enableTools ? "1" : "0",
+    };
+  }
   const key = resolveApiKey(settings);
   return {
+    "x-access-mode": "byok",
     "x-api-key": key,
     "x-provider": settings.provider,
     "x-base-url": resolveBaseURL(settings),
@@ -119,9 +142,19 @@ export function buildChatHeaders(settings: AppSettings): Record<string, string> 
 
 /** Whether tool calling should be active for the current settings/provider. */
 export function toolsEnabled(settings: AppSettings): boolean {
+  if (settings.accessMode === "hosted") return settings.enableTools;
   return settings.enableTools && providerSupportsTools(settings.provider);
 }
 
 export function hasValidKey(settings: AppSettings): boolean {
   return resolveApiKey(settings).trim().length > 0;
+}
+
+/** Whether the user can send chat (hosted cloud available, or BYOK key present). */
+export function canChat(
+  settings: AppSettings,
+  hostedAvailable: boolean,
+): boolean {
+  if (settings.accessMode === "hosted") return hostedAvailable;
+  return hasValidKey(settings);
 }

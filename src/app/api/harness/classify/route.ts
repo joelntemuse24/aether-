@@ -15,12 +15,15 @@ function getHeader(req: Request, name: string): string {
 
 export async function POST(req: Request) {
   try {
+    const accessMode =
+      (getHeader(req, "x-access-mode") as "hosted" | "byok") || "byok";
     const apiKey = getHeader(req, "x-api-key");
     const provider = (getHeader(req, "x-provider") || "openrouter") as ProviderId;
     const baseURL = getHeader(req, "x-base-url");
     const modelId = getHeader(req, "x-model");
+    const hosted = accessMode === "hosted";
 
-    if (!apiKey) {
+    if (!hosted && !apiKey) {
       return NextResponse.json(
         { error: "Missing API key." },
         { status: 401 },
@@ -41,6 +44,7 @@ export async function POST(req: Request) {
 
     const classification: HarnessClassification = await classifyMessage({
       message,
+      accessMode: hosted ? "hosted" : "byok",
       apiKey,
       provider,
       baseURL: baseURL || undefined,
