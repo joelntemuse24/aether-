@@ -12,6 +12,7 @@ import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
 import { ThreadUrlSync } from "@/components/thread-url-sync";
 import { HarnessProvider } from "@/providers/harness-provider";
 import { ProjectsProvider } from "@/providers/projects-provider";
+import { VaultProvider } from "@/providers/vault-provider";
 
 /** Shared provider tree for `/` and `/c/[threadId]`. */
 export function ChatProviders({ children }: { children?: ReactNode }) {
@@ -21,16 +22,18 @@ export function ChatProviders({ children }: { children?: ReactNode }) {
         <DriveProvider>
           <GitHubProvider>
             <ProjectsProvider>
-              <HarnessProvider>
-                <RuntimeProvider>
-                  <ThreadUrlSync />
-                  <ArtifactProvider>
-                    <KeyboardShortcuts />
-                    <AppShell />
-                    {children}
-                  </ArtifactProvider>
-                </RuntimeProvider>
-              </HarnessProvider>
+              <VaultProvider>
+                <HarnessProvider>
+                  <RuntimeProvider>
+                    <ThreadUrlSync />
+                    <ArtifactProvider>
+                      <KeyboardShortcuts />
+                      <AppShell />
+                      {children}
+                    </ArtifactProvider>
+                  </RuntimeProvider>
+                </HarnessProvider>
+              </VaultProvider>
             </ProjectsProvider>
           </GitHubProvider>
         </DriveProvider>

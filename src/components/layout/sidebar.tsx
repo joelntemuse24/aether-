@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -42,17 +41,13 @@ import { useTheme } from "@/providers/theme-provider";
 import { useSession, signOut } from "@/providers/session-provider";
 import { useProjects } from "@/providers/projects-provider";
 import { useArtifact } from "@/providers/artifact-provider";
+import { useVault } from "@/providers/vault-provider";
 import {
   FloatingVault,
   VaultSidebar,
 } from "@/components/layout/vault-sidebar";
 import { Label } from "@/components/ui/label";
 import { NEW_CHAT_PATH } from "@/lib/thread-url";
-import {
-  loadVaultNotes,
-  saveVaultNotes,
-  type VaultNote,
-} from "@/lib/vault";
 import { cn } from "@/lib/utils";
 
 type SidebarProps = {
@@ -68,112 +63,68 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { data: session, status } = useSession();
   const { projects } = useProjects();
   const { saved, savedCloud, openSavedById, refreshSaved } = useArtifact();
+  const vault = useVault();
   const router = useRouter();
   const user = session?.user;
   const isAuthenticated = status === "authenticated" && !!user;
   const isLoadingSession = status === "loading";
   const [query, setQuery] = useState("");
-  const [vaultOpen, setVaultOpen] = useState(false);
-  const [vaultFloating, setVaultFloating] = useState(false);
-  const [vaultNotes, setVaultNotes] = useState<VaultNote[]>([]);
-  const [activeVaultNoteId, setActiveVaultNoteId] = useState<string | null>(
-    null,
-  );
-  const [vaultTitle, setVaultTitle] = useState("Untitled note");
-  const [vaultContent, setVaultContent] = useState("");
-  const [vaultWidth, setVaultWidth] = useState(240);
-  const [vaultDetachPoint, setVaultDetachPoint] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
   const [projectsExpanded, setProjectsExpanded] = useState(false);
   const [artifactsExpanded, setArtifactsExpanded] = useState(false);
 
   useEffect(() => {
-    setVaultNotes(loadVaultNotes());
-  }, []);
-
-  useEffect(() => {
     if (status === "authenticated" && savedCloud) void refreshSaved();
   }, [status, savedCloud, refreshSaved]);
-
-  const beginVaultNote = useCallback((note?: VaultNote) => {
-    setActiveVaultNoteId(note?.id ?? null);
-    setVaultTitle(note?.title ?? "Untitled note");
-    setVaultContent(note?.content ?? "");
-  }, []);
-
-  const saveVaultNote = useCallback(() => {
-    const id = activeVaultNoteId ?? crypto.randomUUID();
-    const note: VaultNote = {
-      id,
-      title: vaultTitle.trim() || "Untitled note",
-      content: vaultContent,
-      updatedAt: Date.now(),
-    };
-    setVaultNotes((previous) => {
-      const next = [note, ...previous.filter((item) => item.id !== id)];
-      saveVaultNotes(next);
-      return next;
-    });
-    setActiveVaultNoteId(id);
-    window.dispatchEvent(
-      new CustomEvent("aether:notice", { detail: "Saved to Vault." }),
-    );
-  }, [activeVaultNoteId, vaultContent, vaultTitle]);
 
   const goNewChat = () => {
     router.push(NEW_CHAT_PATH);
   };
 
   const openVault = () => {
-    if (collapsed) onToggle();
-    setVaultFloating(false);
-    beginVaultNote();
-    setVaultOpen(true);
+    vault.openVault({
+      expandSidebar: collapsed ? onToggle : undefined,
+    });
   };
 
-  if (vaultOpen && !collapsed) {
+  if (vault.vaultOpen && !collapsed) {
     return (
       <>
         <VaultSidebar
-          notes={vaultNotes}
-          activeNoteId={activeVaultNoteId}
-          title={vaultTitle}
-          content={vaultContent}
-          width={vaultWidth}
-          onTitleChange={setVaultTitle}
-          onContentChange={setVaultContent}
-          onWidthChange={setVaultWidth}
-          onNew={() => {
-            setActiveVaultNoteId(null);
-            setVaultTitle("New note");
-            setVaultContent("");
-          }}
-          onSelect={(note) => beginVaultNote(note)}
-          onSave={saveVaultNote}
-          onClose={() => setVaultOpen(false)}
+          notes={vault.notes}
+          activeNoteId={vault.activeNoteId}
+          title={vault.title}
+          content={vault.content}
+          width={vault.width}
+          cloud={vault.cloud}
+          onTitleChange={vault.setTitle}
+          onContentChange={vault.setContent}
+          onWidthChange={vault.setWidth}
+          onNew={() => vault.beginNote()}
+          onSelect={(note) => vault.beginNote(note)}
+          onSave={() => void vault.saveNote()}
+          onDelete={(id) => void vault.deleteNote(id)}
+          onClose={() => vault.setVaultOpen(false)}
           onDetach={(point) => {
-            setVaultDetachPoint(point);
-            setVaultOpen(false);
-            setVaultFloating(true);
+            vault.setDetachPoint(point);
+            vault.setVaultOpen(false);
+            vault.setVaultFloating(true);
           }}
         />
-        {vaultFloating && (
+        {vault.vaultFloating && (
           <FloatingVault
-            title={vaultTitle}
-            content={vaultContent}
-            initialPosition={vaultDetachPoint}
-            onTitleChange={setVaultTitle}
-            onContentChange={setVaultContent}
-            onSave={saveVaultNote}
+            title={vault.title}
+            content={vault.content}
+            initialPosition={vault.detachPoint}
+            onTitleChange={vault.setTitle}
+            onContentChange={vault.setContent}
+            onSave={() => void vault.saveNote()}
             onDock={() => {
-              setVaultFloating(false);
-              setVaultOpen(true);
+              vault.setVaultFloating(false);
+              vault.setVaultOpen(true);
             }}
             onClose={() => {
-              setVaultFloating(false);
-              setVaultDetachPoint(null);
+              vault.setVaultFloating(false);
+              vault.setDetachPoint(null);
             }}
           />
         )}
@@ -289,21 +240,21 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             )}
           </button>
         </aside>
-        {vaultFloating && (
+        {vault.vaultFloating && (
           <FloatingVault
-            title={vaultTitle}
-            content={vaultContent}
-            initialPosition={vaultDetachPoint}
-            onTitleChange={setVaultTitle}
-            onContentChange={setVaultContent}
-            onSave={saveVaultNote}
+            title={vault.title}
+            content={vault.content}
+            initialPosition={vault.detachPoint}
+            onTitleChange={vault.setTitle}
+            onContentChange={vault.setContent}
+            onSave={() => void vault.saveNote()}
             onDock={() => {
-              setVaultFloating(false);
-              setVaultOpen(true);
+              vault.setVaultFloating(false);
+              vault.setVaultOpen(true);
             }}
             onClose={() => {
-              setVaultFloating(false);
-              setVaultDetachPoint(null);
+              vault.setVaultFloating(false);
+              vault.setDetachPoint(null);
             }}
           />
         )}
@@ -377,7 +328,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <SidebarNavItem
             icon={<BookOpenIcon className="size-3.5" />}
             label="Vault"
-            meta="Notes"
+            meta={
+              vault.notes.length > 0
+                ? String(vault.notes.length)
+                : vault.cloud
+                  ? "Synced"
+                  : "Notes"
+            }
             onClick={openVault}
           />
         </div>
@@ -472,21 +429,21 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </div>
         </div>
       </aside>
-      {vaultFloating && (
+      {vault.vaultFloating && (
         <FloatingVault
-          title={vaultTitle}
-          content={vaultContent}
-          initialPosition={vaultDetachPoint}
-          onTitleChange={setVaultTitle}
-          onContentChange={setVaultContent}
-          onSave={saveVaultNote}
+          title={vault.title}
+          content={vault.content}
+          initialPosition={vault.detachPoint}
+          onTitleChange={vault.setTitle}
+          onContentChange={vault.setContent}
+          onSave={() => void vault.saveNote()}
           onDock={() => {
-            setVaultFloating(false);
-            setVaultOpen(true);
+            vault.setVaultFloating(false);
+            vault.setVaultOpen(true);
           }}
           onClose={() => {
-            setVaultFloating(false);
-            setVaultDetachPoint(null);
+            vault.setVaultFloating(false);
+            vault.setDetachPoint(null);
           }}
         />
       )}

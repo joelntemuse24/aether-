@@ -129,6 +129,20 @@ async function ensureSchema(db: AppDb): Promise<void> {
     CREATE INDEX IF NOT EXISTS artifacts_user_updated_idx
       ON artifacts (user_id, updated_at DESC)
   `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS vault_notes (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS vault_notes_user_updated_idx
+      ON vault_notes (user_id, updated_at DESC)
+  `);
     })().catch((err) => {
       schemaPromise = null;
       throw err;
