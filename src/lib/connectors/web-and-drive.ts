@@ -14,8 +14,8 @@ export async function driveSearchForUser(
   error?: string;
   files: Array<{ id: string; name: string; mimeType: string; isFolder: boolean }>;
 }> {
-  const token = await getValidDriveAccessToken(userId);
-  if (!token) {
+  const auth = await getValidDriveAccessToken(userId);
+  if (!auth) {
     return { ok: false, error: "Google Drive is not connected.", files: [] };
   }
   const q = query.trim().replace(/'/g, "\\'");
@@ -30,7 +30,7 @@ export async function driveSearchForUser(
   });
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files?${params}`,
-    { headers: { Authorization: `Bearer ${token}` } },
+    { headers: { Authorization: `Bearer ${auth.accessToken}` } },
   );
   if (!res.ok) {
     return {
@@ -57,14 +57,14 @@ export async function driveReadTextForUser(
   userId: string,
   fileId: string,
 ): Promise<{ ok: boolean; error?: string; name?: string; text?: string }> {
-  const token = await getValidDriveAccessToken(userId);
-  if (!token) {
+  const auth = await getValidDriveAccessToken(userId);
+  if (!auth) {
     return { ok: false, error: "Google Drive is not connected." };
   }
 
   const metaRes = await fetch(
     `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,size`,
-    { headers: { Authorization: `Bearer ${token}` } },
+    { headers: { Authorization: `Bearer ${auth.accessToken}` } },
   );
   if (!metaRes.ok) {
     return { ok: false, error: `Could not read file metadata (${metaRes.status})` };
@@ -98,7 +98,7 @@ export async function driveReadTextForUser(
   }
 
   const res = await fetch(downloadUrl, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${auth.accessToken}` },
   });
   if (!res.ok) {
     return { ok: false, error: `Download failed (${res.status})`, name };
