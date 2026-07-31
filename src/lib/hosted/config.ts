@@ -2,10 +2,11 @@
  * Server-side hosted upstream configuration.
  * Keys never leave the server; clients only send x-access-mode: hosted.
  *
- * Preferred stack: BUZZ (Claude + ChatGPT) + OpenRouter (long-tail / failover).
+ * Preferred stack:
+ *   BUZZ (Claude + ChatGPT) → optional OpenAI-compatible relays → OpenRouter.
  */
 
-export type UpstreamId = "claude" | "gpt" | "openrouter";
+export type UpstreamId = "claude" | "gpt" | "openrouter" | `relay${number}`;
 
 export type UpstreamConfig = {
   id: UpstreamId;
@@ -109,12 +110,36 @@ export function getGptUpstream(): UpstreamConfig {
   };
 }
 
+/**
+ * Optional OpenAI-compatible relays (e.g. other Chinese gateways) tried after
+ * BUZZ and before OpenRouter. Configure up to 5:
+ *   AETHER_HOSTED_RELAY_1_BASE_URL / AETHER_HOSTED_RELAY_1_API_KEY
+ *   AETHER_HOSTED_RELAY_2_BASE_URL / …
+ */
+export function getRelayUpstreams(): UpstreamConfig[] {
+  const relays: UpstreamConfig[] = [];
+  for (let i = 1; i <= 5; i++) {
+    const apiKey = env(`AETHER_HOSTED_RELAY_${i}_API_KEY`);
+    const baseURL = normalizeBaseURL(env(`AETHER_HOSTED_RELAY_${i}_BASE_URL`));
+    if (!apiKey || !baseURL) continue;
+    relays.push({
+      id: `relay${i}`,
+      name: env(`AETHER_HOSTED_RELAY_${i}_NAME`) || `relay-${i}`,
+      baseURL,
+      apiKey,
+      configured: true,
+    });
+  }
+  return relays;
+}
+
 /** True when at least one hosted upstream can serve requests. */
 export function isHostedConfigured(): boolean {
   return (
     getOpenRouterUpstream().configured ||
     getClaudeUpstream().configured ||
-    getGptUpstream().configured
+    getGptUpstream().configured ||
+    getRelayUpstreams().length > 0
   );
 }
 

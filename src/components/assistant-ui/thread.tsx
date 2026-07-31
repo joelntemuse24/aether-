@@ -822,7 +822,10 @@ const MessageError: FC = () => {
   return (
     <MessagePrimitive.Error>
       <ErrorPrimitive.Root className="mt-2 rounded-xl border border-[var(--error-border)] bg-[var(--error-bg)] p-3 text-sm text-[var(--error-text)]">
-        <ErrorPrimitive.Message className="line-clamp-3" />
+        <ErrorPrimitive.Message className="whitespace-pre-wrap" />
+        <p className="mt-1.5 text-[12px] text-[var(--muted)]">
+          Use Retry on this message to continue, or pick another model.
+        </p>
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   );
