@@ -9,6 +9,7 @@ import {
   ChevronRightIcon,
   Loader2Icon,
   LinkIcon,
+  CircleIcon,
   MoonIcon,
   SunIcon,
 } from "lucide-react";
@@ -16,7 +17,7 @@ import { useSettings } from "@/providers/settings-provider";
 import { useDrive } from "@/providers/drive-provider";
 import { useGitHub } from "@/providers/github-provider";
 import { useSession } from "@/providers/session-provider";
-import { ACCENTS, useTheme } from "@/providers/theme-provider";
+import { ACCENTS, THEMES, useTheme } from "@/providers/theme-provider";
 import { PROVIDER_DEFAULTS, type ProviderId } from "@/lib/models";
 import { VOICE_OPTIONS } from "@/lib/voice";
 import { Button } from "@/components/ui/button";
@@ -146,33 +147,32 @@ export function SettingsDialog() {
             </div>
             <div className="space-y-2">
               <Label className="sr-only">Theme</Label>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setTheme("dark")}
-                  className={cn(
-                    "flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
-                    theme === "dark"
-                      ? "border-[var(--accent)] bg-[var(--accent-muted)] text-[var(--text)]"
-                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--hover-overlay)]",
-                  )}
-                >
-                  <MoonIcon className="size-3.5" />
-                  Dark
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTheme("light")}
-                  className={cn(
-                    "flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
-                    theme === "light"
-                      ? "border-[var(--accent)] bg-[var(--accent-muted)] text-[var(--text)]"
-                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--hover-overlay)]",
-                  )}
-                >
-                  <SunIcon className="size-3.5" />
-                  Light
-                </button>
+              <div className="grid grid-cols-3 gap-1.5">
+                {THEMES.map((item) => {
+                  const selected = theme === item.id;
+                  const Icon =
+                    item.id === "dark"
+                      ? MoonIcon
+                      : item.id === "white"
+                        ? CircleIcon
+                        : SunIcon;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setTheme(item.id)}
+                      className={cn(
+                        "flex items-center justify-center gap-2 rounded-lg border px-2 py-2 text-sm transition-colors",
+                        selected
+                          ? "border-[var(--accent)] bg-[var(--accent-muted)] text-[var(--text)]"
+                          : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:bg-[var(--hover-overlay)]",
+                      )}
+                    >
+                      <Icon className="size-3.5" />
+                      {item.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -181,13 +181,14 @@ export function SettingsDialog() {
               <div className="grid grid-cols-4 gap-1.5">
                 {ACCENTS.map((item) => {
                   const selected = accent === item.id;
+                  const lightSurface = theme === "light" || theme === "white";
                   const swatch =
                     item.id === "mono"
-                      ? theme === "light"
+                      ? lightSurface
                         ? "#1a1714"
                         : "#e8e4d9"
                       : item.id === "default"
-                        ? theme === "light"
+                        ? lightSurface
                           ? "#c96442"
                           : item.swatch
                         : item.swatch;

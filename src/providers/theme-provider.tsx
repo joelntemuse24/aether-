@@ -9,7 +9,14 @@ import {
   type ReactNode,
 } from "react";
 
-export type Theme = "dark" | "light";
+/** dark = default charcoal; light = warm parchment; white = brighter near-white canvas. */
+export type Theme = "dark" | "light" | "white";
+
+export const THEMES: { id: Theme; label: string }[] = [
+  { id: "dark", label: "Dark" },
+  { id: "light", label: "Light" },
+  { id: "white", label: "White" },
+];
 
 /** Accent palette ids. `default` is the current clay/terracotta. */
 export type AccentId = "default" | "mono" | "sky" | "burgundy";
@@ -29,6 +36,8 @@ export const ACCENTS: {
 type ThemeContextValue = {
   theme: Theme;
   accent: AccentId;
+  /** True for warm parchment or bright white (not dark). */
+  isLightSurface: boolean;
   toggleTheme: () => void;
   setTheme: (t: Theme) => void;
   setAccent: (a: AccentId) => void;
@@ -38,6 +47,10 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const THEME_KEY = "aether:theme";
 const ACCENT_KEY = "aether:accent";
+
+function isTheme(value: string | null): value is Theme {
+  return value === "dark" || value === "light" || value === "white";
+}
 
 function isAccent(value: string | null): value is AccentId {
   return (
@@ -53,8 +66,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [accent, setAccentState] = useState<AccentId>("default");
 
   useEffect(() => {
-    const storedTheme = localStorage.getItem(THEME_KEY) as Theme | null;
-    if (storedTheme === "light" || storedTheme === "dark") {
+    const storedTheme = localStorage.getItem(THEME_KEY);
+    if (isTheme(storedTheme)) {
       setThemeState(storedTheme);
     }
     const storedAccent = localStorage.getItem(ACCENT_KEY);
@@ -65,10 +78,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === "light") {
-      root.setAttribute("data-theme", "light");
-    } else {
+    if (theme === "dark") {
       root.removeAttribute("data-theme");
+    } else {
+      root.setAttribute("data-theme", theme);
     }
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
@@ -86,13 +99,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setTheme = useCallback((t: Theme) => setThemeState(t), []);
   const setAccent = useCallback((a: AccentId) => setAccentState(a), []);
   const toggleTheme = useCallback(
-    () => setThemeState((prev) => (prev === "dark" ? "light" : "dark")),
+    () =>
+      setThemeState((prev) => {
+        if (prev === "dark") return "light";
+        if (prev === "light") return "white";
+        return "dark";
+      }),
     [],
   );
 
+  const isLightSurface = theme === "light" || theme === "white";
+
   return (
     <ThemeContext.Provider
-      value={{ theme, accent, toggleTheme, setTheme, setAccent }}
+      value={{ theme, accent, isLightSurface, toggleTheme, setTheme, setAccent }}
     >
       {children}
     </ThemeContext.Provider>

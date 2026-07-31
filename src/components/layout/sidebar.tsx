@@ -230,8 +230,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             type="button"
             onClick={toggleTheme}
             className="flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
-            aria-label="Toggle theme"
-            title="Toggle theme"
+            aria-label="Cycle theme"
+            title={
+              theme === "dark"
+                ? "Switch to light"
+                : theme === "light"
+                  ? "Switch to white"
+                  : "Switch to dark"
+            }
           >
             {theme === "dark" ? (
               <SunIcon className="size-4" />
@@ -417,8 +423,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               type="button"
               onClick={toggleTheme}
               className="flex size-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
-              aria-label="Toggle theme"
-              title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+              aria-label="Cycle theme"
+              title={
+                theme === "dark"
+                  ? "Switch to light"
+                  : theme === "light"
+                    ? "Switch to white"
+                    : "Switch to dark"
+              }
             >
               {theme === "dark" ? (
                 <SunIcon className="size-3.5" />
