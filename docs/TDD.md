@@ -130,8 +130,8 @@ Persisted at `aether:settings:v1`: `accessMode` (`hosted` \| `byok`), provider k
 
 ### Hosted routing
 
-- Env: `OPENROUTER_API_KEY`; optional `AETHER_HOSTED_CLAUDE_BASE_URL` / `AETHER_HOSTED_CLAUDE_API_KEY` (default base `https://buzzai.cc/v1`); optional `AETHER_HOSTED_GPT_BASE_URL` / `AETHER_HOSTED_GPT_API_KEY` (default base `https://api.icodeeasy.cc/v1`).
-- Family routing: `claude-*` → Claude gateway then OpenRouter; `gpt-*` / `o*` → GPT gateway then OpenRouter; other catalog ids → OpenRouter only.
+- Env: `OPENROUTER_API_KEY`; preferred `AETHER_HOSTED_BUZZ_API_KEY` / `AETHER_HOSTED_BUZZ_BASE_URL` (default `https://api.buzzai.cc/v1`; bare `https://api.buzzai.cc` is normalized). Legacy `AETHER_HOSTED_CLAUDE_*` accepted. Optional `AETHER_HOSTED_CHATGPT_*` override (else same BUZZ key).
+- Family routing: Claude + ChatGPT → BUZZ then OpenRouter; other catalog ids → OpenRouter only.
 - Product UI brands models as Aether Cloud — does not surface OpenRouter or gateway vendor names to end users.
 
 ### Local blobs
