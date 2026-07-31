@@ -61,14 +61,24 @@ export function AppShell() {
           : "Google Drive connection failed.";
       pushNotices(setNotices, message);
     };
+    const onGitHubError = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      const message =
+        typeof detail === "string" && detail
+          ? `GitHub: ${detail}`
+          : "GitHub connection failed.";
+      pushNotices(setNotices, message);
+    };
     const onNotice = (event: Event) => {
       const detail = (event as CustomEvent<string | string[]>).detail;
       pushNotices(setNotices, detail);
     };
     window.addEventListener("aether:drive-error", onDriveError);
+    window.addEventListener("aether:github-error", onGitHubError);
     window.addEventListener("aether:notice", onNotice);
     return () => {
       window.removeEventListener("aether:drive-error", onDriveError);
+      window.removeEventListener("aether:github-error", onGitHubError);
       window.removeEventListener("aether:notice", onNotice);
     };
   }, []);

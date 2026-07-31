@@ -72,7 +72,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     let openForConnect = false;
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      if (params.get("connect") === "drive") {
+      const connectTarget = params.get("connect");
+      if (connectTarget === "drive" || connectTarget === "github") {
         openForConnect = true;
         setFocusConnectedAccounts(true);
         params.delete("connect");

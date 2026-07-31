@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useSettings } from "@/providers/settings-provider";
 import { useDrive } from "@/providers/drive-provider";
+import { useGitHub } from "@/providers/github-provider";
 import { useSession } from "@/providers/session-provider";
 import { ACCENTS, useTheme } from "@/providers/theme-provider";
 import { PROVIDER_DEFAULTS, type ProviderId } from "@/lib/models";
@@ -45,17 +46,27 @@ export function SettingsDialog() {
     email: driveEmail,
     googleConfigured,
     loading: driveLoading,
-    connect,
-    disconnect,
-    refresh,
+    connect: connectDrive,
+    disconnect: disconnectDrive,
+    refresh: refreshDrive,
   } = useDrive();
+  const {
+    connected: githubConnected,
+    login: githubLogin,
+    githubConfigured,
+    loading: githubLoading,
+    connect: connectGitHubAccount,
+    disconnect: disconnectGitHubAccount,
+    refresh: refreshGitHub,
+  } = useGitHub();
   const titleId = useId();
   const connectedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!openSettings) return;
-    void refresh();
-  }, [openSettings, refresh]);
+    void refreshDrive();
+    void refreshGitHub();
+  }, [openSettings, refreshDrive, refreshGitHub]);
 
   useEffect(() => {
     if (!openSettings || !focusConnectedAccounts) return;
@@ -492,11 +503,11 @@ export function SettingsDialog() {
             {!isAuthenticated ? (
               <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
                 <p className="text-xs leading-relaxed text-[var(--muted)]">
-                  Sign in to connect Google Drive. Chat still works without
-                  signing in.
+                  Sign in to connect Google Drive or GitHub. Chat still works
+                  without signing in.
                 </p>
                 <Link
-                  href="/auth/signin?callbackUrl=%2F%3Fconnect%3Ddrive"
+                  href="/auth/signin?callbackUrl=%2F%3Fconnect%3Dgithub"
                   onClick={() => setOpenSettings(false)}
                   className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] hover:underline"
                 >
@@ -505,46 +516,92 @@ export function SettingsDialog() {
                 </Link>
               </div>
             ) : (
-              <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
-                <div className="flex items-center gap-2">
-                  <GoogleDriveIcon className="size-4" />
-                  <span className="text-sm text-[var(--text)]">Google Drive</span>
-                  {driveLoading ? (
-                    <Loader2Icon className="ml-auto size-3.5 animate-spin text-[var(--muted)]" />
-                  ) : driveConnected ? (
-                    <span className="ml-auto flex items-center gap-1 rounded-full bg-[var(--accent)]/10 px-2 py-0.5 text-xs text-[var(--accent)]">
-                      <CheckIcon className="size-3" />
-                      Connected{driveEmail ? ` · ${driveEmail}` : ""}
+              <div className="space-y-2">
+                <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                  <div className="flex items-center gap-2">
+                    <GoogleDriveIcon className="size-4" />
+                    <span className="text-sm text-[var(--text)]">
+                      Google Drive
                     </span>
-                  ) : null}
-                </div>
-                <p className="text-xs leading-relaxed text-[var(--muted-soft)]">
-                  Optionally connect Drive with read-only access. A file browser
-                  appears in the composer once connected.
-                </p>
-                {!googleConfigured && !driveConnected ? (
-                  <p className="text-xs text-[var(--error-text)]">
-                    Google OAuth is not configured on the server. Set
-                    GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.
+                    {driveLoading ? (
+                      <Loader2Icon className="ml-auto size-3.5 animate-spin text-[var(--muted)]" />
+                    ) : driveConnected ? (
+                      <span className="ml-auto flex items-center gap-1 rounded-full bg-[var(--accent)]/10 px-2 py-0.5 text-xs text-[var(--accent)]">
+                        <CheckIcon className="size-3" />
+                        Connected{driveEmail ? ` · ${driveEmail}` : ""}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-xs leading-relaxed text-[var(--muted-soft)]">
+                    Connect Drive to browse and attach files from the composer.
                   </p>
-                ) : driveConnected ? (
-                  <button
-                    type="button"
-                    onClick={() => void disconnect()}
-                    className="text-xs text-[var(--muted)] hover:text-[var(--text)] hover:underline"
-                  >
-                    Disconnect Google Drive
-                  </button>
-                ) : (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="mt-1"
-                    onClick={() => connect()}
-                  >
-                    Connect Google Drive
-                  </Button>
-                )}
+                  {!googleConfigured && !driveConnected ? (
+                    <p className="text-xs text-[var(--error-text)]">
+                      Google OAuth is not configured on the server. Set
+                      GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.
+                    </p>
+                  ) : driveConnected ? (
+                    <button
+                      type="button"
+                      onClick={() => void disconnectDrive()}
+                      className="text-xs text-[var(--muted)] hover:text-[var(--text)] hover:underline"
+                    >
+                      Disconnect Google Drive
+                    </button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="mt-1"
+                      onClick={() => connectDrive()}
+                    >
+                      Connect Google Drive
+                    </Button>
+                  )}
+                </div>
+
+                <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                  <div className="flex items-center gap-2">
+                    <GitHubIcon className="size-4" />
+                    <span className="text-sm text-[var(--text)]">GitHub</span>
+                    {githubLoading ? (
+                      <Loader2Icon className="ml-auto size-3.5 animate-spin text-[var(--muted)]" />
+                    ) : githubConnected ? (
+                      <span className="ml-auto flex items-center gap-1 rounded-full bg-[var(--accent)]/10 px-2 py-0.5 text-xs text-[var(--accent)]">
+                        <CheckIcon className="size-3" />
+                        Connected{githubLogin ? ` · @${githubLogin}` : ""}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-xs leading-relaxed text-[var(--muted-soft)]">
+                    Connect GitHub in one click to let Aether work with your
+                    repositories.
+                  </p>
+                  {!githubConfigured && !githubConnected ? (
+                    <p className="text-xs text-[var(--error-text)]">
+                      GitHub OAuth is not configured on the server. Set
+                      GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET, and add the
+                      callback URL /api/github/callback.
+                    </p>
+                  ) : githubConnected ? (
+                    <button
+                      type="button"
+                      onClick={() => void disconnectGitHubAccount()}
+                      className="text-xs text-[var(--muted)] hover:text-[var(--text)] hover:underline"
+                    >
+                      Disconnect GitHub
+                    </button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="mt-1"
+                      onClick={() => connectGitHubAccount()}
+                    >
+                      Connect GitHub
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -582,6 +639,20 @@ function GoogleDriveIcon({ className }: { className?: string }) {
       <path d="M14.7 2L9.3 2L2 15.5L7.3 15.5L14.7 2Z" fill="#0F9D58" />
       <path d="M12 7L7.3 15.5L12 15.5L16.7 15.5L12 7Z" fill="#FFC107" />
       <path d="M12 7L16.7 15.5L22 15.5L12 7Z" fill="#FFC107" />
+    </svg>
+  );
+}
+
+function GitHubIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.009-.868-.014-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.523 2 12 2Z" />
     </svg>
   );
 }

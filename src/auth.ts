@@ -6,6 +6,7 @@ import Credentials from "next-auth/providers/credentials";
 import type { Provider } from "next-auth/providers";
 import { verifyMagicLinkToken } from "@/lib/magic-link";
 import { clearDriveCookie } from "@/lib/drive-session";
+import { clearGitHubCookie } from "@/lib/github-session";
 import { getAuthSecretString } from "@/lib/auth-secret";
 
 const googleId = process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID;
@@ -122,6 +123,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signOut() {
       try {
         await clearDriveCookie();
+      } catch {
+        // ignore outside request context
+      }
+      try {
+        await clearGitHubCookie();
       } catch {
         // ignore outside request context
       }
