@@ -13,30 +13,61 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 export function ModelPicker({ className }: { className?: string }) {
-  const { settings, updateSettings, activeModel, activeModelLabel } =
-    useSettings();
+  const {
+    settings,
+    updateSettings,
+    activeModel,
+    activeModelLabel,
+    hostedStatus,
+    hostedLoading,
+  } = useSettings();
+  const hosted = settings.accessMode === "hosted";
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(!getCachedModels());
+  const [loading, setLoading] = useState(!hosted && !getCachedModels());
   const [models, setModels] = useState<ModelOption[]>(
-    () => getCachedModels() ?? [],
+    () => (hosted ? [] : getCachedModels() ?? []),
   );
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (hosted) {
+      const hostedModels = (hostedStatus?.models ?? []).map(
+        (m): ModelOption => ({
+          id: m.id,
+          label: m.label,
+          provider: "openrouter",
+          description: m.description,
+        }),
+      );
+      setModels(hostedModels);
+      setLoading(hostedLoading);
+      if (
+        !settings.useCustomModel &&
+        hostedModels.length > 0 &&
+        (!activeModel || !hostedModels.some((m) => m.id === activeModel))
+      ) {
+        const next =
+          hostedStatus?.defaultModel &&
+          hostedModels.some((m) => m.id === hostedStatus.defaultModel)
+            ? hostedStatus.defaultModel
+            : hostedModels[0].id;
+        updateSettings({ model: next, useCustomModel: false });
+      }
+      return;
+    }
+
     const cached = getCachedModels();
     if (cached) {
       setModels(cached);
       setLoading(false);
-      return;
     }
     let cancelled = false;
-    setLoading(true);
+    if (!cached) setLoading(true);
     fetchOpenRouterModels()
       .then((live) => {
         if (cancelled) return;
         setModels(live);
         setCachedModels(live);
-        // Auto-select first model if none is set
         if (!activeModel && live.length > 0) {
           updateSettings({ model: live[0].id, useCustomModel: false });
         }
@@ -50,7 +81,8 @@ export function ModelPicker({ className }: { className?: string }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh when access mode / hosted catalog changes
+  }, [hosted, hostedStatus, hostedLoading]);
 
   useEffect(() => {
     if (!open) return;
@@ -92,16 +124,25 @@ export function ModelPicker({ className }: { className?: string }) {
           className="absolute bottom-full left-0 z-50 mb-2 max-h-72 w-60 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--elevated-deep)] py-1"
         >
           <div className="px-3 pb-1.5 pt-2">
-            <Label>Models</Label>
+            <Label>{hosted ? "Aether Cloud" : "Models"}</Label>
           </div>
           {loading ? (
             <div className="px-3 py-3 text-center">
               <Label>Loading models…</Label>
             </div>
+          ) : models.length === 0 ? (
+            <div className="px-3 py-3 text-center">
+              <Label>
+                {hosted
+                  ? "Cloud models unavailable"
+                  : "No models loaded"}
+              </Label>
+            </div>
           ) : (
             <>
               {models.map((model) => {
-                const selected = activeModel === model.id && !settings.useCustomModel;
+                const selected =
+                  activeModel === model.id && !settings.useCustomModel;
                 return (
                   <button
                     key={model.id}
@@ -134,7 +175,7 @@ export function ModelPicker({ className }: { className?: string }) {
                   </button>
                 );
               })}
-              {settings.useCustomModel && settings.customModel && (
+              {!hosted && settings.useCustomModel && settings.customModel && (
                 <div className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--muted)]">
                   Custom: {settings.customModel}
                 </div>

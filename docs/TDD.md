@@ -6,7 +6,7 @@
 
 ## System Overview
 
-**Aether** is a Next.js 15 (App Router) bring-your-own-key (BYOK) AI chat application: the browser holds provider API keys; the Next.js server proxies chat to LLM providers and runs tools. Optional Auth.js sign-in plus Postgres (`DATABASE_URL` Neon or `AETHER_PGLITE=1`) enables cloud conversation sync, curated memory, projects, persisted artifacts, and harness run records. BYOK keys are never stored in the application database. Unsigned / no-DB users keep history and local memory in `localStorage` (`aether:` prefix).
+**Aether** is a Next.js 15 (App Router) AI chat application with two access modes: **Aether Cloud** (default — server-side hosted keys; curated Claude / GPT / long-tail catalog) and **Bring your own key** (BYOK — browser-held provider keys). The Next.js server proxies chat to LLM providers and runs tools. Optional Auth.js sign-in plus Postgres (`DATABASE_URL` Neon or `AETHER_PGLITE=1`) enables cloud conversation sync, curated memory, projects, persisted artifacts, and harness run records. BYOK keys are never stored in the application database. Unsigned / no-DB users keep history and local memory in `localStorage` (`aether:` prefix).
 
 ---
 
@@ -54,22 +54,23 @@ src/app/layout.tsx
 | Artifacts | `src/lib/artifacts/*`, `api/artifacts/*`, artifact panel + sidebar list |
 | Thread list / history adapter | `src/lib/local-thread-adapter.tsx` |
 | URL ↔ active thread | `src/components/thread-url-sync.tsx`, `src/lib/thread-url.ts` |
-| Settings / BYOK headers | `src/lib/settings.ts`, `src/providers/settings-provider.tsx` |
+| Settings / access mode / headers | `src/lib/settings.ts`, `src/providers/settings-provider.tsx` |
+| Hosted routing (Aether Cloud) | `src/lib/hosted/*`, `GET /api/hosted/status` |
 | Web search | `src/lib/web-search.ts` |
 | URL fetch safety | `src/lib/connectors/url-safety.ts` |
 | Drive | `src/lib/drive-session.ts`, `src/lib/connectors/web-and-drive.ts`, `api/drive/*` |
 | Cloud conversations | `src/lib/db/*`, `src/lib/conversations/*`, `api/conversations/*` |
 | Voices | `src/lib/voice.ts` |
-| Models list (OpenRouter public) | `src/lib/models.ts` |
+| Models list (BYOK OpenRouter public) | `src/lib/models.ts` |
 
 ### Data flow — chat turn
 
-1. User configures provider + API key in Settings → `localStorage` key `aether:settings:v1`.
+1. User picks **Aether Cloud** (default) or **Bring your own key** in Settings → `localStorage` key `aether:settings:v1` (`accessMode`).
 2. Composer send classifies via `POST /api/harness/classify` (unless skipped after clarify). May show clarify cards; then arms `HarnessChatContext` (`intent`, `depth`, `runId`, `clarifications`, `planSteps`).
 3. Attachments resolve from an in-memory `Map`; text stubs → `textPrefix`; images/files with data URLs → message `file` parts.
-4. Client `AssistantChatTransport` `POST`s `/api/chat` with headers `x-api-key`, `x-provider`, `x-base-url`, `x-model`, `x-tools`.
+4. Client `AssistantChatTransport` `POST`s `/api/chat` with `x-access-mode`, `x-model`, `x-tools`. BYOK also sends `x-api-key`, `x-provider`, `x-base-url`.
 5. Body includes `messages`, optional `model`, `system` (voice, ≤ 8000), `attachments[]`, `textPrefix`, `harness`, `memoryContext`, `projectId`, `conversationId`.
-6. Server validates API key (**401** if missing), injects harness addendum (including `planSteps`), memory (server cloud or client local when no cloud), and project instructions; builds tools via `buildToolRegistry`; `stopWhen: stepCountIs(budget.maxSteps)` where budgets are shallow=2 / standard=8 / deep=16; streams (`maxOutputTokens: 8192`, `maxDuration: 60`). Marks harness run `done` on finish when applicable.
+6. Server: hosted mode resolves upstream via `src/lib/hosted/router.ts` (**503** if cloud unconfigured); BYOK validates API key (**401** if missing). Injects harness addendum (including `planSteps`), memory (server cloud or client local when no cloud), and project instructions; builds tools via `buildToolRegistry`; `stopWhen: stepCountIs(budget.maxSteps)` where budgets are shallow=2 / standard=8 / deep=16; streams (`maxOutputTokens: 8192`, `maxDuration: 60`). Marks harness run `done` on finish when applicable.
 7. Client tool: `execute_python` (Pyodide). Server tools (gated): `web_search`, `fetch_url` (SSRF-hardened), `create_artifact` (acks + may persist), `memory_search` / `memory_write` (signed-in + DB), `drive_search` / `drive_read` (Drive connected).
 8. History adapter writes format repo to `localStorage` or `PUT /api/conversations/[id]/messages` when cloud mode is active.
 
@@ -90,8 +91,10 @@ src/app/layout.tsx
 
 | External system | How used |
 |-----------------|----------|
-| OpenRouter / OpenAI-compatible / Anthropic | Chat completions streaming via user-supplied key |
-| OpenRouter `GET /api/v1/models` | Client model picker; cache `aether:models-cache:v2` |
+| Aether Cloud (hosted) | Server keys: Claude/GPT specialty gateways + OpenRouter long-tail/failover |
+| OpenRouter / OpenAI-compatible / Anthropic | BYOK chat completions streaming via user-supplied key |
+| `GET /api/hosted/status` | Hosted availability + curated catalog (no vendor/key leakage) |
+| OpenRouter `GET /api/v1/models` | BYOK model picker; cache `aether:models-cache:v2` |
 | Resend | Optional magic-link email |
 | Google OAuth + Drive API | Sign-in + readonly browse/download + Drive tools |
 | GitHub / Apple OAuth | Sign-in only (when env set) |
@@ -123,7 +126,13 @@ There is no `/settings` route — Settings is a dialog. Drive connect deep-link 
 
 ### Client settings (`AppSettings`)
 
-Persisted at `aether:settings:v1`: provider keys, `baseURL`, `model`, `enableTools`, `voice` (`default` \| `literary` \| `socratic` \| `concise`), etc. Defaults: provider `openrouter`, `enableTools: true`, `voice: "literary"`.
+Persisted at `aether:settings:v1`: `accessMode` (`hosted` \| `byok`), provider keys, `baseURL`, `model`, `enableTools`, `voice` (`default` \| `literary` \| `socratic` \| `concise`), etc. Defaults: `accessMode: "hosted"`, model `claude-sonnet-4`, provider `openrouter` (BYOK), `enableTools: true`, `voice: "literary"`. Legacy installs with a saved key and no `accessMode` migrate to `byok`.
+
+### Hosted routing
+
+- Env: `OPENROUTER_API_KEY`; optional `AETHER_HOSTED_CLAUDE_BASE_URL` / `AETHER_HOSTED_CLAUDE_API_KEY` (default base `https://buzzai.cc/v1`); optional `AETHER_HOSTED_GPT_BASE_URL` / `AETHER_HOSTED_GPT_API_KEY` (default base `https://api.icodeeasy.cc/v1`).
+- Family routing: `claude-*` → Claude gateway then OpenRouter; `gpt-*` / `o*` → GPT gateway then OpenRouter; other catalog ids → OpenRouter only.
+- Product UI brands models as Aether Cloud — does not surface OpenRouter or gateway vendor names to end users.
 
 ### Local blobs
 

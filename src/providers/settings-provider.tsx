@@ -17,10 +17,22 @@ import {
   resolveModel,
   saveSettings,
   type AppSettings,
-  hasValidKey,
+  canChat,
   buildChatHeaders,
 } from "@/lib/settings";
+import { getHostedModelLabel } from "@/lib/hosted/catalog";
 import { getModelLabel } from "@/lib/models";
+
+export type HostedStatus = {
+  available: boolean;
+  defaultModel: string;
+  models: Array<{
+    id: string;
+    label: string;
+    family: string;
+    description?: string;
+  }>;
+};
 
 type SettingsContextValue = {
   settings: AppSettings;
@@ -29,7 +41,10 @@ type SettingsContextValue = {
   setSettings: (next: AppSettings) => void;
   activeModel: string;
   activeModelLabel: string;
+  /** True when the user can send chat (hosted available or BYOK key). */
   hasKey: boolean;
+  hostedStatus: HostedStatus | null;
+  hostedLoading: boolean;
   chatHeaders: Record<string, string>;
   openSettings: boolean;
   setOpenSettings: (open: boolean) => void;
@@ -46,6 +61,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [openSettings, setOpenSettings] = useState(false);
   const [focusConnectedAccounts, setFocusConnectedAccounts] = useState(false);
+  const [hostedStatus, setHostedStatus] = useState<HostedStatus | null>(null);
+  const [hostedLoading, setHostedLoading] = useState(true);
 
   useEffect(() => {
     const loaded = loadSettings();
@@ -67,9 +84,63 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    if (openForConnect || !hasValidKey(loaded)) {
-      setOpenSettings(true);
-    }
+    let cancelled = false;
+    setHostedLoading(true);
+    fetch("/api/hosted/status")
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json() as Promise<HostedStatus>;
+      })
+      .then((status) => {
+        if (cancelled) return;
+        setHostedStatus(status);
+        // Auto-pick default hosted model when needed
+        if (
+          loaded.accessMode === "hosted" &&
+          status.available &&
+          status.defaultModel &&
+          !loaded.useCustomModel &&
+          (!loaded.model ||
+            !status.models.some((m) => m.id === loaded.model))
+        ) {
+          const next = { ...loaded, model: status.defaultModel };
+          setSettingsState(next);
+          saveSettings(next);
+        }
+        const chatReady = canChat(
+          {
+            ...loaded,
+            model:
+              loaded.accessMode === "hosted" &&
+              status.available &&
+              status.defaultModel &&
+              !loaded.useCustomModel &&
+              (!loaded.model ||
+                !status.models.some((m) => m.id === loaded.model))
+                ? status.defaultModel
+                : loaded.model,
+          },
+          status.available,
+        );
+        if (openForConnect || !chatReady) {
+          setOpenSettings(true);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHostedStatus({ available: false, defaultModel: "", models: [] });
+        // Hosted probe failed — open settings if BYOK isn't ready either
+        if (openForConnect || !canChat(loaded, false)) {
+          setOpenSettings(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setHostedLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const clearFocusConnectedAccounts = useCallback(() => {
@@ -102,12 +173,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       if (patch.customKey !== undefined && prev.provider === "custom") {
         next.apiKey = patch.customKey;
       }
+      // When switching into hosted, ensure a sensible default model
+      if (patch.accessMode === "hosted" && !next.model.trim()) {
+        next.model = hostedStatus?.defaultModel || "claude-sonnet-4";
+        next.useCustomModel = false;
+      }
       saveSettings(next);
       return next;
     });
-  }, []);
+  }, [hostedStatus?.defaultModel]);
 
   const activeModel = resolveModel(settings);
+  const hostedAvailable = hostedStatus?.available ?? false;
+  const activeModelLabel =
+    getHostedModelLabel(activeModel) || getModelLabel(activeModel);
+
   const value = useMemo<SettingsContextValue>(
     () => ({
       settings,
@@ -115,8 +195,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       updateSettings,
       setSettings,
       activeModel,
-      activeModelLabel: getModelLabel(activeModel),
-      hasKey: hasValidKey(settings),
+      activeModelLabel,
+      hasKey: canChat(settings, hostedAvailable),
+      hostedStatus,
+      hostedLoading,
       chatHeaders: buildChatHeaders(settings),
       openSettings,
       setOpenSettings,
@@ -130,6 +212,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       updateSettings,
       setSettings,
       activeModel,
+      activeModelLabel,
+      hostedAvailable,
+      hostedStatus,
+      hostedLoading,
       openSettings,
       focusConnectedAccounts,
       clearFocusConnectedAccounts,
