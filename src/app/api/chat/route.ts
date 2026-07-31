@@ -37,10 +37,14 @@ import { isHostedConfigured } from "@/lib/hosted/config";
 import { createFailoverLanguageModel } from "@/lib/hosted/failover";
 import { friendlyChatError } from "@/lib/chat-errors";
 
+<<<<<<< HEAD
 /**
  * Vercel always enforces a function wall clock — you cannot remove this.
  * Fluid/Pro supports higher values (up to ~800); 300 covers deep tool runs.
  */
+=======
+/** Long multi-tool turns (repo digs, research) regularly exceed 60s. */
+>>>>>>> origin/master
 export const maxDuration = 300;
 export const runtime = "nodejs";
 

@@ -228,17 +228,47 @@ function saveFormatRepo(remoteId: string, repo: StoredFormatRepo) {
   storage.setItem(messagesKey(remoteId), JSON.stringify(repo));
 }
 
-function simpleTitle(messages: readonly ThreadMessage[]): string {
+function firstUserText(messages: readonly ThreadMessage[]): string {
   const firstUser = messages.find((m) => m.role === "user");
-  if (!firstUser) return "New chat";
-  const text = firstUser.content
+  if (!firstUser) return "";
+  return firstUser.content
     .filter((c): c is { type: "text"; text: string } => c.type === "text")
     .map((c) => c.text)
     .join(" ")
     .trim()
     .replace(/\s+/g, " ");
-  if (!text) return "New chat";
-  return text.length > 48 ? `${text.slice(0, 48)}…` : text;
+}
+
+async function resolveConversationTitle(
+  messages: readonly ThreadMessage[],
+): Promise<string> {
+  const { fallbackConversationTitle } = await import(
+    "@/lib/conversation-title"
+  );
+  const text = firstUserText(messages);
+  const fallback = fallbackConversationTitle(text);
+  if (!text) return fallback;
+
+  try {
+    const { buildChatHeaders, loadSettings } = await import("@/lib/settings");
+    const headers = buildChatHeaders(loadSettings());
+    const res = await fetch("/api/conversations/title", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...headers,
+      },
+      body: JSON.stringify({ message: text }),
+    });
+    if (!res.ok) return fallback;
+    const data = (await res.json()) as { title?: string };
+    if (typeof data.title === "string" && data.title.trim()) {
+      return data.title.trim();
+    }
+  } catch {
+    // offline / model failure — heuristic title is fine
+  }
+  return fallback;
 }
 
 /** ThreadHistoryAdapter that satisfies useAISDKRuntime's withFormat contract. */
@@ -567,7 +597,7 @@ export function createAetherThreadListAdapter(): RemoteThreadListAdapter {
     },
 
     async generateTitle(remoteId: string, messages: readonly ThreadMessage[]) {
-      const title = simpleTitle(messages);
+      const title = await resolveConversationTitle(messages);
       if (await ensureMode()) {
         const { cloudPatchThread } = await import(
           "@/lib/conversations/cloud-client"

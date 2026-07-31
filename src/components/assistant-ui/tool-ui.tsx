@@ -9,6 +9,7 @@ import {
   ExternalLinkIcon,
   FileIcon,
   GlobeIcon,
+  FolderGit2Icon,
   HardDriveIcon,
   Loader2Icon,
   PanelRightOpenIcon,
@@ -55,6 +56,9 @@ const ICONS: Record<string, FC<{ className?: string }>> = {
   [TOOL_NAMES.memoryWrite]: BrainIcon,
   [TOOL_NAMES.driveSearch]: HardDriveIcon,
   [TOOL_NAMES.driveRead]: HardDriveIcon,
+  [TOOL_NAMES.githubGetRepo]: FolderGit2Icon,
+  [TOOL_NAMES.githubListContents]: FolderGit2Icon,
+  [TOOL_NAMES.githubReadFile]: FolderGit2Icon,
   [TOOL_NAMES.fetchUrl]: GlobeIcon,
   [TOOL_NAMES.toolSearch]: WrenchIcon,
 };
@@ -72,8 +76,19 @@ const ToolShell: FC<{
   const display = getToolDisplay(name);
   const Icon = ICONS[name] ?? WrenchIcon;
 
+  // When a finished tool prefers to open (errors, useful results), sync once.
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
+
   return (
-    <div className="my-2 overflow-hidden rounded-lg bg-[var(--elevated)] font-[family-name:var(--font-sans)] text-[13px]">
+    <div
+      className={cn(
+        "my-1.5 overflow-hidden rounded-lg bg-[var(--elevated)] font-[family-name:var(--font-sans)] text-[13px]",
+        "transition-[opacity,transform] duration-200 ease-out",
+        running ? "opacity-100" : "opacity-95",
+      )}
+    >
       <div className="flex items-center gap-2 px-3 py-2">
         <button
           type="button"
@@ -113,17 +128,19 @@ const ToolShell: FC<{
             ) : (
               <CheckIcon className="size-3.5 shrink-0 text-emerald-600" />
             ))}
-          <ChevronDownIcon
-            className={cn(
-              "size-4 shrink-0 text-[var(--muted)] transition-transform",
-              open && "rotate-180",
-            )}
-          />
+          {!!children && (
+            <ChevronDownIcon
+              className={cn(
+                "size-4 shrink-0 text-[var(--muted)] transition-transform duration-200",
+                open && "rotate-180",
+              )}
+            />
+          )}
         </button>
         {headerAction}
       </div>
       {open && children && (
-        <div className="border-t border-[var(--border)] px-3 py-2.5">
+        <div className="border-t border-[var(--border)] px-3 py-2.5 animate-[fadeIn_150ms_ease-out]">
           {children}
         </div>
       )}
@@ -304,6 +321,12 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [complete]);
 
+  const streamingHint =
+    !input?.title && part.argsText
+      ? part.argsText.match(/"title"\s*:\s*"([^"]+)"/)?.[1]
+      : undefined;
+  const kindHint = input?.kind || part.argsText?.match(/"kind"\s*:\s*"(\w+)"/)?.[1];
+
   return (
     <ToolShell
       name={TOOL_NAMES.createArtifact}
@@ -313,7 +336,13 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
           ? result?.persisted
             ? `${input.title} · saved`
             : input.title
-          : undefined
+          : streamingHint
+            ? kindHint
+              ? `${streamingHint} · ${kindHint}`
+              : streamingHint
+            : kindHint
+              ? `Creating ${kindHint}…`
+              : undefined
       }
       headerAction={
         artifact ? (
@@ -540,6 +569,164 @@ const DriveReadToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 
 /* ─── Fetch URL ─── */
 
+/* ─── GitHub ─── */
+
+const GitHubGetRepoToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = partIsRunning(part);
+  const input = part.args as { repo?: string } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    error?: string;
+    repository?: {
+      fullName?: string;
+      description?: string | null;
+      defaultBranch?: string;
+      private?: boolean;
+      language?: string | null;
+      htmlUrl?: string;
+    };
+  } | undefined;
+  const error = part.isError || (output ? output.ok === false : false);
+  const repo = output?.repository;
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.githubGetRepo}
+      running={running}
+      error={error}
+      subtitle={repo?.fullName || input?.repo}
+      defaultOpen={!running && (!!repo || !!output?.error)}
+    >
+      {output?.error && (
+        <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
+          {output.error}
+        </div>
+      )}
+      {repo && (
+        <div className="space-y-1.5 text-[12px] text-[var(--text)]">
+          {repo.htmlUrl && (
+            <a
+              href={repo.htmlUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 font-medium text-[var(--accent)] hover:underline"
+            >
+              {repo.fullName}
+              <ExternalLinkIcon className="size-3" />
+            </a>
+          )}
+          {repo.description && (
+            <p className="text-[var(--muted)]">{repo.description}</p>
+          )}
+          <p className="text-[11px] text-[var(--muted-soft)]">
+            {[
+              repo.private ? "private" : "public",
+              repo.language,
+              repo.defaultBranch ? `default ${repo.defaultBranch}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+      )}
+    </ToolShell>
+  );
+};
+
+const GitHubListContentsToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = partIsRunning(part);
+  const input = part.args as { repo?: string; path?: string } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    error?: string;
+    path?: string;
+    entries?: Array<{ name: string; path: string; type: string; size?: number }>;
+  } | undefined;
+  const error = part.isError || (output ? output.ok === false : false);
+  const entries = output?.entries ?? [];
+  const pathLabel = output?.path || input?.path || "/";
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.githubListContents}
+      running={running}
+      error={error}
+      subtitle={
+        input?.repo
+          ? `${input.repo}${pathLabel && pathLabel !== "/" ? ` · ${pathLabel}` : ""}`
+          : pathLabel
+      }
+      defaultOpen={!running && (entries.length > 0 || !!output?.error)}
+    >
+      {output?.error && (
+        <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
+          {output.error}
+        </div>
+      )}
+      {entries.length > 0 && (
+        <ul className="max-h-56 space-y-1 overflow-auto">
+          {entries.map((e) => (
+            <li
+              key={e.path || e.name}
+              className="flex items-center gap-2 text-[12px] text-[var(--text)]"
+            >
+              <FileIcon className="size-3.5 shrink-0 text-[var(--muted)]" />
+              <span className="min-w-0 truncate font-medium">{e.name}</span>
+              <span className="shrink-0 text-[10px] text-[var(--muted-soft)]">
+                {e.type}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </ToolShell>
+  );
+};
+
+const GitHubReadFileToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = partIsRunning(part);
+  const input = part.args as { repo?: string; path?: string } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    error?: string;
+    name?: string;
+    path?: string;
+    text?: string;
+    truncated?: boolean;
+  } | undefined;
+  const error = part.isError || (output ? output.ok === false : false);
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.githubReadFile}
+      running={running}
+      error={error}
+      subtitle={output?.path || input?.path || input?.repo}
+      defaultOpen={!running && (!!output?.text || !!output?.error)}
+    >
+      {output?.error && (
+        <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
+          {output.error}
+        </div>
+      )}
+      {output?.text && (
+        <CodeSnippet
+          code={
+            output.text.length > 4000
+              ? `${output.text.slice(0, 4000)}…`
+              : output.text
+          }
+          label={
+            output.truncated
+              ? `${output.name || "File"} (truncated)`
+              : output.name || "File"
+          }
+        />
+      )}
+    </ToolShell>
+  );
+};
+
 const FetchUrlToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const running = partIsRunning(part);
   const input = part.args as { url?: string } | undefined;
@@ -673,6 +860,12 @@ export const ToolCallPart: FC<{ part: ToolPartLike }> = ({ part }) => {
       return <DriveSearchToolCall part={part} />;
     case TOOL_NAMES.driveRead:
       return <DriveReadToolCall part={part} />;
+    case TOOL_NAMES.githubGetRepo:
+      return <GitHubGetRepoToolCall part={part} />;
+    case TOOL_NAMES.githubListContents:
+      return <GitHubListContentsToolCall part={part} />;
+    case TOOL_NAMES.githubReadFile:
+      return <GitHubReadFileToolCall part={part} />;
     case TOOL_NAMES.fetchUrl:
       return <FetchUrlToolCall part={part} />;
     case TOOL_NAMES.toolSearch:
