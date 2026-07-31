@@ -90,18 +90,18 @@ export const Thread: FC = () => {
         <div
           className={cn(
             "mx-auto flex w-full max-w-[var(--thread-max-width)] flex-1 flex-col px-4 sm:px-6",
-            isEmpty
-              ? "items-center justify-center px-4 pb-10 pt-6"
-              : "pt-2 sm:pt-4",
+            isEmpty ? "min-h-0 px-4 pt-2" : "pt-2 sm:pt-4",
           )}
         >
           {isEmpty ? (
-            <>
-              <ThreadWelcome />
-              <div className="mt-8 w-full max-w-[var(--thread-max-width)]">
+            <div className="flex w-full min-h-0 flex-1 flex-col">
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
+                <ThreadWelcome />
+              </div>
+              <div className="w-full shrink-0 pb-4 md:pb-6">
                 <Composer />
               </div>
-            </>
+            </div>
           ) : (
             <>
               <div className="mb-16 flex flex-col gap-y-8 empty:hidden">
@@ -159,30 +159,31 @@ function getWelcomePhrase() {
 const ThreadWelcome: FC = () => {
   const phrase = getWelcomePhrase();
 
-  // Figma empty state: italic greeting with the mark floating to its right,
-  // sitting a short gap above the composer (not a stacked logo-above-title block).
+  // Figma empty state: mark centered above italic greeting; composer sits lower.
   return (
-    <div className="flex items-center justify-center gap-3 px-2">
+    <div className="flex w-full flex-col items-center px-2 text-center">
+      <div className="mb-4 flex size-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--elevated)]">
+        <Image
+          src="/logo.jpg"
+          alt="Aether"
+          width={36}
+          height={36}
+          className="size-9 rounded-full object-cover"
+        />
+      </div>
       <h1
         className="font-[family-name:var(--font-serif)] text-[var(--text)]"
         style={{
-          fontSize: "clamp(1.35rem, 3.2vw, 1.85rem)",
+          fontSize: "clamp(0.95rem, 2.25vw, 1.2rem)",
           fontWeight: 400,
           fontStyle: "italic",
-          letterSpacing: "-0.02em",
-          lineHeight: 1.15,
+          letterSpacing: "-0.015em",
+          lineHeight: 1.18,
+          maxWidth: "28rem",
         }}
       >
         {phrase}
       </h1>
-      <Image
-        src="/logo.jpg"
-        alt=""
-        width={36}
-        height={36}
-        className="size-9 shrink-0 rounded-full object-cover shadow-[0_0_0_1px_var(--border)]"
-        aria-hidden
-      />
     </div>
   );
 };
