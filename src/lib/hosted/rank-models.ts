@@ -42,6 +42,32 @@ export const PREFERRED_DEFAULT_MODELS = [
   "openai/gpt-4o",
 ] as const;
 
+/**
+ * Short “major models” list for the default picker view (Cursor-style).
+ * Full catalog is available via search. Missing ids are skipped at runtime.
+ */
+export const FEATURED_MODEL_IDS = [
+  // ChatGPT
+  "openai/gpt-5.6-sol",
+  "openai/gpt-5.5",
+  "openai/gpt-5.4",
+  "openai/o3",
+  // Claude
+  "anthropic/claude-opus-5",
+  "anthropic/claude-sonnet-5",
+  "anthropic/claude-fable-5",
+  "anthropic/claude-haiku-4.5",
+  // More
+  "x-ai/grok-4.5",
+  "moonshotai/kimi-k3",
+  "google/gemini-3.5-flash",
+  "deepseek/deepseek-r1",
+] as const;
+
+const FEATURED_INDEX = new Map(
+  FEATURED_MODEL_IDS.map((id, i) => [id, i] as const),
+);
+
 /** Exact-id pins (lower index = higher). Covers frontier chat models. */
 const PIN_ORDER: string[] = [
   // ChatGPT / OpenAI
@@ -175,6 +201,12 @@ export function brandModelLabel(id: string, upstreamName: string): string {
   if (family === "claude") {
     return cleaned.replace(/^Anthropic:\s*/i, "") || cleaned;
   }
+  if (id.startsWith("deepseek/")) {
+    return /^deepseek\b/i.test(cleaned) ? cleaned : `DeepSeek ${cleaned}`;
+  }
+  if (id.startsWith("moonshotai/") || id.startsWith("x-ai/")) {
+    return cleaned;
+  }
   return cleaned;
 }
 
@@ -261,4 +293,35 @@ export function pickDefaultModel(models: RankedModelOption[]): string {
   }
   const firstChatgpt = models.find((m) => m.family === "chatgpt");
   return firstChatgpt?.id ?? models[0]?.id ?? "";
+}
+
+/** Featured majors in pinned order; only ids present in `models`. */
+export function featuredModelsForPicker<T extends { id: string }>(
+  models: T[],
+): T[] {
+  const byId = new Map(models.map((m) => [m.id, m]));
+  const out: T[] = [];
+  for (const id of FEATURED_MODEL_IDS) {
+    const hit = byId.get(id);
+    if (hit) out.push(hit);
+  }
+  return out;
+}
+
+export function isFeaturedModelId(id: string): boolean {
+  return FEATURED_INDEX.has(id as (typeof FEATURED_MODEL_IDS)[number]);
+}
+
+/** Case-insensitive match on id + label. */
+export function filterModelsByQuery<T extends { id: string; label: string }>(
+  models: T[],
+  query: string,
+): T[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return models;
+  const tokens = q.split(/\s+/).filter(Boolean);
+  return models.filter((m) => {
+    const hay = `${m.label} ${m.id}`.toLowerCase();
+    return tokens.every((t) => hay.includes(t));
+  });
 }
