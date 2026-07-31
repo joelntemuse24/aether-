@@ -4,7 +4,8 @@ import {
   getOpenRouterUpstream,
   type UpstreamConfig,
 } from "./config";
-import { HOSTED_CATALOG, type HostedModelFamily } from "./catalog";
+import type { HostedModelFamily } from "./catalog";
+import { familyForRankedModel } from "./rank-models";
 
 export type RoutedUpstream = {
   upstream: UpstreamConfig;
@@ -19,7 +20,10 @@ export type HostedRoute = {
 };
 
 function stripProviderPrefix(modelId: string): string {
-  return modelId.replace(/^(anthropic|openai|google|meta-llama|meta|deepseek)\//, "");
+  return modelId.replace(
+    /^(anthropic|openai|google|meta-llama|meta|deepseek|x-ai|moonshotai)\//,
+    "",
+  );
 }
 
 /** Map Aether / short ids onto OpenRouter's provider/model form. */
@@ -39,27 +43,13 @@ export function toOpenRouterModelId(modelId: string): string {
   return modelId;
 }
 
-/** Model id for OpenAI-compatible specialty gateways (BUZZ, Code Easy, …). */
+/** Model id for OpenAI-compatible specialty gateways (BUZZ, …). */
 export function toGatewayModelId(modelId: string): string {
   return stripProviderPrefix(modelId);
 }
 
 export function familyForModel(modelId: string): HostedModelFamily {
-  const catalog = HOSTED_CATALOG.find((m) => m.id === modelId);
-  if (catalog) return catalog.family;
-
-  const id = modelId.toLowerCase();
-  const bare = stripProviderPrefix(id);
-  if (bare.startsWith("claude") || id.startsWith("anthropic/")) return "claude";
-  if (
-    bare.startsWith("gpt-") ||
-    /^o[0-9]/.test(bare) ||
-    bare.startsWith("chatgpt-") ||
-    id.startsWith("openai/")
-  ) {
-    return "gpt";
-  }
-  return "other";
+  return familyForRankedModel(modelId);
 }
 
 /**
@@ -87,17 +77,11 @@ export function resolveHostedRoute(modelId: string): HostedRoute | null {
     if (!primary) return null;
     const fallbacks: RoutedUpstream[] = [];
     const or = openrouterRoute();
-    if (
-      or &&
-      (primary.upstream.id !== "openrouter" ||
-        primary.modelId !== or.modelId)
-    ) {
-      if (primary.upstream.id !== "openrouter") fallbacks.push(or);
-    }
+    if (or && primary.upstream.id !== "openrouter") fallbacks.push(or);
     return { primary, fallbacks };
   }
 
-  if (family === "gpt") {
+  if (family === "chatgpt") {
     const primary: RoutedUpstream | null = gpt.configured
       ? { upstream: gpt, modelId: toGatewayModelId(trimmed) }
       : openrouterRoute();
