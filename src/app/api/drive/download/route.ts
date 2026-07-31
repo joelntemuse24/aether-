@@ -196,7 +196,7 @@ export async function POST(req: Request) {
       });
     }
 
-    if (isImageFile(mimeType)) {
+    if (isImageFile(name, mimeType)) {
       if (blob.size > MAX_EMBEDDED_IMAGE_BYTES) {
         const mb = (MAX_EMBEDDED_IMAGE_BYTES / (1024 * 1024)).toFixed(0);
         return NextResponse.json({

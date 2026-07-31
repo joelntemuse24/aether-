@@ -39,9 +39,9 @@ import { friendlyChatError } from "@/lib/chat-errors";
 
 /**
  * Vercel always enforces a function wall clock — you cannot remove this.
- * Fluid/Pro supports higher values (up to ~800); 300 covers deep tool runs.
+ * Fluid/Pro supports up to ~800s; long artifact + tool runs need the headroom.
  */
-export const maxDuration = 300;
+export const maxDuration = 800;
 export const runtime = "nodejs";
 
 type ProviderId = "openrouter" | "openai" | "anthropic" | "custom";

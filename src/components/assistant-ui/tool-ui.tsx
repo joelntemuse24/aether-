@@ -48,6 +48,47 @@ function partIsRunning(part: ToolPartLike): boolean {
   return t === "running" || t === "requires-action" || t === undefined;
 }
 
+/**
+ * Best-effort extract of a JSON string field from partial tool argsText
+ * while the model is still streaming the tool-call arguments.
+ */
+function extractPartialJsonString(
+  argsText: string | undefined,
+  key: string,
+): string | undefined {
+  if (!argsText) return undefined;
+  const needle = `"${key}"`;
+  const keyIdx = argsText.indexOf(needle);
+  if (keyIdx < 0) return undefined;
+  let i = keyIdx + needle.length;
+  while (i < argsText.length && /[\s:]/.test(argsText[i]!)) i++;
+  if (argsText[i] !== '"') return undefined;
+  i++;
+  let out = "";
+  while (i < argsText.length) {
+    const ch = argsText[i]!;
+    if (ch === "\\") {
+      const next = argsText[i + 1];
+      if (next === undefined) break;
+      if (next === "n") out += "\n";
+      else if (next === "t") out += "\t";
+      else if (next === "r") out += "\r";
+      else if (next === '"' || next === "\\") out += next;
+      else if (next === "u" && /^[0-9a-fA-F]{4}/.test(argsText.slice(i + 2, i + 6))) {
+        out += String.fromCharCode(parseInt(argsText.slice(i + 2, i + 6), 16));
+        i += 6;
+        continue;
+      } else out += next;
+      i += 2;
+      continue;
+    }
+    if (ch === '"') break;
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
 const ICONS: Record<string, FC<{ className?: string }>> = {
   [TOOL_NAMES.executePython]: TerminalIcon,
   [TOOL_NAMES.webSearch]: SearchIcon,
@@ -168,16 +209,24 @@ const PythonToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const input = part.args as Partial<ExecutePythonInput> | undefined;
   const output = part.result as ExecutePythonOutput | undefined;
   const error = output ? !output.ok : part.isError;
+  const code =
+    typeof input?.code === "string"
+      ? input.code
+      : extractPartialJsonString(part.argsText, "code");
+  const description =
+    input?.description || extractPartialJsonString(part.argsText, "description");
 
   return (
     <ToolShell
       name={TOOL_NAMES.executePython}
       running={running}
       error={error}
-      subtitle={input?.description}
-      defaultOpen={!!error}
+      subtitle={description}
+      defaultOpen={!!error || (running && !!code)}
     >
-      {input?.code && <CodeSnippet code={input.code} label="Code" />}
+      {code && (
+        <CodeSnippet code={code} label={running ? "Writing code…" : "Code"} />
+      )}
       {output && (
         <div className="mt-2 space-y-2">
           {output.stdout?.trim() && (
@@ -210,6 +259,8 @@ const WebSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const output = part.result as WebSearchOutput | undefined;
   const error = output ? !output.ok : part.isError;
   const resultCount = output?.results?.length ?? 0;
+  const query =
+    input?.query || extractPartialJsonString(part.argsText, "query");
 
   return (
     <ToolShell
@@ -217,10 +268,10 @@ const WebSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       running={running}
       error={error}
       subtitle={
-        input?.query
+        query
           ? resultCount > 0
-            ? `${input.query} · ${resultCount} hit${resultCount === 1 ? "" : "s"}`
-            : input.query
+            ? `${query} · ${resultCount} hit${resultCount === 1 ? "" : "s"}`
+            : query
           : undefined
       }
       // Keep collapsed by default — research turns often fire several searches.
@@ -294,55 +345,112 @@ function toArtifact(id: string, input: CreateArtifactInput): Artifact {
 }
 
 const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const { openArtifact, refreshSaved } = useArtifact();
+  const { openArtifact, refreshSaved, artifact: openPanelArtifact, open } =
+    useArtifact();
   const running = partIsRunning(part);
   const input = part.args as Partial<CreateArtifactInput> | undefined;
   const result = part.result as CreateArtifactOutput | undefined;
   const complete =
     part.result !== undefined && !!input?.content && !!input?.title;
   const openedRef = useRef(false);
+  const lastSyncedLen = useRef(0);
+
+  const streamingTitle =
+    input?.title || extractPartialJsonString(part.argsText, "title");
+  const kindHint =
+    (input?.kind as string | undefined) ||
+    extractPartialJsonString(part.argsText, "kind") ||
+    part.argsText?.match(/"kind"\s*:\s*"(\w+)"/)?.[1];
+  const streamingContent =
+    typeof input?.content === "string"
+      ? input.content
+      : extractPartialJsonString(part.argsText, "content");
+  const streamingLanguage =
+    input?.language || extractPartialJsonString(part.argsText, "language");
 
   const artifactId = result?.id || part.toolCallId;
-  const artifact =
-    input?.content && input?.title
-      ? toArtifact(artifactId, input as CreateArtifactInput)
+  const draft: Artifact | null =
+    streamingTitle && streamingContent !== undefined
+      ? toArtifact(artifactId, {
+          title: streamingTitle,
+          kind: (kindHint as ArtifactKind) || "code",
+          language: streamingLanguage,
+          content: streamingContent,
+        })
       : null;
 
-  // Auto-open the panel once when the artifact is fully created.
+  const completeArtifact =
+    complete && input?.content && input?.title
+      ? toArtifact(artifactId, input as CreateArtifactInput)
+      : null;
+  const artifact = completeArtifact ?? draft;
+
+  // Open early while writing; keep the panel in sync if the user left it open.
   useEffect(() => {
-    if (complete && artifact && !openedRef.current) {
-      openedRef.current = true;
-      openArtifact({
-        ...artifact,
-        persisted: !!result?.persisted,
-      });
+    if (!artifact) return;
+
+    if (complete) {
+      if (!openedRef.current || (open && openPanelArtifact?.id === artifact.id)) {
+        openedRef.current = true;
+        openArtifact({
+          ...artifact,
+          persisted: !!result?.persisted,
+        });
+      }
       if (result?.persisted) void refreshSaved();
+      lastSyncedLen.current = artifact.code.length;
+      return;
+    }
+
+    if (!running) return;
+    // Wait for a little body so we don't flash an empty panel.
+    if (artifact.code.length < 24) return;
+
+    if (!openedRef.current) {
+      openedRef.current = true;
+      lastSyncedLen.current = artifact.code.length;
+      openArtifact(artifact);
+      return;
+    }
+
+    // Live-update only if the panel is still showing this draft.
+    if (
+      open &&
+      openPanelArtifact?.id === artifact.id &&
+      artifact.code.length !== lastSyncedLen.current
+    ) {
+      lastSyncedLen.current = artifact.code.length;
+      openArtifact(artifact);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [complete]);
+  }, [running, complete, artifact?.code, artifact?.title, artifact?.id]);
 
-  const streamingHint =
-    !input?.title && part.argsText
-      ? part.argsText.match(/"title"\s*:\s*"([^"]+)"/)?.[1]
+  const previewLabel =
+    kindHint === "document"
+      ? "Writing"
+      : kindHint === "code"
+        ? "Coding"
+        : "Building";
+  const charHint =
+    streamingContent !== undefined
+      ? `${streamingContent.length.toLocaleString()} chars`
       : undefined;
-  const kindHint = input?.kind || part.argsText?.match(/"kind"\s*:\s*"(\w+)"/)?.[1];
 
   return (
     <ToolShell
       name={TOOL_NAMES.createArtifact}
       running={running}
+      defaultOpen={running && !!streamingContent}
       subtitle={
-        input?.title
+        streamingTitle
           ? result?.persisted
-            ? `${input.title} · saved`
-            : input.title
-          : streamingHint
-            ? kindHint
-              ? `${streamingHint} · ${kindHint}`
-              : streamingHint
-            : kindHint
-              ? `Creating ${kindHint}…`
-              : undefined
+            ? `${streamingTitle} · saved`
+            : running
+              ? `${streamingTitle}${charHint ? ` · ${charHint}` : ""}`
+              : streamingTitle
+          : kindHint
+            ? `Creating ${kindHint}…`
+            : undefined
       }
       headerAction={
         artifact ? (
@@ -357,11 +465,21 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
         ) : undefined
       }
     >
-      {input?.kind && (
+      {(kindHint || streamingLanguage) && (
         <div className="text-[12px] text-[var(--muted)]">
-          {input.kind} artifact
-          {input.language ? ` · ${input.language}` : ""}
+          {kindHint ? `${kindHint} artifact` : "artifact"}
+          {streamingLanguage ? ` · ${streamingLanguage}` : ""}
+          {running && streamingContent !== undefined ? ` · ${previewLabel}…` : ""}
         </div>
+      )}
+      {streamingContent !== undefined && streamingContent.length > 0 && (
+        <CodeSnippet
+          code={streamingContent}
+          label={running ? `${previewLabel}…` : "Content"}
+        />
+      )}
+      {running && !streamingContent && part.argsText && (
+        <CodeSnippet code={part.argsText} label="Arguments" />
       )}
     </ToolShell>
   );
@@ -826,14 +944,20 @@ const ToolSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 
 const GenericToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const running = partIsRunning(part);
+  const hasArgs = !!part.argsText;
   return (
     <ToolShell
       name={part.toolName}
       running={running}
       error={part.isError}
-      defaultOpen={false}
+      defaultOpen={running && hasArgs}
     >
-      {part.argsText && <CodeSnippet code={part.argsText} label="Input" />}
+      {part.argsText && (
+        <CodeSnippet
+          code={part.argsText}
+          label={running ? "Calling…" : "Input"}
+        />
+      )}
       {part.result !== undefined && (
         <CodeSnippet
           code={JSON.stringify(part.result, null, 2)}

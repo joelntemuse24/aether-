@@ -47,6 +47,28 @@ const TEXT_EXTENSIONS = new Set([
   "hpp",
 ]);
 
+const IMAGE_EXTENSIONS = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "svg",
+  "bmp",
+  "ico",
+]);
+
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+  ico: "image/x-icon",
+};
+
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB (matches most AI provider limits)
 /** Max files pending on a message (local + Drive combined). */
 export const MAX_ATTACHMENTS = 6;
@@ -70,12 +92,20 @@ export function isTextFile(name: string, mime: string): boolean {
   return TEXT_EXTENSIONS.has(ext);
 }
 
-export function isImageFile(mime: string): boolean {
-  return mime.startsWith("image/");
+export function isImageFile(name: string, mime: string): boolean {
+  if (mime.startsWith("image/")) return true;
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  return IMAGE_EXTENSIONS.has(ext);
 }
 
 export function isPdfFile(name: string, mime: string): boolean {
   return mime === "application/pdf" || name.toLowerCase().endsWith(".pdf");
+}
+
+function resolveImageMime(name: string, mime: string): string {
+  if (mime.startsWith("image/")) return mime;
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  return IMAGE_MIME_BY_EXT[ext] ?? "image/png";
 }
 
 /** True when the model will receive file/image bytes (not just a name stub). */
@@ -119,15 +149,22 @@ export async function processFiles(
     }
 
     const id = crypto.randomUUID();
+    const mime =
+      file.type ||
+      (isPdfFile(file.name, file.type)
+        ? "application/pdf"
+        : isImageFile(file.name, file.type)
+          ? resolveImageMime(file.name, file.type)
+          : "application/octet-stream");
     const base = {
       id,
       name: file.name,
-      mime: file.type || "application/octet-stream",
+      mime,
       size: file.size,
     };
 
     try {
-      if (isImageFile(file.type)) {
+      if (isImageFile(file.name, file.type)) {
         if (file.size > MAX_EMBEDDED_IMAGE_BYTES) {
           attachments.push({ ...base, kind: "image" });
           errors.push(
@@ -143,11 +180,16 @@ export async function processFiles(
         const capped = text.length > 120_000 ? text.slice(0, 120_000) + "\n\n[… truncated]" : text;
         attachments.push({ ...base, kind: "text", text: capped });
       } else if (isPdfFile(file.name, file.type)) {
-        // Local PDFs are metadata-only (no client-side PDF parse / embed).
-        attachments.push({ ...base, kind: "file" });
-        errors.push(
-          `"${file.name}" was attached by name only — local PDFs aren't sent to the model. Use Drive for PDFs under ${mbLabel(MAX_EMBEDDED_FILE_BYTES)}, or paste the text.`,
-        );
+        // Embed local PDFs the same way Drive does (base64 data URL), within budget.
+        if (file.size > MAX_EMBEDDED_FILE_BYTES) {
+          attachments.push({ ...base, kind: "file" });
+          errors.push(
+            `"${file.name}" is larger than ${mbLabel(MAX_EMBEDDED_FILE_BYTES)}, so it was attached by name only (model cannot read the PDF bytes).`,
+          );
+        } else {
+          const dataUrl = await readAsDataURL(file);
+          attachments.push({ ...base, kind: "file", dataUrl });
+        }
       } else {
         attachments.push({ ...base, kind: "file" });
         errors.push(
