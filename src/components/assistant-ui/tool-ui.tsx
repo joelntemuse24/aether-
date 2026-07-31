@@ -73,7 +73,7 @@ const ToolShell: FC<{
   const Icon = ICONS[name] ?? WrenchIcon;
 
   return (
-    <div className="my-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] font-[family-name:var(--font-sans)] text-[13px]">
+    <div className="my-2 overflow-hidden rounded-lg bg-[var(--elevated)] font-[family-name:var(--font-sans)] text-[13px]">
       <div className="flex items-center gap-2 px-3 py-2">
         <button
           type="button"

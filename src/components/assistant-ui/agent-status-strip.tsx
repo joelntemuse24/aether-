@@ -1,8 +1,7 @@
 "use client";
 
-import { type FC } from "react";
+import { useEffect, useState, type FC } from "react";
 import { useAuiState } from "@assistant-ui/react";
-import { Loader2Icon } from "lucide-react";
 import { getToolDisplay } from "@/lib/tools";
 import { useHarness } from "@/providers/harness-provider";
 
@@ -13,9 +12,16 @@ type ToolishPart = {
   status?: { type?: string };
 };
 
+const THINKING_PHRASES = [
+  "Cooking…",
+  "Gathering threads…",
+  "Building a response…",
+  "Checking the shape of it…",
+];
+
 function runningToolLabel(
   messages: Array<{ role: string; parts?: ToolishPart[] }>,
-): string {
+): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m.role !== "assistant") continue;
@@ -27,19 +33,18 @@ function runningToolLabel(
       if (part.status?.type === "complete") continue;
       return getToolDisplay(part.toolName).runningLabel;
     }
-    return "Writing…";
+    return null;
   }
-  return "Thinking…";
+  return null;
 }
 
 /**
- * Composer-adjacent status while classifying or the assistant is running —
- * Claude/ChatGPT-style "Searching…" / "Running Python…" strip.
+ * Quiet composer-adjacent status — no bordered strip, editorial pacing.
  */
 export const AgentStatusStrip: FC = () => {
   const { classifying } = useHarness();
   const isRunning = useAuiState((s) => s.thread.isRunning);
-  const text = useAuiState((s) => {
+  const toolLabel = useAuiState((s) => {
     if (!s.thread.isRunning) return null;
     return runningToolLabel(
       s.thread.messages as unknown as Array<{
@@ -49,29 +54,40 @@ export const AgentStatusStrip: FC = () => {
     );
   });
 
+  const [phraseIndex, setPhraseIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isRunning || toolLabel || classifying) return;
+    setPhraseIndex(0);
+    const timer = window.setInterval(() => {
+      setPhraseIndex((i) => (i + 1) % THINKING_PHRASES.length);
+    }, 900);
+    return () => window.clearInterval(timer);
+  }, [isRunning, toolLabel, classifying]);
+
   if (classifying) {
     return (
       <div
-        className="mb-1.5 flex items-center gap-2 px-2.5 text-[12px] text-[var(--muted)] animate-[fadeIn_150ms_ease-out]"
+        className="mb-1 px-2.5 text-[12px] tracking-wide text-[var(--muted)] animate-[fadeIn_150ms_ease-out]"
         role="status"
         aria-live="polite"
       >
-        <Loader2Icon className="size-3 animate-spin text-[var(--accent)]" />
-        <span className="tracking-wide">Planning how deep to go…</span>
+        Gathering threads…
       </div>
     );
   }
 
-  if (!isRunning || !text) return null;
+  if (!isRunning) return null;
+
+  const text = toolLabel ?? THINKING_PHRASES[phraseIndex];
 
   return (
     <div
-      className="mb-1.5 flex items-center gap-2 px-2.5 text-[12px] text-[var(--muted)] animate-[fadeIn_150ms_ease-out]"
+      className="mb-1 px-2.5 text-[12px] tracking-wide text-[var(--muted)] animate-[fadeIn_150ms_ease-out]"
       role="status"
       aria-live="polite"
     >
-      <Loader2Icon className="size-3 animate-spin text-[var(--accent)]" />
-      <span className="tracking-wide">{text}</span>
+      {text}
     </div>
   );
 };

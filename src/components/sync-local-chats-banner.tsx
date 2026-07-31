@@ -91,15 +91,14 @@ export function SyncLocalChatsBanner() {
   };
 
   return (
-    <div className="fixed bottom-4 left-1/2 z-[120] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-[var(--border)] bg-[var(--elevated)] px-3 py-2.5 text-xs text-[var(--text-secondary)] shadow-none backdrop-blur-md">
+    <div className="fixed bottom-4 left-1/2 z-[120] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl bg-[var(--elevated)] px-3 py-2.5 text-xs text-[var(--text-secondary)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="font-medium text-[var(--text)]">
             Sync {pendingCount} local chat{pendingCount === 1 ? "" : "s"}?
           </div>
           <p className="leading-relaxed text-[var(--muted)]">
-            These conversations are only in this browser. Upload them to your
-            account so they follow you across devices.
+            Upload browser-only chats to your account.
           </p>
           <div className="flex items-center gap-2 pt-1">
             <button

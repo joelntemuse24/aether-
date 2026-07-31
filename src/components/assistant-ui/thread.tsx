@@ -28,10 +28,12 @@ import {
   BranchPickerPrimitive,
   ComposerPrimitive,
   ErrorPrimitive,
+  ExportedMessageRepository,
   MessagePrimitive,
   ThreadPrimitive,
   useAuiState,
   useComposerRuntime,
+  useThreadRuntime,
 } from "@assistant-ui/react";
 import {
   ArrowDownIcon,
@@ -43,22 +45,29 @@ import {
   FileIcon,
   ImageIcon,
   Loader2Icon,
+  MicIcon,
   PaperclipIcon,
   PencilIcon,
   RefreshCwIcon,
+  RotateCcwIcon,
   SquareIcon,
-  ThumbsDownIcon,
-  ThumbsUpIcon,
   XIcon,
 } from "lucide-react";
 import { ClarifyCard } from "@/components/assistant-ui/clarify-card";
 import { useHarness } from "@/providers/harness-provider";
+import { useGitHub } from "@/providers/github-provider";
 import type { HarnessClassification } from "@/lib/harness/types";
 import {
   heuristicClassify,
   shouldSkipModelClassify,
 } from "@/lib/harness/heuristic";
 import { readThreadIdFromLocation } from "@/lib/thread-url";
+import {
+  speechRecognitionSupported,
+  startSpeechSession,
+  type MicState,
+  type SpeechSession,
+} from "@/lib/speech";
 
 const isNewChatView = (s: AssistantState) =>
   s.thread.messages.length === 0 &&
@@ -139,41 +148,47 @@ const ThreadScrollToBottom: FC = () => {
   );
 };
 
+function getWelcomePhrase() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Howzit?";
+  if (hour < 17) return "we uup";
+  return "in the trenches?";
+}
+
 const ThreadWelcome: FC = () => {
+  const phrase = getWelcomePhrase();
+  const starters = STARTER_PROMPTS.slice(0, 4);
+
   return (
     <div className="mb-8 flex flex-col items-center px-2 text-center sm:mb-10">
       <Image
         src="/logo.jpg"
         alt="Aether"
-        width={56}
-        height={56}
-        className="mb-5 rounded-full object-cover shadow-[0_0_0_1px_var(--border)]"
+        width={40}
+        height={40}
+        className="mb-4 rounded-full object-cover"
       />
       <h1
         className="font-[family-name:var(--font-serif)] text-[var(--text)]"
         style={{
-          fontSize: "clamp(1.85rem, 4vw, 2.35rem)",
+          fontSize: "clamp(0.95rem, 2.25vw, 1.2rem)",
           fontWeight: 400,
           fontStyle: "italic",
           letterSpacing: "-0.015em",
-          lineHeight: 1.2,
+          lineHeight: 1.18,
           maxWidth: "28rem",
         }}
       >
-        Think with me.
+        {phrase}
       </h1>
-      <p className="mt-3 max-w-md text-sm leading-relaxed text-[var(--muted)]">
-        Essays, close readings, research, and living documents — with tools when
-        the work needs them.
-      </p>
 
-      <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
-        {STARTER_PROMPTS.map((starter) => (
+      <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-1 sm:grid-cols-2">
+        {starters.map((starter) => (
           <ThreadPrimitive.Suggestion
             key={starter.id}
             prompt={starter.prompt}
             send
-            className="group flex flex-col items-start gap-1 rounded-xl border border-[var(--border)] bg-[var(--elevated)]/60 px-3.5 py-3 text-left transition-colors hover:border-[var(--accent)]/35 hover:bg-[var(--accent-muted)]"
+            className="group flex flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-[var(--hover-overlay)]"
           >
             <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--muted-soft)]">
               {starter.category}
@@ -184,21 +199,6 @@ const ThreadWelcome: FC = () => {
           </ThreadPrimitive.Suggestion>
         ))}
       </div>
-
-      <p className="mt-5 text-[11px] tracking-wide text-[var(--muted-soft)]">
-        <kbd className="rounded border border-[var(--border)] bg-[var(--elevated)] px-1 py-0.5 font-[family-name:var(--font-mono)] text-[10px]">
-          ⌘N
-        </kbd>{" "}
-        new ·{" "}
-        <kbd className="rounded border border-[var(--border)] bg-[var(--elevated)] px-1 py-0.5 font-[family-name:var(--font-mono)] text-[10px]">
-          ⌘K
-        </kbd>{" "}
-        focus ·{" "}
-        <kbd className="rounded border border-[var(--border)] bg-[var(--elevated)] px-1 py-0.5 font-[family-name:var(--font-mono)] text-[10px]">
-          ⌘,
-        </kbd>{" "}
-        settings
-      </p>
     </div>
   );
 };
@@ -423,15 +423,93 @@ const Composer: FC = () => {
     }).finally(() => setResumeBusy(false));
   };
 
+  const [micState, setMicState] = useState<MicState>("idle");
+  const speechRef = useRef<SpeechSession | null>(null);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const {
+    connected: githubConnected,
+    connect: connectGitHub,
+    githubConfigured,
+  } = useGitHub();
+
+  useEffect(() => {
+    return () => {
+      speechRef.current?.stop();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!attachOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest("[data-attach-menu]")) {
+        setAttachOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [attachOpen]);
+
+  const appendTranscript = (text: string) => {
+    const current = composerRuntime.getState().text ?? "";
+    const next = current ? `${current.trimEnd()} ${text}` : text;
+    composerRuntime.setText(next);
+  };
+
+  const handleMic = () => {
+    if (micState !== "idle") {
+      speechRef.current?.stop();
+      speechRef.current = null;
+      setMicState("idle");
+      return;
+    }
+    if (!speechRecognitionSupported()) {
+      window.dispatchEvent(
+        new CustomEvent("aether:notice", {
+          detail: "Speech input isn’t available in this browser.",
+        }),
+      );
+      return;
+    }
+    setMicState("listening");
+    const session = startSpeechSession({
+      onPartial: () => {
+        /* interim stays in mic placeholder via micState */
+      },
+      onFinal: (text) => {
+        setMicState("transcribing");
+        appendTranscript(text);
+        window.setTimeout(() => setMicState("idle"), 200);
+      },
+      onError: (message) => {
+        window.dispatchEvent(
+          new CustomEvent("aether:notice", { detail: message }),
+        );
+        setMicState("idle");
+      },
+      onEnd: () => {
+        speechRef.current = null;
+        setMicState((s) => (s === "listening" ? "idle" : s));
+      },
+    });
+    speechRef.current = session;
+  };
+
+  const micPlaceholder =
+    micState === "listening"
+      ? "Listening…"
+      : micState === "transcribing"
+        ? "Transcribing…"
+        : "How can I help you today?";
+
   return (
     <ComposerPrimitive.Root className="relative flex w-full flex-col border-0 bg-transparent">
       {!hasKey && (
         <button
           type="button"
           onClick={() => setOpenSettings(true)}
-          className="mb-2 rounded-xl border border-[var(--border)] bg-[var(--elevated)] px-3 py-2 text-left text-xs text-[var(--muted)] hover:bg-[var(--elevated-deep)]"
+          className="mb-1.5 px-2.5 text-left text-[12px] text-[var(--muted)] hover:text-[var(--text)]"
         >
-          Open Settings to enable Aether Cloud or add your own API key →
+          Chat isn’t ready yet — open Preferences.
         </button>
       )}
 
@@ -479,7 +557,7 @@ const Composer: FC = () => {
         )}
 
         <ComposerPrimitive.Input
-          placeholder="How can I help you today?"
+          placeholder={micPlaceholder}
           className="max-h-40 min-h-[44px] w-full resize-none border-0 bg-transparent px-2.5 py-2 text-[15px] leading-relaxed text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)]"
           rows={1}
           autoFocus
@@ -502,18 +580,38 @@ const Composer: FC = () => {
 
         <ComposerAction
           onAttachClick={() => fileInputRef.current?.click()}
+          attachOpen={attachOpen}
+          onAttachMenuToggle={() => setAttachOpen((v) => !v)}
           onDriveClick={() => {
+            setAttachOpen(false);
             if (driveConnected) {
               setBrowserOpen(true);
               return;
             }
             openConnectedAccounts();
           }}
+          onGitHubClick={() => {
+            setAttachOpen(false);
+            if (githubConnected) {
+              window.dispatchEvent(
+                new CustomEvent("aether:notice", {
+                  detail: "GitHub is connected.",
+                }),
+              );
+              return;
+            }
+            if (githubConfigured) connectGitHub();
+            else openConnectedAccounts();
+          }}
           driveConnected={driveConnected}
           driveAvailable={driveAuthed || driveConnected}
           driveEmail={driveEmail}
+          githubConnected={githubConnected}
+          githubAvailable={githubConfigured || githubConnected}
           classifying={classifying}
           harnessBlocked={!!pending}
+          micState={micState}
+          onMicToggle={handleMic}
           onHarnessSend={() => void sendWithHarness()}
         />
       </div>
@@ -540,60 +638,164 @@ const GoogleDriveIcon: FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
+const GitHubGlyph: FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z" />
+  </svg>
+);
+
 const ComposerAction: FC<{
   onAttachClick: () => void;
+  attachOpen: boolean;
+  onAttachMenuToggle: () => void;
   onDriveClick: () => void;
+  onGitHubClick: () => void;
   driveConnected: boolean;
   driveAvailable: boolean;
   driveEmail?: string | null;
+  githubConnected: boolean;
+  githubAvailable: boolean;
   classifying?: boolean;
   harnessBlocked?: boolean;
+  micState: MicState;
+  onMicToggle: () => void;
   onHarnessSend: () => void;
 }> = ({
   onAttachClick,
+  attachOpen,
+  onAttachMenuToggle,
   onDriveClick,
+  onGitHubClick,
   driveConnected,
   driveAvailable,
   driveEmail,
+  githubConnected,
+  githubAvailable,
   classifying,
   harnessBlocked,
+  micState,
+  onMicToggle,
   onHarnessSend,
 }) => {
+  const micLabel =
+    micState === "idle"
+      ? "Speak"
+      : micState === "listening"
+        ? "Stop listening"
+        : "Transcribing…";
+
   return (
     <div className="flex items-center justify-between gap-2 px-0.5">
       <div className="flex items-center gap-1">
-        <TooltipIconButton
-          tooltip="Attach files"
-          onClick={onAttachClick}
-          className="size-7"
-        >
-          <PaperclipIcon className="size-3.5" />
-        </TooltipIconButton>
-
-        {driveConnected ? (
+        <div className="relative" data-attach-menu>
           <TooltipIconButton
-            tooltip={
-              driveEmail ? `Google Drive · ${driveEmail}` : "Google Drive"
-            }
-            onClick={onDriveClick}
+            tooltip="Attach"
+            onClick={onAttachMenuToggle}
             className="size-7"
+            aria-haspopup="menu"
+            aria-expanded={attachOpen}
           >
-            <GoogleDriveIcon className="size-4" />
+            <PaperclipIcon className="size-4" />
           </TooltipIconButton>
-        ) : driveAvailable ? (
-          <TooltipIconButton
-            tooltip="Connect Google Drive in Settings"
-            onClick={onDriveClick}
-            className="size-7 opacity-70"
-          >
-            <GoogleDriveIcon className="size-4 grayscale" />
-          </TooltipIconButton>
-        ) : null}
+          {attachOpen && (
+            <div
+              className="absolute bottom-full left-0 z-50 mb-2 w-52 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--elevated-deep)] p-1 shadow-lg animate-[fadeIn_140ms_ease-out]"
+              role="menu"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  onAttachClick();
+                  onAttachMenuToggle();
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--hover-overlay)]"
+              >
+                <FileIcon className="size-4 text-[var(--muted)]" />
+                Upload files
+              </button>
+              {(driveAvailable || githubAvailable) && (
+                <div className="px-2 pb-1.5 pt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--muted-soft)]">
+                  {driveConnected || githubConnected
+                    ? "Add from"
+                    : "Connect"}
+                </div>
+              )}
+              {driveAvailable && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={onDriveClick}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--hover-overlay)]"
+                >
+                  <GoogleDriveIcon className="size-4" />
+                  <span className="flex-1 text-[12px] font-medium text-[var(--text)]">
+                    Google Drive
+                  </span>
+                  {driveConnected ? (
+                    <CheckIcon className="size-3.5 text-[var(--muted)]" />
+                  ) : (
+                    <span className="text-[10px] text-[var(--muted-soft)]">
+                      Connect
+                    </span>
+                  )}
+                </button>
+              )}
+              {githubAvailable && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={onGitHubClick}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--hover-overlay)]"
+                >
+                  <GitHubGlyph className="size-4 text-[var(--muted)]" />
+                  <span className="flex-1 text-[12px] font-medium text-[var(--text)]">
+                    GitHub
+                  </span>
+                  {githubConnected ? (
+                    <CheckIcon className="size-3.5 text-[var(--muted)]" />
+                  ) : (
+                    <span className="text-[10px] text-[var(--muted-soft)]">
+                      Connect
+                    </span>
+                  )}
+                </button>
+              )}
+              {driveConnected && driveEmail ? (
+                <div className="truncate px-2.5 pb-1.5 pt-0.5 text-[10px] text-[var(--muted-soft)]">
+                  {driveEmail}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
 
         <ModelPicker />
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onMicToggle}
+          aria-label={micLabel}
+          title={micLabel}
+          className={cn(
+            "relative flex size-8 items-center justify-center rounded-full transition-colors",
+            micState !== "idle"
+              ? "bg-[var(--accent)] text-white"
+              : "text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]",
+          )}
+        >
+          {micState === "transcribing" ? (
+            <Loader2Icon className="size-4 animate-spin" />
+          ) : (
+            <MicIcon className="size-4" />
+          )}
+          {micState === "listening" && (
+            <span className="absolute inset-0 animate-ping rounded-full bg-[var(--accent)] opacity-35" />
+          )}
+        </button>
+
         <AuiIf condition={(s) => !s.thread.isRunning}>
           <button
             type="button"
@@ -614,10 +816,11 @@ const ComposerAction: FC<{
           <ComposerPrimitive.Cancel asChild>
             <button
               type="button"
-              className="flex size-8 items-center justify-center rounded-full bg-[var(--text)] text-white transition-opacity hover:opacity-90"
+              className="flex h-8 items-center gap-2 rounded-full bg-[var(--text)] px-3 text-[var(--canvas)] transition-opacity hover:opacity-80"
               aria-label="Stop generating"
             >
               <SquareIcon className="size-3 fill-current" />
+              <span className="text-[13px] font-medium">Stop</span>
             </button>
           </ComposerPrimitive.Cancel>
         </AuiIf>
@@ -679,8 +882,6 @@ const AssistantMessage: FC = () => {
 };
 
 const AssistantActionBar: FC = () => {
-  const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
-
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
@@ -698,39 +899,72 @@ const AssistantActionBar: FC = () => {
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
       <ActionBarPrimitive.Reload asChild>
-        <TooltipIconButton tooltip="Regenerate">
+        <TooltipIconButton tooltip="Retry">
           <RefreshCwIcon className="size-3.5" />
         </TooltipIconButton>
       </ActionBarPrimitive.Reload>
-      <TooltipIconButton
-        tooltip={feedback === "up" ? "Thanks" : "Good response"}
-        onClick={() => {
-          setFeedback("up");
-          window.dispatchEvent(
-            new CustomEvent("aether:notice", {
-              detail: "Thanks — noted for this response.",
-            }),
-          );
-        }}
-        className={feedback === "up" ? "text-[var(--accent)]" : undefined}
-      >
-        <ThumbsUpIcon className="size-3.5" />
-      </TooltipIconButton>
-      <TooltipIconButton
-        tooltip={feedback === "down" ? "Noted" : "Bad response"}
-        onClick={() => {
-          setFeedback("down");
-          window.dispatchEvent(
-            new CustomEvent("aether:notice", {
-              detail: "Thanks — we'll use that to improve.",
-            }),
-          );
-        }}
-        className={feedback === "down" ? "text-[var(--accent)]" : undefined}
-      >
-        <ThumbsDownIcon className="size-3.5" />
-      </TooltipIconButton>
+      <RestoreToHereButton />
     </ActionBarPrimitive.Root>
+  );
+};
+
+const RestoreToHereButton: FC = () => {
+  const threadRuntime = useThreadRuntime();
+  const messageId = useAuiState((s) => s.message.id);
+  const msgsAfter = useAuiState((s) => {
+    const messages = s.thread.messages;
+    const idx = messages.findIndex((m) => m.id === s.message.id);
+    if (idx < 0) return 0;
+    return messages.length - idx - 1;
+  });
+  const [confirm, setConfirm] = useState(false);
+
+  if (msgsAfter <= 0) return null;
+
+  if (confirm) {
+    return (
+      <div className="ml-1 flex items-center gap-2 rounded-lg bg-[var(--surface)] px-2.5 py-1.5 text-[12px] text-[var(--muted)]">
+        <span>
+          Remove {msgsAfter} message{msgsAfter > 1 ? "s" : ""} after this?
+        </span>
+        <button
+          type="button"
+          onClick={() => setConfirm(false)}
+          className="rounded-md px-1.5 py-0.5 hover:text-[var(--text)]"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const messages = threadRuntime.getState().messages;
+            const idx = messages.findIndex((m) => m.id === messageId);
+            if (idx < 0) {
+              setConfirm(false);
+              return;
+            }
+            const kept = messages.slice(0, idx + 1);
+            threadRuntime.import(ExportedMessageRepository.fromArray(kept));
+            setConfirm(false);
+            window.dispatchEvent(
+              new CustomEvent("aether:notice", { detail: "Reverted." }),
+            );
+          }}
+          className="rounded-md bg-[var(--danger)] px-1.5 py-0.5 font-medium text-white"
+        >
+          Remove
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <TooltipIconButton
+      tooltip="Restore to here"
+      onClick={() => setConfirm(true)}
+    >
+      <RotateCcwIcon className="size-3.5" />
+    </TooltipIconButton>
   );
 };
 
@@ -771,10 +1005,11 @@ const UserActionBar: FC = () => {
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
       <ActionBarPrimitive.Edit asChild>
-        <TooltipIconButton tooltip="Edit">
+        <TooltipIconButton tooltip="Edit & resend">
           <PencilIcon className="size-3.5" />
         </TooltipIconButton>
       </ActionBarPrimitive.Edit>
+      <RestoreToHereButton />
     </ActionBarPrimitive.Root>
   );
 };
@@ -795,7 +1030,7 @@ const EditComposer: FC = () => {
           </ComposerPrimitive.Cancel>
           <ComposerPrimitive.Send asChild>
             <Button size="sm" className="h-8 rounded-full px-3.5">
-              Update
+              Resend
             </Button>
           </ComposerPrimitive.Send>
         </div>
