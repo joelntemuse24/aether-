@@ -3,7 +3,6 @@
 import { useState, type FC } from "react";
 import { cn } from "@/lib/utils";
 import type { ClarifyQuestion, HarnessClassification } from "@/lib/harness/types";
-import { budgetForDepth } from "@/lib/harness/budgets";
 
 type ClarifyCardProps = {
   classification: HarnessClassification;
@@ -12,6 +11,7 @@ type ClarifyCardProps = {
   onSkip: () => void;
 };
 
+/** Inline clarify prompts folded into the composer stack — no card chrome. */
 export const ClarifyCard: FC<ClarifyCardProps> = ({
   classification,
   busy,
@@ -19,28 +19,14 @@ export const ClarifyCard: FC<ClarifyCardProps> = ({
   onSkip,
 }) => {
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const budget = budgetForDepth(classification.depth);
   const questions = classification.questions;
   const allAnswered = questions.every((q) => !!answers[q.id]?.trim());
 
   return (
-    <div className="mb-3 rounded-xl border border-[var(--border)] bg-[var(--elevated)] px-3 py-3 text-[13px] text-[var(--text-secondary)]">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="font-medium text-[var(--text)]">
-          Quick check before I go deep
-        </div>
-        <span className="rounded-md bg-[var(--hover-overlay)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[var(--muted)]">
-          {budget.label} · {classification.intent.replace("_", " ")}
-        </span>
+    <div className="mb-2 px-1 py-1 text-[13px] text-[var(--text-secondary)]">
+      <div className="mb-2 text-[13px] font-medium text-[var(--text)]">
+        Before I go further
       </div>
-
-      {classification.planSteps && classification.planSteps.length > 0 && (
-        <ol className="mb-3 list-decimal space-y-0.5 pl-4 text-[12px] text-[var(--muted)]">
-          {classification.planSteps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-      )}
 
       <div className="space-y-3">
         {questions.map((q) => (
@@ -56,7 +42,7 @@ export const ClarifyCard: FC<ClarifyCardProps> = ({
         ))}
       </div>
 
-      <div className="mt-3 flex items-center gap-2">
+      <div className="mt-2.5 flex items-center gap-2">
         <button
           type="button"
           disabled={busy || !allAnswered}
@@ -71,40 +57,42 @@ export const ClarifyCard: FC<ClarifyCardProps> = ({
           onClick={onSkip}
           className="rounded-lg px-2 py-1.5 text-[12px] text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
         >
-          Skip — just go
+          Skip
         </button>
       </div>
     </div>
   );
 };
 
-const QuestionBlock: FC<{
+function QuestionBlock({
+  question,
+  value,
+  disabled,
+  onChange,
+}: {
   question: ClarifyQuestion;
   value?: string;
   disabled?: boolean;
   onChange: (value: string) => void;
-}> = ({ question, value, disabled, onChange }) => {
-  const options = question.options ?? [];
-  return (
-    <div className="space-y-1.5">
-      <div className="text-[12px] font-medium text-[var(--text)]">
-        {question.prompt}
-      </div>
-      {options.length > 0 ? (
+}) {
+  if (question.options && question.options.length > 0) {
+    return (
+      <div className="space-y-1.5">
+        <div className="text-[12px] text-[var(--text)]">{question.prompt}</div>
         <div className="flex flex-wrap gap-1.5">
-          {options.map((opt) => {
-            const selected = value === opt.id || value === opt.label;
+          {question.options.map((opt) => {
+            const active = value === opt.id;
             return (
               <button
                 key={opt.id}
                 type="button"
                 disabled={disabled}
-                onClick={() => onChange(opt.label)}
+                onClick={() => onChange(opt.id)}
                 className={cn(
-                  "rounded-lg border px-2.5 py-1.5 text-left text-[12px] transition-colors",
-                  selected
-                    ? "border-[var(--accent)] bg-[var(--accent-muted)] text-[var(--text)]"
-                    : "border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--hover-overlay)]",
+                  "rounded-lg px-2.5 py-1 text-[12px] transition-colors",
+                  active
+                    ? "bg-[var(--accent-muted)] text-[var(--text)]"
+                    : "text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]",
                 )}
               >
                 {opt.label}
@@ -112,15 +100,23 @@ const QuestionBlock: FC<{
             );
           })}
         </div>
-      ) : (
-        <input
-          value={value ?? ""}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[12px] text-[var(--text)] outline-none focus:border-[var(--accent)]/40"
-          placeholder="Your answer"
-        />
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <label className="block text-[12px] text-[var(--text)]">
+        {question.prompt}
+      </label>
+      <input
+        type="text"
+        value={value ?? ""}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg border-0 bg-[var(--elevated)] px-2.5 py-1.5 text-[13px] text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)] focus:ring-1 focus:ring-[var(--focus-ring)]"
+        placeholder="Your answer"
+      />
     </div>
   );
-};
+}
