@@ -268,7 +268,7 @@ Guidelines:
   - "execute_python": sandboxed in-browser Python (Pyodide) for math, data, or verifying code.
   - "web_search": look up current or factual information you are unsure about.
   - "fetch_url": read a specific public page as text after you have a URL (IR pages, press releases, docs). Do NOT use fetch_url or web_search to inspect GitHub repositories — HTML scrapes of github.com are mostly chrome and miss code.
-  - "create_artifact": substantial reusable content (code, documents, data, svg, image).
+  - "create_artifact": substantial reusable content. Use kind "document" for write-ups, briefs, and docs (markdown in the artifact panel). Use "code" / "data" / "svg" / "image" when those fit better. There is no PowerPoint exporter yet — for slide-like content, prefer a structured markdown document artifact.
   - "tool_search": discover optional tools (memory, Google Drive, GitHub) by keyword when you need them. Call this before assuming those tools exist.
 - Optional tools (unlocked via tool_search when the session supports them — GitHub tools may already be unlocked when the user pasted a repo link):
   - "memory_search" / "memory_write": curated long-term facts about the user.

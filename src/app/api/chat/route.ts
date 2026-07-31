@@ -35,7 +35,8 @@ import { isCloudDbConfigured } from "@/lib/db";
 import { listHostedCandidates } from "@/lib/hosted/client";
 import { isHostedConfigured } from "@/lib/hosted/config";
 
-export const maxDuration = 60;
+/** Long multi-tool turns (repo digs, research) regularly exceed 60s. */
+export const maxDuration = 300;
 export const runtime = "nodejs";
 
 type ProviderId = "openrouter" | "openai" | "anthropic" | "custom";

@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type FC } from "react";
 import { useAuiState } from "@assistant-ui/react";
-import { getToolDisplay } from "@/lib/tools";
 import { useHarness } from "@/providers/harness-provider";
 
 type ToolishPart = {
@@ -19,34 +18,32 @@ const THINKING_PHRASES = [
   "Checking the shape of it…",
 ];
 
-function runningToolLabel(
+function hasVisibleToolCall(
   messages: Array<{ role: string; parts?: ToolishPart[] }>,
-): string | null {
+): boolean {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m.role !== "assistant") continue;
-    const parts = m.parts ?? [];
-    for (let j = parts.length - 1; j >= 0; j--) {
-      const part = parts[j];
-      if (part.type !== "tool-call" || !part.toolName) continue;
-      if (part.result !== undefined) continue;
-      if (part.status?.type === "complete") continue;
-      return getToolDisplay(part.toolName).runningLabel;
+    for (const part of m.parts ?? []) {
+      if (part.type === "tool-call" && part.toolName) return true;
     }
-    return null;
+    // Only inspect the latest assistant message.
+    return false;
   }
-  return null;
+  return false;
 }
 
 /**
- * Quiet composer-adjacent status — no bordered strip, editorial pacing.
+ * Quiet composer-adjacent status while the model is thinking — before tool
+ * shells appear in the message. Once tools render inline, hide to avoid
+ * duplicate “Searching…” labels.
  */
 export const AgentStatusStrip: FC = () => {
   const { classifying } = useHarness();
   const isRunning = useAuiState((s) => s.thread.isRunning);
-  const toolLabel = useAuiState((s) => {
-    if (!s.thread.isRunning) return null;
-    return runningToolLabel(
+  const toolsVisible = useAuiState((s) => {
+    if (!s.thread.isRunning) return false;
+    return hasVisibleToolCall(
       s.thread.messages as unknown as Array<{
         role: string;
         parts?: ToolishPart[];
@@ -57,18 +54,18 @@ export const AgentStatusStrip: FC = () => {
   const [phraseIndex, setPhraseIndex] = useState(0);
 
   useEffect(() => {
-    if (!isRunning || toolLabel || classifying) return;
+    if (!isRunning || toolsVisible || classifying) return;
     setPhraseIndex(0);
     const timer = window.setInterval(() => {
       setPhraseIndex((i) => (i + 1) % THINKING_PHRASES.length);
-    }, 900);
+    }, 2800);
     return () => window.clearInterval(timer);
-  }, [isRunning, toolLabel, classifying]);
+  }, [isRunning, toolsVisible, classifying]);
 
   if (classifying) {
     return (
       <div
-        className="mb-1 px-2.5 text-[12px] tracking-wide text-[var(--muted)] animate-[fadeIn_150ms_ease-out]"
+        className="mb-1 px-2.5 text-[12px] tracking-wide text-[var(--muted)] transition-opacity duration-300"
         role="status"
         aria-live="polite"
       >
@@ -77,17 +74,16 @@ export const AgentStatusStrip: FC = () => {
     );
   }
 
-  if (!isRunning) return null;
-
-  const text = toolLabel ?? THINKING_PHRASES[phraseIndex];
+  // Tool shells in the transcript carry their own status — don't double up.
+  if (!isRunning || toolsVisible) return null;
 
   return (
     <div
-      className="mb-1 px-2.5 text-[12px] tracking-wide text-[var(--muted)] animate-[fadeIn_150ms_ease-out]"
+      className="mb-1 px-2.5 text-[12px] tracking-wide text-[var(--muted)] transition-opacity duration-300"
       role="status"
       aria-live="polite"
     >
-      {text}
+      {THINKING_PHRASES[phraseIndex]}
     </div>
   );
 };
