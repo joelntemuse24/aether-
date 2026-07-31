@@ -151,7 +151,7 @@ export function SettingsDialog() {
               >
                 <div className="font-medium">Aether Cloud</div>
                 <div className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                  Claude, ChatGPT-class, and more — no key needed
+                  Claude, ChatGPT, and more — no key needed
                 </div>
               </button>
               <button
@@ -177,7 +177,7 @@ export function SettingsDialog() {
                 ) : hostedStatus?.available ? (
                   <>
                     Aether Cloud is ready. Pick a model from the composer — Claude,
-                    ChatGPT-class GPT models, and more, with no key required.
+                    ChatGPT, and more, with no key required.
                   </>
                 ) : (
                   <>
