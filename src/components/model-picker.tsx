@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import {
   fetchOpenRouterModels,
@@ -8,9 +8,18 @@ import {
   setCachedModels,
   type ModelOption,
 } from "@/lib/models";
+import { rankModelsForPicker } from "@/lib/hosted/rank-models";
 import { useSettings } from "@/providers/settings-provider";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+
+type PickerModel = ModelOption & { family?: string };
+
+const SECTION_LABELS: Record<string, string> = {
+  chatgpt: "ChatGPT",
+  claude: "Claude",
+  other: "More",
+};
 
 export function ModelPicker({ className }: { className?: string }) {
   const {
@@ -24,24 +33,27 @@ export function ModelPicker({ className }: { className?: string }) {
   const hosted = settings.accessMode === "hosted";
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(!hosted && !getCachedModels());
-  const [models, setModels] = useState<ModelOption[]>(
+  const [models, setModels] = useState<PickerModel[]>(
     () => (hosted ? [] : getCachedModels() ?? []),
   );
   const rootRef = useRef<HTMLDivElement>(null);
+  const didAutoSelect = useRef(false);
 
   useEffect(() => {
     if (hosted) {
-      const hostedModels = (hostedStatus?.models ?? []).map(
-        (m): ModelOption => ({
+      const hostedModels: PickerModel[] = (hostedStatus?.models ?? []).map(
+        (m) => ({
           id: m.id,
           label: m.label,
-          provider: "openrouter",
+          provider: "openrouter" as const,
           description: m.description,
+          family: m.family,
         }),
       );
       setModels(hostedModels);
       setLoading(hostedLoading);
       if (
+        !didAutoSelect.current &&
         !settings.useCustomModel &&
         hostedModels.length > 0 &&
         (!activeModel || !hostedModels.some((m) => m.id === activeModel))
@@ -51,11 +63,13 @@ export function ModelPicker({ className }: { className?: string }) {
           hostedModels.some((m) => m.id === hostedStatus.defaultModel)
             ? hostedStatus.defaultModel
             : hostedModels[0].id;
+        didAutoSelect.current = true;
         updateSettings({ model: next, useCustomModel: false });
       }
       return;
     }
 
+    didAutoSelect.current = false;
     const cached = getCachedModels();
     if (cached) {
       setModels(cached);
@@ -66,10 +80,28 @@ export function ModelPicker({ className }: { className?: string }) {
     fetchOpenRouterModels()
       .then((live) => {
         if (cancelled) return;
-        setModels(live);
-        setCachedModels(live);
-        if (!activeModel && live.length > 0) {
-          updateSettings({ model: live[0].id, useCustomModel: false });
+        // Same capability ranking as Aether Cloud for BYOK OpenRouter picks
+        const ranked = rankModelsForPicker(
+          live.map((m) => ({
+            id: m.id,
+            name: m.label,
+            context_length: undefined,
+          })),
+        ).map(
+          (m): PickerModel => ({
+            id: m.id,
+            label: m.label,
+            provider: "openrouter",
+            description: m.description,
+            family: m.family,
+          }),
+        );
+        setModels(ranked);
+        setCachedModels(ranked);
+        if (!activeModel && ranked.length > 0) {
+          const def =
+            ranked.find((m) => m.family === "chatgpt")?.id ?? ranked[0].id;
+          updateSettings({ model: def, useCustomModel: false });
         }
       })
       .catch(() => {
@@ -100,12 +132,34 @@ export function ModelPicker({ className }: { className?: string }) {
     };
   }, [open]);
 
+  const sections = useMemo(() => {
+    const order = ["chatgpt", "claude", "other"] as const;
+    const grouped = new Map<string, PickerModel[]>();
+    for (const m of models) {
+      const key = m.family || "other";
+      const list = grouped.get(key) ?? [];
+      list.push(m);
+      grouped.set(key, list);
+    }
+    // If models lack family (legacy cache), show flat "Models"
+    if (![...grouped.keys()].some((k) => k in SECTION_LABELS)) {
+      return [{ key: "all", label: hosted ? "Aether Cloud" : "Models", models }];
+    }
+    return order
+      .filter((key) => (grouped.get(key)?.length ?? 0) > 0)
+      .map((key) => ({
+        key,
+        label: SECTION_LABELS[key],
+        models: grouped.get(key) ?? [],
+      }));
+  }, [models, hosted]);
+
   return (
     <div ref={rootRef} className={cn("relative", className)}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-7 max-w-[11rem] items-center gap-1 rounded-md px-2 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+        className="flex h-7 max-w-[14rem] items-center gap-1 rounded-md px-2 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
@@ -121,11 +175,8 @@ export function ModelPicker({ className }: { className?: string }) {
       {open && (
         <div
           role="listbox"
-          className="absolute bottom-full left-0 z-50 mb-2 max-h-72 w-60 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--elevated-deep)] py-1"
+          className="absolute bottom-full left-0 z-50 mb-2 max-h-80 w-72 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--elevated-deep)] py-1"
         >
-          <div className="px-3 pb-1.5 pt-2">
-            <Label>{hosted ? "Aether Cloud" : "Models"}</Label>
-          </div>
           {loading ? (
             <div className="px-3 py-3 text-center">
               <Label>Loading models…</Label>
@@ -133,48 +184,53 @@ export function ModelPicker({ className }: { className?: string }) {
           ) : models.length === 0 ? (
             <div className="px-3 py-3 text-center">
               <Label>
-                {hosted
-                  ? "Cloud models unavailable"
-                  : "No models loaded"}
+                {hosted ? "Cloud models unavailable" : "No models loaded"}
               </Label>
             </div>
           ) : (
             <>
-              {models.map((model) => {
-                const selected =
-                  activeModel === model.id && !settings.useCustomModel;
-                return (
-                  <button
-                    key={model.id}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    onClick={() => {
-                      updateSettings({
-                        model: model.id,
-                        useCustomModel: false,
-                      });
-                      setOpen(false);
-                    }}
-                    className={cn(
-                      "flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--hover-overlay)]",
-                      selected && "bg-[var(--accent-muted)]",
-                    )}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[13px] text-[var(--text)]">
-                        {model.label}
-                      </div>
-                      {model.description && (
-                        <Label>{model.description}</Label>
-                      )}
-                    </div>
-                    {selected && (
-                      <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-[var(--accent)]" />
-                    )}
-                  </button>
-                );
-              })}
+              {sections.map((section) => (
+                <div key={section.key}>
+                  <div className="px-3 pb-1 pt-2">
+                    <Label>{section.label}</Label>
+                  </div>
+                  {section.models.map((model) => {
+                    const selected =
+                      activeModel === model.id && !settings.useCustomModel;
+                    return (
+                      <button
+                        key={model.id}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        onClick={() => {
+                          updateSettings({
+                            model: model.id,
+                            useCustomModel: false,
+                          });
+                          setOpen(false);
+                        }}
+                        className={cn(
+                          "flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--hover-overlay)]",
+                          selected && "bg-[var(--accent-muted)]",
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px] text-[var(--text)]">
+                            {model.label}
+                          </div>
+                          {model.description && (
+                            <Label>{model.description}</Label>
+                          )}
+                        </div>
+                        {selected && (
+                          <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-[var(--accent)]" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
               {!hosted && settings.useCustomModel && settings.customModel && (
                 <div className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--muted)]">
                   Custom: {settings.customModel}

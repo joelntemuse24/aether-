@@ -185,8 +185,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const activeModel = resolveModel(settings);
   const hostedAvailable = hostedStatus?.available ?? false;
+  const hostedLabel = hostedStatus?.models.find((m) => m.id === activeModel)
+    ?.label;
   const activeModelLabel =
-    getHostedModelLabel(activeModel) || getModelLabel(activeModel);
+    hostedLabel ||
+    getHostedModelLabel(activeModel) ||
+    getModelLabel(activeModel);
 
   const value = useMemo<SettingsContextValue>(
     () => ({

@@ -93,7 +93,7 @@ src/app/layout.tsx
 |-----------------|----------|
 | Aether Cloud (hosted) | Server keys: Claude/GPT specialty gateways + OpenRouter long-tail/failover |
 | OpenRouter / OpenAI-compatible / Anthropic | BYOK chat completions streaming via user-supplied key |
-| `GET /api/hosted/status` | Hosted availability + curated catalog (no vendor/key leakage) |
+| `GET /api/hosted/status` | Hosted availability + live ranked catalog (ChatGPT → Claude → More) |
 | OpenRouter `GET /api/v1/models` | BYOK model picker; cache `aether:models-cache:v2` |
 | Resend | Optional magic-link email |
 | Google OAuth + Drive API | Sign-in + readonly browse/download + Drive tools |

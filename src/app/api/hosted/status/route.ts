@@ -1,23 +1,32 @@
 import { NextResponse } from "next/server";
-import {
-  filterCatalogForCapabilities,
-  DEFAULT_HOSTED_MODEL,
-} from "@/lib/hosted/catalog";
+import { DEFAULT_HOSTED_MODEL, filterCatalogForCapabilities } from "@/lib/hosted/catalog";
 import { getHostedCapabilities } from "@/lib/hosted/config";
+import { fetchRankedHostedCatalog } from "@/lib/hosted/openrouter-catalog";
 
 export const runtime = "nodejs";
 
 /**
- * Public hosted status + curated model catalog.
+ * Public hosted status + ranked live model catalog.
  * Does not expose API keys, base URLs, or upstream vendor names.
  */
 export async function GET() {
   const capabilities = getHostedCapabilities();
-  const models = filterCatalogForCapabilities(capabilities);
-  const defaultModel =
-    models.find((m) => m.id === DEFAULT_HOSTED_MODEL)?.id ??
-    models[0]?.id ??
-    "";
+
+  let models: Awaited<ReturnType<typeof fetchRankedHostedCatalog>>["models"] = [];
+  let defaultModel: string = DEFAULT_HOSTED_MODEL;
+
+  try {
+    const live = await fetchRankedHostedCatalog();
+    models = filterCatalogForCapabilities(live.models, capabilities);
+    defaultModel =
+      models.find((m) => m.id === live.defaultModel)?.id ??
+      models.find((m) => m.family === "chatgpt")?.id ??
+      models[0]?.id ??
+      "";
+  } catch (err) {
+    console.error("[api/hosted/status] catalog", err);
+    // Hosted may still be available for chat; picker will show empty/error state.
+  }
 
   return NextResponse.json({
     available: capabilities.available,
