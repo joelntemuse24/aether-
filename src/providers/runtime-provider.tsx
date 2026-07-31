@@ -149,6 +149,13 @@ function useChatThreadRuntime() {
     onError: (error) => {
       console.error("[chat]", error);
       clearChatContext();
+      void import("@/lib/chat-errors").then(({ friendlyChatError }) => {
+        window.dispatchEvent(
+          new CustomEvent("aether:notice", {
+            detail: friendlyChatError(error),
+          }),
+        );
+      });
     },
     onFinish: () => {
       clearAttachments();

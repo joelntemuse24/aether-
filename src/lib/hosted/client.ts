@@ -1,5 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
+import { createFailoverLanguageModel } from "./failover";
 import { resolveHostedRoute, type RoutedUpstream } from "./router";
 
 function createChatModel(
@@ -22,19 +23,19 @@ function createChatModel(
 }
 
 /**
- * Build a LanguageModel for hosted mode. Uses the primary upstream when
- * configured; callers that need failover should use listHostedCandidates.
+ * Build a LanguageModel for hosted mode with automatic upstream failover
+ * (BUZZ → relays → OpenRouter).
  */
 export function createHostedLanguageModel(
   modelId: string,
   origin?: string | null,
 ): LanguageModel | null {
-  const route = resolveHostedRoute(modelId);
-  if (!route) return null;
-  return createChatModel(route.primary, origin);
+  const candidates = listHostedCandidates(modelId, origin);
+  if (candidates.length === 0) return null;
+  return createFailoverLanguageModel(candidates);
 }
 
-/** Ordered candidates: primary then fallbacks (e.g. specialty → OpenRouter). */
+/** Ordered candidates: primary then fallbacks (BUZZ → relays → OpenRouter). */
 export function listHostedCandidates(
   modelId: string,
   origin?: string | null,

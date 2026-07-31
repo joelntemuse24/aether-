@@ -34,8 +34,13 @@ import { messageMentionsGitHubRepo } from "@/lib/connectors/github";
 import { isCloudDbConfigured } from "@/lib/db";
 import { listHostedCandidates } from "@/lib/hosted/client";
 import { isHostedConfigured } from "@/lib/hosted/config";
+import { createFailoverLanguageModel } from "@/lib/hosted/failover";
+import { friendlyChatError } from "@/lib/chat-errors";
 
-/** Long multi-tool turns (repo digs, research) regularly exceed 60s. */
+/**
+ * Vercel always enforces a function wall clock — you cannot remove this.
+ * Fluid/Pro supports higher values (up to ~800); 300 covers deep tool runs.
+ */
 export const maxDuration = 300;
 export const runtime = "nodejs";
 
@@ -318,9 +323,8 @@ export async function POST(req: Request) {
           { status: 503, headers: { "Content-Type": "application/json" } },
         );
       }
-      // Primary upstream; specialty gateways fall back via OpenRouter on later turns
-      // once health tracking is added. For now we use the best configured route.
-      model = candidates[0].model;
+      // BUZZ → optional relays → OpenRouter (see resolveHostedRoute).
+      model = createFailoverLanguageModel(candidates);
     } else {
       const modelId = resolveModel(provider, requestedModel);
       model = buildByokModel({
@@ -402,6 +406,8 @@ export async function POST(req: Request) {
           }
         : {}),
       maxOutputTokens: 8192,
+      // Failover model walks upstreams itself — don't burn 3 retries on one 429.
+      maxRetries: hosted ? 0 : 2,
       abortSignal: req.signal,
       onFinish: () => {
         if (harnessRunId && userId) {
@@ -433,8 +439,7 @@ export async function POST(req: Request) {
             },
           });
         }
-        if (error instanceof Error) return error.message;
-        return "An error occurred while generating a response.";
+        return friendlyChatError(error);
       },
     });
   } catch (error) {
