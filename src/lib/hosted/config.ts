@@ -1,6 +1,8 @@
 /**
  * Server-side hosted upstream configuration.
  * Keys never leave the server; clients only send x-access-mode: hosted.
+ *
+ * Preferred stack: BUZZ (Claude + ChatGPT) + OpenRouter (long-tail / failover).
  */
 
 export type UpstreamId = "claude" | "gpt" | "openrouter";
@@ -15,15 +17,25 @@ export type UpstreamConfig = {
 };
 
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
-const DEFAULT_CLAUDE_BASE = "https://buzzai.cc/v1";
-const DEFAULT_GPT_BASE = "https://api.icodeeasy.cc/v1";
+/** BUZZ dashboard "API Endpoint" is https://api.buzzai.cc — OpenAI SDK needs /v1. */
+const DEFAULT_BUZZ_BASE = "https://api.buzzai.cc/v1";
 
 function env(name: string): string {
   return (process.env[name] ?? "").trim();
 }
 
 function normalizeBaseURL(url: string): string {
-  return url.replace(/\/$/, "");
+  const trimmed = url.replace(/\/$/, "");
+  // Dashboard copies https://api.buzzai.cc without /v1; Chat Completions needs it.
+  if (
+    trimmed === "https://api.buzzai.cc" ||
+    trimmed === "https://buzzai.cc" ||
+    trimmed === "http://api.buzzai.cc" ||
+    trimmed === "http://buzzai.cc"
+  ) {
+    return `${trimmed}/v1`;
+  }
+  return trimmed;
 }
 
 export function getOpenRouterUpstream(): UpstreamConfig {
@@ -37,35 +49,63 @@ export function getOpenRouterUpstream(): UpstreamConfig {
   };
 }
 
-export function getClaudeUpstream(): UpstreamConfig {
-  const apiKey = env("AETHER_HOSTED_CLAUDE_API_KEY");
+/**
+ * Shared BUZZ credentials. One key covers Claude + ChatGPT groups on the token.
+ * Prefer AETHER_HOSTED_BUZZ_*; accept legacy CLAUDE_* aliases.
+ */
+function getBuzzCredentials(): { baseURL: string; apiKey: string } {
+  const apiKey =
+    env("AETHER_HOSTED_BUZZ_API_KEY") ||
+    env("AETHER_HOSTED_CLAUDE_API_KEY");
   const baseURL = normalizeBaseURL(
-    env("AETHER_HOSTED_CLAUDE_BASE_URL") || DEFAULT_CLAUDE_BASE,
+    env("AETHER_HOSTED_BUZZ_BASE_URL") ||
+      env("AETHER_HOSTED_CLAUDE_BASE_URL") ||
+      DEFAULT_BUZZ_BASE,
   );
+  return { baseURL, apiKey };
+}
+
+export function getClaudeUpstream(): UpstreamConfig {
+  const { baseURL, apiKey } = getBuzzCredentials();
   return {
     id: "claude",
-    name: "claude-gateway",
+    name: "buzz",
     baseURL,
     apiKey,
     configured: apiKey.length > 0,
   };
 }
 
+/**
+ * ChatGPT family — same BUZZ key by default.
+ * Optional AETHER_HOSTED_CHATGPT_* / AETHER_HOSTED_GPT_* override if you ever
+ * want a separate gateway; otherwise falls back to BUZZ.
+ */
 export function getGptUpstream(): UpstreamConfig {
-  // Prefer ChatGPT-named env vars; keep GPT_* as aliases.
-  const apiKey =
+  const overrideKey =
     env("AETHER_HOSTED_CHATGPT_API_KEY") || env("AETHER_HOSTED_GPT_API_KEY");
-  const baseURL = normalizeBaseURL(
-    env("AETHER_HOSTED_CHATGPT_BASE_URL") ||
-      env("AETHER_HOSTED_GPT_BASE_URL") ||
-      DEFAULT_GPT_BASE,
-  );
+  if (overrideKey) {
+    const baseURL = normalizeBaseURL(
+      env("AETHER_HOSTED_CHATGPT_BASE_URL") ||
+        env("AETHER_HOSTED_GPT_BASE_URL") ||
+        DEFAULT_BUZZ_BASE,
+    );
+    return {
+      id: "gpt",
+      name: "chatgpt-gateway",
+      baseURL,
+      apiKey: overrideKey,
+      configured: true,
+    };
+  }
+
+  const buzz = getBuzzCredentials();
   return {
     id: "gpt",
-    name: "chatgpt-gateway",
-    baseURL,
-    apiKey,
-    configured: apiKey.length > 0,
+    name: "buzz",
+    baseURL: buzz.baseURL,
+    apiKey: buzz.apiKey,
+    configured: buzz.apiKey.length > 0,
   };
 }
 
@@ -82,13 +122,14 @@ export type HostedCapabilities = {
   available: boolean;
   claude: boolean;
   gpt: boolean;
-  /** Long-tail / non-Claude / non-GPT models via OpenRouter. */
+  /** Long-tail / non-Claude / non-ChatGPT models via OpenRouter. */
   catalog: boolean;
 };
 
 export function getHostedCapabilities(): HostedCapabilities {
   const openrouter = getOpenRouterUpstream().configured;
-  const claude = getClaudeUpstream().configured || openrouter;
+  const buzz = getBuzzCredentials().apiKey.length > 0;
+  const claude = buzz || openrouter;
   const gpt = getGptUpstream().configured || openrouter;
   return {
     available: isHostedConfigured(),
