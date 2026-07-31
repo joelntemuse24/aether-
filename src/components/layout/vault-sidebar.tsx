@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, type FC } from "react";
-import { BookOpenIcon, GripVerticalIcon, XIcon } from "lucide-react";
+import {
+  BookOpenIcon,
+  GripVerticalIcon,
+  TrashIcon,
+  XIcon,
+} from "lucide-react";
 import type { VaultNote } from "@/lib/vault";
 import { cn } from "@/lib/utils";
 
@@ -11,12 +16,14 @@ type VaultSidebarProps = {
   title: string;
   content: string;
   width: number;
+  cloud?: boolean;
   onTitleChange: (value: string) => void;
   onContentChange: (value: string) => void;
   onWidthChange: (value: number) => void;
   onNew: () => void;
   onSelect: (note: VaultNote) => void;
   onSave: () => void;
+  onDelete?: (id: string) => void;
   onClose: () => void;
   onDetach: (point: { x: number; y: number }) => void;
   className?: string;
@@ -28,12 +35,14 @@ export const VaultSidebar: FC<VaultSidebarProps> = ({
   title,
   content,
   width,
+  cloud,
   onTitleChange,
   onContentChange,
   onWidthChange,
   onNew,
   onSelect,
   onSave,
+  onDelete,
   onClose,
   onDetach,
   className,
@@ -61,6 +70,9 @@ export const VaultSidebar: FC<VaultSidebarProps> = ({
         <span className="min-w-0 flex-1 text-[13px] font-medium text-[var(--text)]">
           Vault
         </span>
+        <span className="text-[10px] text-[var(--muted-soft)]">
+          {cloud ? "Synced" : "This device"}
+        </span>
         <button
           type="button"
           onClick={onClose}
@@ -86,19 +98,42 @@ export const VaultSidebar: FC<VaultSidebarProps> = ({
           <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
             {notes.length ? (
               notes.map((note) => (
-                <button
+                <div
                   key={note.id}
-                  type="button"
-                  onClick={() => onSelect(note)}
-                  className="mb-1 w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--hover-overlay)]"
+                  className="group mb-1 flex items-start gap-1 rounded-lg hover:bg-[var(--hover-overlay)]"
                 >
-                  <span className="block truncate text-[12px] font-medium text-[var(--text)]">
-                    {note.title}
-                  </span>
-                  <span className="mt-0.5 block truncate text-[10px] text-[var(--muted-soft)]">
-                    {note.content || "Empty note"}
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(note)}
+                    className="min-w-0 flex-1 px-2.5 py-2 text-left"
+                  >
+                    <span className="block truncate text-[12px] font-medium text-[var(--text)]">
+                      {note.title}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[10px] text-[var(--muted-soft)]">
+                      {note.content || "Empty note"}
+                    </span>
+                  </button>
+                  {onDelete ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Delete “${note.title || "Untitled note"}”?`,
+                          )
+                        ) {
+                          onDelete(note.id);
+                        }
+                      }}
+                      className="mt-1.5 me-1 flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--muted)] opacity-0 transition-opacity hover:text-[var(--text)] group-hover:opacity-100 max-md:opacity-100"
+                      aria-label={`Delete ${note.title}`}
+                      title="Delete"
+                    >
+                      <TrashIcon className="size-3" />
+                    </button>
+                  ) : null}
+                </div>
               ))
             ) : (
               <div className="px-1 py-5 text-[11px] text-[var(--muted-soft)]">

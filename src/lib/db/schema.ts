@@ -168,6 +168,25 @@ export const artifacts = pgTable(
   (t) => [index("artifacts_user_updated_idx").on(t.userId, t.updatedAt)],
 );
 
+/** User Vault notes — in-app scratchpad (not Drive). */
+export const vaultNotes = pgTable(
+  "vault_notes",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    title: text("title").notNull(),
+    content: text("content").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("vault_notes_user_updated_idx").on(t.userId, t.updatedAt)],
+);
+
 export type MemoryRecordRow = typeof memoryRecords.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect;
 export type ArtifactRow = typeof artifacts.$inferSelect;
+export type VaultNoteRow = typeof vaultNotes.$inferSelect;
