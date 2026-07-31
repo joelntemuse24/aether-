@@ -52,13 +52,17 @@ export function getClaudeUpstream(): UpstreamConfig {
 }
 
 export function getGptUpstream(): UpstreamConfig {
-  const apiKey = env("AETHER_HOSTED_GPT_API_KEY");
+  // Prefer ChatGPT-named env vars; keep GPT_* as aliases.
+  const apiKey =
+    env("AETHER_HOSTED_CHATGPT_API_KEY") || env("AETHER_HOSTED_GPT_API_KEY");
   const baseURL = normalizeBaseURL(
-    env("AETHER_HOSTED_GPT_BASE_URL") || DEFAULT_GPT_BASE,
+    env("AETHER_HOSTED_CHATGPT_BASE_URL") ||
+      env("AETHER_HOSTED_GPT_BASE_URL") ||
+      DEFAULT_GPT_BASE,
   );
   return {
     id: "gpt",
-    name: "gpt-gateway",
+    name: "chatgpt-gateway",
     baseURL,
     apiKey,
     configured: apiKey.length > 0,
