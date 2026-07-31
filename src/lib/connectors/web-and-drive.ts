@@ -114,6 +114,21 @@ export async function fetchUrlText(url: string): Promise<{
   text?: string;
   url: string;
 }> {
+  // github.com HTML is mostly chrome; authenticated repo tools are the path.
+  try {
+    const host = new URL(url).hostname.replace(/^www\./i, "").toLowerCase();
+    if (host === "github.com" || host === "gist.github.com") {
+      return {
+        ok: false,
+        url,
+        error:
+          "Do not fetch github.com with fetch_url. Use github_get_repo, github_list_contents, and github_read_file when GitHub is connected (tool_search for 'github' if those tools are not unlocked yet).",
+      };
+    }
+  } catch {
+    // fall through to normal URL validation
+  }
+
   const gate = await assertPublicHttpUrl(url);
   if (!gate.ok) {
     return { ok: false, error: gate.error, url };

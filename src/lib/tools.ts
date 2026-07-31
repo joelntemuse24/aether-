@@ -15,8 +15,11 @@ export const TOOL_NAMES = {
   memoryWrite: "memory_write",
   driveSearch: "drive_search",
   driveRead: "drive_read",
+  githubGetRepo: "github_get_repo",
+  githubListContents: "github_list_contents",
+  githubReadFile: "github_read_file",
   fetchUrl: "fetch_url",
-  /** Deferred discovery — unlocks memory/Drive tools into later steps. */
+  /** Deferred discovery — unlocks memory/Drive/GitHub tools into later steps. */
   toolSearch: "tool_search",
 } as const;
 
@@ -144,6 +147,39 @@ export const driveReadInput = z.object({
   fileId: z.string().describe("Google Drive file id."),
 });
 
+export const githubGetRepoInput = z.object({
+  repo: z
+    .string()
+    .describe(
+      "GitHub repository as owner/repo or a github.com URL (blob/tree links are ok).",
+    ),
+});
+
+export const githubListContentsInput = z.object({
+  repo: z
+    .string()
+    .describe("GitHub repository as owner/repo or a github.com URL."),
+  path: z
+    .string()
+    .optional()
+    .describe("Directory path inside the repo (omit for the root)."),
+  ref: z
+    .string()
+    .optional()
+    .describe("Branch, tag, or commit SHA (defaults to the repo default branch)."),
+});
+
+export const githubReadFileInput = z.object({
+  repo: z
+    .string()
+    .describe("GitHub repository as owner/repo or a github.com URL."),
+  path: z.string().describe("File path inside the repo (e.g. README.md)."),
+  ref: z
+    .string()
+    .optional()
+    .describe("Branch, tag, or commit SHA (defaults to the repo default branch)."),
+});
+
 export const fetchUrlInput = z.object({
   url: z.string().url().describe("Public http(s) URL to fetch as text."),
 });
@@ -152,7 +188,7 @@ export const toolSearchInput = z.object({
   query: z
     .string()
     .describe(
-      "Keywords for the capability you need (e.g. 'memory preferences', 'google drive files').",
+      "Keywords for the capability you need (e.g. 'memory preferences', 'google drive files', 'github repository').",
     ),
 });
 export type ToolSearchInput = z.infer<typeof toolSearchInput>;
@@ -193,6 +229,18 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Drive",
     runningLabel: "Reading Drive file…",
   },
+  [TOOL_NAMES.githubGetRepo]: {
+    label: "GitHub",
+    runningLabel: "Looking up repository…",
+  },
+  [TOOL_NAMES.githubListContents]: {
+    label: "GitHub",
+    runningLabel: "Listing repository files…",
+  },
+  [TOOL_NAMES.githubReadFile]: {
+    label: "GitHub",
+    runningLabel: "Reading repository file…",
+  },
   [TOOL_NAMES.fetchUrl]: {
     label: "Fetch URL",
     runningLabel: "Fetching page…",
@@ -219,12 +267,16 @@ Guidelines:
 - Core tools are always available when tools are on:
   - "execute_python": sandboxed in-browser Python (Pyodide) for math, data, or verifying code.
   - "web_search": look up current or factual information you are unsure about.
-  - "fetch_url": read a specific public page as text after you have a URL (IR pages, press releases, docs).
+  - "fetch_url": read a specific public page as text after you have a URL (IR pages, press releases, docs). Do NOT use fetch_url or web_search to inspect GitHub repositories — HTML scrapes of github.com are mostly chrome and miss code.
   - "create_artifact": substantial reusable content (code, documents, data, svg, image).
-  - "tool_search": discover optional tools (memory, Google Drive) by keyword when you need them. Call this before assuming those tools exist.
-- Optional tools (unlocked via tool_search when the session supports them):
+  - "tool_search": discover optional tools (memory, Google Drive, GitHub) by keyword when you need them. Call this before assuming those tools exist.
+- Optional tools (unlocked via tool_search when the session supports them — GitHub tools may already be unlocked when the user pasted a repo link):
   - "memory_search" / "memory_write": curated long-term facts about the user.
   - "drive_search" / "drive_read": search/read the user's Google Drive when connected.
+  - "github_get_repo": metadata for a connected user's repository (owner/repo or github.com URL).
+  - "github_list_contents": list files/folders in a repo path.
+  - "github_read_file": read a text file from a repo (README, source, config).
+- When the user pastes a github.com link or asks about a repo and GitHub tools are available: call github_get_repo, then github_list_contents / github_read_file. Never fall back to Drive for a GitHub URL.
 - Web research discipline (enforced):
   - Prefer 1–2 focused web_search calls, then draft. Near-duplicate queries are blocked.
   - Depth budgets also cap searches (Quick 1 / Standard 2 / Deep 3). When blocked, fetch_url or answer.

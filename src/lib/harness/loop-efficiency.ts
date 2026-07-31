@@ -25,6 +25,9 @@ export const DEFERRED_TOOL_ORDER = [
   TOOL_NAMES.memoryWrite,
   TOOL_NAMES.driveSearch,
   TOOL_NAMES.driveRead,
+  TOOL_NAMES.githubGetRepo,
+  TOOL_NAMES.githubListContents,
+  TOOL_NAMES.githubReadFile,
 ] as const;
 
 const DEFERRED_SET = new Set<string>(DEFERRED_TOOL_ORDER);
@@ -84,6 +87,45 @@ const CATALOG: Record<string, Omit<ToolCatalogEntry, "name">> = {
       "open file",
       "document",
       "docs",
+    ],
+  },
+  [TOOL_NAMES.githubGetRepo]: {
+    description:
+      "Get metadata for a GitHub repository the user can access (owner/repo or github.com URL).",
+    keywords: [
+      "github",
+      "repo",
+      "repository",
+      "codebase",
+      "pull request",
+      "gh",
+    ],
+  },
+  [TOOL_NAMES.githubListContents]: {
+    description: "List files and folders in a GitHub repository path.",
+    keywords: [
+      "github",
+      "repo",
+      "repository",
+      "files",
+      "folder",
+      "directory",
+      "tree",
+      "list files",
+      "codebase",
+    ],
+  },
+  [TOOL_NAMES.githubReadFile]: {
+    description: "Read a text file from a GitHub repository by path.",
+    keywords: [
+      "github",
+      "repo",
+      "repository",
+      "read file",
+      "source",
+      "readme",
+      "code",
+      "blob",
     ],
   },
 };
@@ -234,6 +276,11 @@ export function createAgentLoopController(input: {
   depth: HarnessDepth;
   /** Tool names present in this request's registry. */
   availableToolNames: readonly string[];
+  /**
+   * Deferred tools to unlock on step 0 (e.g. GitHub tools when the user
+   * pasted a github.com link — skip tool_search discovery).
+   */
+  seedUnlocked?: readonly string[];
 }): AgentLoopController {
   const available = [...input.availableToolNames];
   const availableSet = new Set(available);
@@ -242,6 +289,10 @@ export function createAgentLoopController(input: {
   );
   const hasDeferred = deferredAvailable.length > 0;
   const unlocked = new Set<string>();
+  const deferredSet = new Set<string>(deferredAvailable);
+  for (const name of input.seedUnlocked ?? []) {
+    if (deferredSet.has(name)) unlocked.add(name);
+  }
   const priorQueries: string[] = [];
   const webSearchBudget = webSearchBudgetForDepth(input.depth);
 
@@ -263,7 +314,7 @@ export function createAgentLoopController(input: {
 
   return {
     toolOrder,
-    initialActiveTools: coreActive,
+    initialActiveTools: activeTools(),
     webSearchBudget,
     prepareStep: () => ({
       activeTools: activeTools(),
