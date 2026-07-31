@@ -8,6 +8,9 @@ import {
   memoryWriteInput,
   driveSearchInput,
   driveReadInput,
+  githubGetRepoInput,
+  githubListContentsInput,
+  githubReadFileInput,
   fetchUrlInput,
   toolSearchInput,
   type CreateArtifactOutput,
@@ -22,6 +25,11 @@ import {
   driveSearchForUser,
   fetchUrlText,
 } from "@/lib/connectors/web-and-drive";
+import {
+  githubGetRepoForUser,
+  githubListContentsForUser,
+  githubReadFileForUser,
+} from "@/lib/connectors/github";
 import type { AgentLoopController } from "@/lib/harness/loop-efficiency";
 
 export type ToolRegistryContext = {
@@ -29,6 +37,7 @@ export type ToolRegistryContext = {
   conversationId?: string | null;
   projectId?: string | null;
   hasDrive?: boolean;
+  hasGitHub?: boolean;
   /** Optional per-turn loop controller (quotas, deferred discovery). */
   loop?: AgentLoopController;
 };
@@ -37,6 +46,7 @@ export type ToolRegistryContext = {
 export function resolveAvailableToolNames(ctx: {
   userId?: string | null;
   hasDrive?: boolean;
+  hasGitHub?: boolean;
 }): string[] {
   const names: string[] = [
     TOOL_NAMES.executePython,
@@ -46,19 +56,27 @@ export function resolveAvailableToolNames(ctx: {
   ];
   const hasMemory = !!(ctx.userId && isCloudDbConfigured());
   const hasDrive = !!(ctx.userId && ctx.hasDrive);
+  const hasGitHub = !!(ctx.userId && ctx.hasGitHub);
   if (hasMemory) {
     names.push(TOOL_NAMES.memorySearch, TOOL_NAMES.memoryWrite);
   }
   if (hasDrive) {
     names.push(TOOL_NAMES.driveSearch, TOOL_NAMES.driveRead);
   }
-  if (hasMemory || hasDrive) {
+  if (hasGitHub) {
+    names.push(
+      TOOL_NAMES.githubGetRepo,
+      TOOL_NAMES.githubListContents,
+      TOOL_NAMES.githubReadFile,
+    );
+  }
+  if (hasMemory || hasDrive || hasGitHub) {
     names.push(TOOL_NAMES.toolSearch);
   }
   return names;
 }
 
-/** Build the tool set for this request (capabilities depend on auth/Drive/DB). */
+/** Build the tool set for this request (capabilities depend on auth/Drive/GitHub/DB). */
 export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
   const tools: ToolSet = {
     [TOOL_NAMES.executePython]: tool({
@@ -68,7 +86,7 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     }),
     [TOOL_NAMES.webSearch]: tool({
       description:
-        "Search the web for current or factual information and return a list of result snippets. Prefer few focused queries; near-duplicates are blocked.",
+        "Search the web for current or factual information and return a list of result snippets. Prefer few focused queries; near-duplicates are blocked. Do not use for inspecting GitHub repositories — use github_* tools instead.",
       inputSchema: webSearchInput,
       execute: async ({ query }): Promise<WebSearchOutput> => {
         const blocked = ctx.loop?.gateWebSearch(query);
@@ -106,7 +124,7 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     }),
     [TOOL_NAMES.fetchUrl]: tool({
       description:
-        "Fetch a public http(s) URL and return extracted text (HTML stripped). Use to read a specific page after search.",
+        "Fetch a public http(s) URL and return extracted text (HTML stripped). Use to read a specific page after search. Do not use for github.com repositories — use github_get_repo / github_list_contents / github_read_file.",
       inputSchema: fetchUrlInput,
       execute: async ({ url }) => fetchUrlText(url),
     }),
@@ -148,17 +166,43 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     });
   }
 
+  if (ctx.userId && ctx.hasGitHub) {
+    tools[TOOL_NAMES.githubGetRepo] = tool({
+      description:
+        "Get metadata for a GitHub repository the signed-in user can access. Pass owner/repo or a github.com URL. Prefer this over fetch_url/web_search for repos.",
+      inputSchema: githubGetRepoInput,
+      execute: async ({ repo }) => githubGetRepoForUser(ctx.userId!, repo),
+    });
+    tools[TOOL_NAMES.githubListContents] = tool({
+      description:
+        "List files and folders at a path in a GitHub repository. Pass owner/repo (or URL), optional path and ref.",
+      inputSchema: githubListContentsInput,
+      execute: async ({ repo, path, ref }) =>
+        githubListContentsForUser(ctx.userId!, repo, path, ref),
+    });
+    tools[TOOL_NAMES.githubReadFile] = tool({
+      description:
+        "Read a text file from a GitHub repository by path (README, source, config). Pass owner/repo (or URL), path, optional ref.",
+      inputSchema: githubReadFileInput,
+      execute: async ({ repo, path, ref }) =>
+        githubReadFileForUser(ctx.userId!, repo, path, ref),
+    });
+  }
+
   // tool_search only when deferred tools exist for this session.
   const hasDeferred =
     !!tools[TOOL_NAMES.memorySearch] ||
     !!tools[TOOL_NAMES.memoryWrite] ||
     !!tools[TOOL_NAMES.driveSearch] ||
-    !!tools[TOOL_NAMES.driveRead];
+    !!tools[TOOL_NAMES.driveRead] ||
+    !!tools[TOOL_NAMES.githubGetRepo] ||
+    !!tools[TOOL_NAMES.githubListContents] ||
+    !!tools[TOOL_NAMES.githubReadFile];
 
   if (hasDeferred && ctx.loop) {
     tools[TOOL_NAMES.toolSearch] = tool({
       description:
-        "Search for optional tools (memory, Google Drive) by keyword and unlock matching definitions for later steps. Call when you need a capability that is not in the core tool list.",
+        "Search for optional tools (memory, Google Drive, GitHub) by keyword and unlock matching definitions for later steps. Call when you need a capability that is not in the core tool list.",
       inputSchema: toolSearchInput,
       execute: async ({ query }) => ctx.loop!.runToolSearch(query),
     });

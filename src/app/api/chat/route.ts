@@ -7,7 +7,7 @@ import {
   type LanguageModel,
   type UIMessage,
 } from "ai";
-import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
+import { TOOL_NAMES, TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
 import { budgetForDepth, harnessSystemAddendum } from "@/lib/harness/budgets";
 import { createAgentLoopController } from "@/lib/harness/loop-efficiency";
 import { updateAgentRunStatus } from "@/lib/harness/runs-store";
@@ -29,6 +29,8 @@ import {
   getProject,
 } from "@/lib/projects/store";
 import { getValidDriveAccessToken } from "@/lib/drive-session";
+import { getValidGitHubAccessToken } from "@/lib/github-session";
+import { messageMentionsGitHubRepo } from "@/lib/connectors/github";
 import { isCloudDbConfigured } from "@/lib/db";
 import { listHostedCandidates } from "@/lib/hosted/client";
 import { isHostedConfigured } from "@/lib/hosted/config";
@@ -354,14 +356,27 @@ export async function POST(req: Request) {
     const hasDrive = userId
       ? !!(await getValidDriveAccessToken(userId))
       : false;
+    const hasGitHub = userId
+      ? !!(await getValidGitHubAccessToken(userId))
+      : false;
 
     const availableToolNames = toolsEnabled
-      ? resolveAvailableToolNames({ userId, hasDrive })
+      ? resolveAvailableToolNames({ userId, hasDrive, hasGitHub })
       : [];
+    // Pasted github.com links → unlock repo tools on step 0 (skip tool_search).
+    const seedUnlocked =
+      hasGitHub && messageMentionsGitHubRepo(lastUserText(messages))
+        ? [
+            TOOL_NAMES.githubGetRepo,
+            TOOL_NAMES.githubListContents,
+            TOOL_NAMES.githubReadFile,
+          ]
+        : undefined;
     const loop = toolsEnabled
       ? createAgentLoopController({
           depth: harnessDepth,
           availableToolNames,
+          seedUnlocked,
         })
       : null;
 
@@ -376,6 +391,7 @@ export async function POST(req: Request) {
               conversationId,
               projectId: projectId ?? null,
               hasDrive,
+              hasGitHub,
               loop,
             }),
             activeTools: loop.initialActiveTools,

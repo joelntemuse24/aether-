@@ -379,7 +379,9 @@ Schema is declared in `src/lib/db/schema.ts` and ensured at runtime with `CREATE
 
 - Separate connect flow (`/api/github/connect` → callback → cookie `aether.github`).
 - Scopes: `repo`, `read:user`.
-- Today: connect/status/disconnect in Preferences. **Agent repo tools are not wired yet** — connecting accounts for the product, not a full coding agent.
+- Agent tools (when connected): `github_get_repo`, `github_list_contents`, `github_read_file` — authenticated GitHub API via the cookie token (`src/lib/connectors/github.ts`).
+- Pasted `github.com` links auto-unlock those tools for the turn (skip `tool_search`). `fetch_url` rejects github.com so the model cannot scrape HTML chrome instead.
+- Do **not** confuse Connect GitHub (repo tools) with “Sign in with GitHub” (Auth.js login).
 
 Callback URLs must be registered on the OAuth apps (see `.env.example`).
 
@@ -415,7 +417,7 @@ Honest constraints still visible in the code:
 
 1. **`/api/chat` is not session-gated** — hosted abuse resistance depends on deployment/network controls; BYOK uses the caller’s key.
 2. **BYOK keys are plaintext in `localStorage`** — convenient, not a hardware vault.
-3. **GitHub connector** is account-link only until repo tools land.
+3. **GitHub repo tools** cover get/list/read — not PRs, issues, or commits yet.
 4. **Keyless web search** quality varies by IP (DDG captchas); Brave is the upgrade.
 5. **No Next.js middleware** — auth is per-route.
 6. **Default theme is dark** in code; light parchment is a toggle (Figma Make often showed light first).
