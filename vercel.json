@@ -3,15 +3,12 @@
   "functions": {
     "src/app/api/chat/route.ts": {
       "maxDuration": 300
-<<<<<<< HEAD
-=======
     },
     "src/app/api/harness/classify/route.ts": {
       "maxDuration": 60
     },
     "src/app/api/conversations/title/route.ts": {
       "maxDuration": 30
->>>>>>> origin/master
     }
   }
 }
