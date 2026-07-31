@@ -75,6 +75,8 @@ const isNewChatView = (s: AssistantState) =>
 export const Thread: FC = () => {
   const isEmpty = useAuiState(isNewChatView);
 
+  // Empty layout mirrors Figma Make ThreadViewport:
+  // one column with justify-center so Welcome + Composer sit together mid-screen.
   return (
     <ThreadPrimitive.Root
       className="flex h-full flex-col bg-[var(--canvas)]"
@@ -86,26 +88,26 @@ export const Thread: FC = () => {
         turnAnchor="top"
         className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth"
       >
-        <ThreadHeader />
+        {!isEmpty && <ThreadHeader />}
         <div
           className={cn(
-            "mx-auto flex w-full max-w-[var(--thread-max-width)] flex-1 flex-col px-4 pt-2 sm:px-6 sm:pt-4",
-            isEmpty && "justify-center pt-6",
+            "mx-auto flex w-full max-w-[var(--thread-max-width)] flex-1 flex-col px-4 sm:px-6",
+            isEmpty ? "justify-center py-12" : "pt-2 sm:pt-4",
           )}
         >
-          <AuiIf condition={isNewChatView}>
-            <ThreadWelcome />
-          </AuiIf>
+          {isEmpty ? <ThreadWelcome /> : null}
 
-          <div className="mb-16 flex flex-col gap-y-8 empty:hidden">
-            <ThreadPrimitive.Messages>
-              {() => <ThreadMessage />}
-            </ThreadPrimitive.Messages>
-          </div>
+          {!isEmpty && (
+            <div className="mb-16 flex flex-col gap-y-8 empty:hidden">
+              <ThreadPrimitive.Messages>
+                {() => <ThreadMessage />}
+              </ThreadPrimitive.Messages>
+            </div>
+          )}
 
-          <ThreadPrimitive.ViewportFooter
+          <div
             className={cn(
-              "flex flex-col gap-3 overflow-visible pb-4 md:pb-6",
+              "flex flex-col gap-2 pb-4 md:pb-6",
               !isEmpty && "sticky bottom-0 mt-auto",
             )}
           >
@@ -115,9 +117,9 @@ export const Thread: FC = () => {
                 className="pointer-events-none absolute inset-x-0 -top-12 h-12 bg-gradient-to-b from-transparent to-[var(--canvas)]"
               />
             )}
-            <ThreadScrollToBottom />
+            {!isEmpty && <ThreadScrollToBottom />}
             <Composer />
-          </ThreadPrimitive.ViewportFooter>
+          </div>
         </div>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
@@ -157,19 +159,20 @@ function getWelcomePhrase() {
 const ThreadWelcome: FC = () => {
   const phrase = getWelcomePhrase();
 
+  // Exact structure from Figma Make WelcomeState.
   return (
-    <div className="mb-6 flex w-full flex-col items-center px-2 text-center">
-      <div className="mb-4 flex size-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--elevated)]">
+    <div className="flex w-full flex-col">
+      <div className="mb-4 flex size-11 self-center items-center justify-center rounded-full border border-[var(--border)] bg-[var(--elevated)]">
         <Image
           src="/logo.jpg"
           alt="Aether"
           width={36}
           height={36}
-          className="rounded-full object-cover"
+          className="size-9 rounded-full object-cover"
         />
       </div>
       <h1
-        className="font-[family-name:var(--font-serif)] text-[var(--text)]"
+        className="mb-3 font-[family-name:var(--font-serif)] text-[var(--text)]"
         style={{
           fontSize: "clamp(0.95rem, 2.25vw, 1.2rem)",
           fontWeight: 400,
