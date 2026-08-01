@@ -17,6 +17,7 @@ import {
   ACTIVE_THREAD_KEY,
   loadThreadUIMessages,
   loadThreadUIMessagesAsync,
+  persistThreadUIMessages,
 } from "@/lib/local-thread-adapter";
 import { readThreadIdFromLocation } from "@/lib/thread-url";
 import { useSettings } from "./settings-provider";
@@ -128,6 +129,8 @@ function useChatThreadRuntime() {
   );
 
   const addToolResultRef = useRef<AddToolResult | null>(null);
+  const messagesRef = useRef<UIMessage[]>(seedMessages);
+  const statusRef = useRef<string>("ready");
 
   const chat = useChat({
     messages: seedMessages,
@@ -148,6 +151,10 @@ function useChatThreadRuntime() {
     },
     onError: (error) => {
       console.error("[chat]", error);
+      const key = threadIdRef.current;
+      if (key && messagesRef.current.length > 0) {
+        persistThreadUIMessages(key, messagesRef.current);
+      }
       clearChatContext();
       void import("@/lib/chat-errors").then(({ friendlyChatError }) => {
         window.dispatchEvent(
@@ -158,6 +165,10 @@ function useChatThreadRuntime() {
       });
     },
     onFinish: () => {
+      const key = threadIdRef.current;
+      if (key && messagesRef.current.length > 0) {
+        persistThreadUIMessages(key, messagesRef.current);
+      }
       clearAttachments();
       clearChatContext();
     },
@@ -165,7 +176,10 @@ function useChatThreadRuntime() {
 
   addToolResultRef.current = chat.addToolResult as unknown as AddToolResult;
 
-  const { messages, setMessages } = chat;
+  const { messages, setMessages, status } = chat;
+  messagesRef.current = messages;
+  statusRef.current = status;
+
   const loadedKeyRef = useRef<string | null>(
     seedMessages.length > 0 ? (readThreadStorageKey(aui) ?? null) : null,
   );
@@ -188,6 +202,62 @@ function useChatThreadRuntime() {
       cancelled = true;
     };
   }, [aui, messages.length, setMessages]);
+
+  // Assign a durable thread id as soon as a turn starts so /c/<id> + drafts work
+  // before assistant-ui's end-of-run history flush.
+  useEffect(() => {
+    if (status !== "submitted" && status !== "streaming") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const state = aui.threadListItem().getState();
+        if (!state.remoteId) {
+          await aui.threadListItem().initialize();
+        }
+        if (!cancelled) {
+          threadIdRef.current =
+            readThreadStorageKey(aui) ?? readThreadIdFromLocation();
+        }
+      } catch {
+        // ignore — drafts fall back to whatever id we already have
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [status, aui]);
+
+  // Debounced draft persistence while the model is still working.
+  useEffect(() => {
+    if (status !== "submitted" && status !== "streaming") return;
+    const key = threadIdRef.current ?? readThreadStorageKey(aui);
+    if (!key || messages.length === 0) return;
+    const timer = window.setTimeout(() => {
+      persistThreadUIMessages(key, messages);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [messages, status, aui]);
+
+  // Flush on tab close / refresh so the last streamed tokens aren't lost to the debounce.
+  useEffect(() => {
+    const flush = () => {
+      const key = threadIdRef.current ?? readThreadStorageKey(aui);
+      if (!key || messagesRef.current.length === 0) return;
+      const s = statusRef.current;
+      if (s === "submitted" || s === "streaming" || s === "ready") {
+        persistThreadUIMessages(key, messagesRef.current);
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [aui]);
 
   return useAISDKRuntime(chat, {
     isDisabled: !hasKey,

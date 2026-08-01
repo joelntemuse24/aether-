@@ -160,6 +160,41 @@ export function loadThreadUIMessages(remoteId: string): UIMessage[] {
   return messages;
 }
 
+/**
+ * Snapshot the current linear UIMessage list into local history.
+ * Used while a turn is still streaming so refresh doesn't lose partial output
+ * (assistant-ui's history adapter only persists after isRunning → false).
+ */
+export function persistThreadUIMessages(
+  remoteId: string,
+  messages: UIMessage[],
+): void {
+  if (!remoteId || typeof window === "undefined") return;
+  if (!Array.isArray(messages) || messages.length === 0) return;
+
+  // Keep the thread list entry so /c/<id> still resolves after refresh.
+  const threads = loadThreads();
+  if (!threads.some((t) => t.remoteId === remoteId)) {
+    threads.unshift({ remoteId, status: "regular" });
+    saveThreads(threads);
+  }
+
+  const entries: StoredFormatEntry[] = messages.map((message, idx) => {
+    const { id, ...content } = message;
+    return {
+      id,
+      parent_id: idx === 0 ? null : messages[idx - 1]!.id,
+      format: AI_SDK_FORMAT,
+      content: content as Record<string, unknown>,
+    };
+  });
+
+  saveFormatRepo(remoteId, {
+    headId: messages[messages.length - 1]?.id ?? null,
+    entries,
+  });
+}
+
 /** Async loader — cloud when signed in + DB configured, else localStorage. */
 export async function loadThreadUIMessagesAsync(
   remoteId: string,
