@@ -181,6 +181,7 @@ export function AppShell() {
         )}
       </div>
       <SyncLocalMemory />
+      <ArtifactDraftingPeek />
     </div>
   );
 }

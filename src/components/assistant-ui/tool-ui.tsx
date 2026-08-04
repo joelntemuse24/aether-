@@ -469,10 +469,13 @@ function toArtifact(id: string, input: CreateArtifactInput): Artifact {
 const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const {
     openArtifact,
+    stageArtifact,
     refreshSaved,
     rememberSessionArtifact,
     artifact: openPanelArtifact,
     open,
+    drafting,
+    setDrafting,
   } = useArtifact();
   const running = usePartRunning(part);
   const threadRunning = useAuiState((s) => s.thread.isRunning);
@@ -539,8 +542,29 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       : null;
   const artifact = completeArtifact ?? draft;
 
-  // Open while writing; also open once on live complete (batch tools often skip
-  // streaming args). Never auto-open historical tools after refresh.
+  // Keep the draft available for the peek without forcing the inspector open.
+  useEffect(() => {
+    if (running && !open && (streamingTitle || kindHint)) {
+      setDrafting({
+        id: artifactId,
+        title: streamingTitle || "Artifact",
+        kind: kindHint || "document",
+        charCount: streamingContent?.length,
+      });
+    } else if (!running || open) {
+      setDrafting(null);
+    }
+  }, [
+    running,
+    open,
+    streamingTitle,
+    kindHint,
+    artifactId,
+    streamingContent?.length,
+    setDrafting,
+  ]);
+
+  // Stage while writing, update an already-open inspector, and open on live completion.
   useEffect(() => {
     if (!artifact) return;
 
@@ -569,24 +593,11 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       return;
     }
 
-    if (!running) return;
-    // Wait for a little body so we don't flash an empty panel.
-    if (artifact.code.length < 24) return;
+    if (!running || artifact.code.length < 24) return;
+    stageArtifact(artifact);
+    lastSyncedLen.current = artifact.code.length;
 
-    if (!openedRef.current) {
-      openedRef.current = true;
-      lastSyncedLen.current = artifact.code.length;
-      openArtifact(artifact);
-      return;
-    }
-
-    // Live-update only if the panel is still showing this draft.
-    if (
-      open &&
-      openPanelArtifact?.id === artifact.id &&
-      artifact.code.length !== lastSyncedLen.current
-    ) {
-      lastSyncedLen.current = artifact.code.length;
+    if (open && openPanelArtifact?.id === artifact.id) {
       openArtifact(artifact);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
