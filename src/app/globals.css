@@ -1,40 +1,15 @@
 @import "tailwindcss";
-@import "highlight.js/styles/github-dark.css";
+@import "highlight.js/styles/github.css";
 
-/* ─── Design tokens: dark (default) ─── */
+/*
+ * Themes (ids kept for storage back-compat):
+ * - dark  → production parchment (former light) — NOT Make’s cool gray dark
+ * - light → Figma Make light
+ * - white → near-white canvas
+ */
+
+/* ─── dark id = warm parchment (current prod light) ─── */
 :root {
-  --canvas: #17150f;
-  --elevated: #252219;
-  --elevated-deep: #2d2a20;
-  --surface: #1e1c15;
-  --border: rgba(255, 245, 220, 0.08);
-  --border-subtle: rgba(255, 245, 220, 0.05);
-  --accent: #a83232;
-  --accent-hover: #be3838;
-  --accent-muted: rgba(168, 50, 50, 0.10);
-  --text: #ede9de;
-  --text-secondary: #d4d0c5;
-  --muted: #9a9588;
-  --muted-soft: #635e52;
-  --danger: #d4183d;
-  --hover-overlay: rgba(255, 255, 255, 0.05);
-  --scrollbar-thumb: rgba(255, 245, 220, 0.10);
-  --scrollbar-color: rgba(255, 245, 220, 0.12);
-  --selection-bg: rgba(168, 50, 50, 0.25);
-  --focus-ring: rgba(168, 50, 50, 0.40);
-  --code-bg: var(--elevated-deep);
-  --error-border: rgba(239, 68, 68, 0.3);
-  --error-bg: rgba(127, 29, 29, 0.2);
-  --error-text: #f87171;
-  --overlay: rgba(10, 9, 6, 0.6);
-  --hljs-theme: "highlight.js/styles/github-dark.css";
-
-  --background: var(--canvas);
-  --foreground: var(--text);
-}
-
-/* ─── Design tokens: light (warm parchment) ─── */
-:root[data-theme="light"] {
   --canvas: #faf7f1;
   --elevated: #f4efe6;
   --elevated-deep: #ece6d9;
@@ -60,12 +35,41 @@
   --overlay: rgba(0, 0, 0, 0.3);
   --error-text: #991b1b;
   --hljs-theme: "highlight.js/styles/github.css";
+
+  --background: var(--canvas);
+  --foreground: var(--text);
 }
 
-/*
- * White — same light system, brighter canvas (closer to how parchment
- * often reads in agent / factory-default browser color profiles).
- */
+/* ─── light id = Figma Make light ─── */
+:root[data-theme="light"] {
+  --canvas: #f1ede6;
+  --elevated: #faf9f7;
+  --elevated-deep: #ece8e1;
+  --surface: #f1ede6;
+  --border: rgba(26, 23, 20, 0.12);
+  --border-subtle: rgba(26, 23, 20, 0.08);
+  --accent: #c96442;
+  --accent-hover: #b5573a;
+  --accent-muted: rgba(201, 100, 66, 0.08);
+  --text: #1a1714;
+  --text-secondary: #2d2a20;
+  --muted: #6b6050;
+  --muted-soft: #9a8e7e;
+  --danger: #c0392b;
+  --hover-overlay: rgba(26, 23, 20, 0.05);
+  --scrollbar-thumb: rgba(26, 23, 20, 0.12);
+  --scrollbar-color: rgba(26, 23, 20, 0.18);
+  --selection-bg: rgba(201, 100, 66, 0.15);
+  --focus-ring: rgba(201, 100, 66, 0.4);
+  --code-bg: #e7e3dc;
+  --error-border: rgba(239, 68, 68, 0.25);
+  --error-bg: rgba(254, 242, 242, 0.9);
+  --overlay: rgba(26, 23, 20, 0.4);
+  --error-text: #991b1b;
+  --hljs-theme: "highlight.js/styles/github.css";
+}
+
+/* ─── white — brighter near-white canvas ─── */
 :root[data-theme="white"] {
   --canvas: #fbfbfa;
   --elevated: #f3f3f1;
@@ -94,17 +98,8 @@
   --hljs-theme: "highlight.js/styles/github.css";
 }
 
-/* ─── Accent themes (override accent tokens only) ─── */
+/* ─── Accent themes (all surfaces are light paper) ─── */
 :root[data-accent="mono"] {
-  --accent: #e8e4d9;
-  --accent-hover: #f5f1e6;
-  --accent-muted: rgba(232, 228, 217, 0.12);
-  --selection-bg: rgba(232, 228, 217, 0.22);
-  --focus-ring: rgba(232, 228, 217, 0.45);
-}
-
-:root[data-theme="light"][data-accent="mono"],
-:root[data-theme="white"][data-accent="mono"] {
   --accent: #1a1714;
   --accent-hover: #000000;
   --accent-muted: rgba(26, 23, 20, 0.08);
@@ -113,15 +108,6 @@
 }
 
 :root[data-accent="sky"] {
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --accent-muted: rgba(59, 130, 246, 0.14);
-  --selection-bg: rgba(59, 130, 246, 0.28);
-  --focus-ring: rgba(59, 130, 246, 0.45);
-}
-
-:root[data-theme="light"][data-accent="sky"],
-:root[data-theme="white"][data-accent="sky"] {
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
   --accent-muted: rgba(37, 99, 235, 0.10);
@@ -130,15 +116,6 @@
 }
 
 :root[data-accent="burgundy"] {
-  --accent: #7a1f3d;
-  --accent-hover: #9b2850;
-  --accent-muted: rgba(122, 31, 61, 0.16);
-  --selection-bg: rgba(122, 31, 61, 0.30);
-  --focus-ring: rgba(122, 31, 61, 0.45);
-}
-
-:root[data-theme="light"][data-accent="burgundy"],
-:root[data-theme="white"][data-accent="burgundy"] {
   --accent: #8b2348;
   --accent-hover: #6e1a38;
   --accent-muted: rgba(139, 35, 72, 0.10);
@@ -190,22 +167,22 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ─── Subtle material grain (leather / fine paper) ─── */
+/* ─── Subtle material grain (fine paper) ─── */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 9999;
-  opacity: 0.045;
+  opacity: 0.055;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
   background-repeat: repeat;
-  background-size: 180px 180px;
-  mix-blend-mode: overlay;
+  background-size: 160px 160px;
+  mix-blend-mode: multiply;
 }
 
 :root[data-theme="light"] body::before {
-  opacity: 0.055;
+  opacity: 0.06;
   mix-blend-mode: multiply;
   background-size: 160px 160px;
 }
@@ -239,63 +216,42 @@ body::before {
   color: inherit;
 }
 
-/* Light / white mode code token colors */
-:root[data-theme="light"] .hljs,
-:root[data-theme="white"] .hljs {
+/* Code token colors — all appearance modes are light paper */
+.hljs {
   color: #24292e;
 }
-:root[data-theme="light"] .hljs-comment,
-:root[data-theme="light"] .hljs-quote,
-:root[data-theme="white"] .hljs-comment,
-:root[data-theme="white"] .hljs-quote {
+.hljs-comment,
+.hljs-quote {
   color: #6a737d;
 }
-:root[data-theme="light"] .hljs-keyword,
-:root[data-theme="light"] .hljs-selector-tag,
-:root[data-theme="light"] .hljs-literal,
-:root[data-theme="light"] .hljs-type,
-:root[data-theme="white"] .hljs-keyword,
-:root[data-theme="white"] .hljs-selector-tag,
-:root[data-theme="white"] .hljs-literal,
-:root[data-theme="white"] .hljs-type {
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-type {
   color: #d73a49;
 }
-:root[data-theme="light"] .hljs-string,
-:root[data-theme="light"] .hljs-doctag,
-:root[data-theme="white"] .hljs-string,
-:root[data-theme="white"] .hljs-doctag {
+.hljs-string,
+.hljs-doctag {
   color: #032f62;
 }
-:root[data-theme="light"] .hljs-title,
-:root[data-theme="light"] .hljs-section,
-:root[data-theme="light"] .hljs-name,
-:root[data-theme="light"] .hljs-attribute,
-:root[data-theme="white"] .hljs-title,
-:root[data-theme="white"] .hljs-section,
-:root[data-theme="white"] .hljs-name,
-:root[data-theme="white"] .hljs-attribute {
+.hljs-title,
+.hljs-section,
+.hljs-name,
+.hljs-attribute {
   color: #6f42c1;
 }
-:root[data-theme="light"] .hljs-number,
-:root[data-theme="light"] .hljs-symbol,
-:root[data-theme="light"] .hljs-bullet,
-:root[data-theme="light"] .hljs-built_in,
-:root[data-theme="light"] .hljs-code,
-:root[data-theme="white"] .hljs-number,
-:root[data-theme="white"] .hljs-symbol,
-:root[data-theme="white"] .hljs-bullet,
-:root[data-theme="white"] .hljs-built_in,
-:root[data-theme="white"] .hljs-code {
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-built_in,
+.hljs-code {
   color: #005cc5;
 }
-:root[data-theme="light"] .hljs-meta,
-:root[data-theme="white"] .hljs-meta {
+.hljs-meta {
   color: #6a737d;
 }
-:root[data-theme="light"] .hljs-variable,
-:root[data-theme="light"] .hljs-template-variable,
-:root[data-theme="white"] .hljs-variable,
-:root[data-theme="white"] .hljs-template-variable {
+.hljs-variable,
+.hljs-template-variable {
   color: #e36209;
 }
 
