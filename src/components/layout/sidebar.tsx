@@ -38,6 +38,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useSettings } from "@/providers/settings-provider";
 import { useTheme } from "@/providers/theme-provider";
+import { listLocalThreads } from "@/lib/local-thread-adapter";
 import { useSession, signOut } from "@/providers/session-provider";
 import { useProjects } from "@/providers/projects-provider";
 import { useArtifact } from "@/providers/artifact-provider";
@@ -233,7 +234,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             aria-label="Cycle theme"
             title={
               theme === "dark"
-                ? "Switch to light"
+                ? "Switch to parchment"
                 : theme === "light"
                   ? "Switch to white"
                   : "Switch to dark"
@@ -373,6 +374,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               <ThreadListPrimitive.Items>
                 {() => <ThreadListItem />}
               </ThreadListPrimitive.Items>
+              <ThreadSearchEmpty />
             </ThreadListPrimitive.Root>
           </ThreadSearchContext.Provider>
         </div>
@@ -426,7 +428,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               aria-label="Cycle theme"
               title={
                 theme === "dark"
-                  ? "Switch to light"
+                  ? "Switch to parchment"
                   : theme === "light"
                     ? "Switch to white"
                     : "Switch to dark"
@@ -638,6 +640,24 @@ function SavedArtifactsSection() {
     </div>
   );
 }
+
+const ThreadSearchEmpty: FC = () => {
+  const query = useContext(ThreadSearchContext);
+  const threadCount = useAuiState((s) => s.threads.threadIds.length);
+  if (!query || threadCount === 0) return null;
+
+  const hasMatch = listLocalThreads().some((t) =>
+    (t.title || "New chat").toLowerCase().includes(query),
+  );
+  if (hasMatch) return null;
+
+  return (
+    <div className="flex flex-col items-center gap-2 px-2 py-8 text-[var(--muted-soft)]">
+      <SearchIcon className="size-5 opacity-40" />
+      <span className="text-[11px]">No matches</span>
+    </div>
+  );
+};
 
 const ThreadListItem: FC = () => {
   const aui = useAui();

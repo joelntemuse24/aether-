@@ -240,6 +240,66 @@ function AttachmentChips() {
   );
 }
 
+/* ─── Continue / paused bar ─── */
+
+function isContinuableStatus(type: string | undefined, reason?: string) {
+  if (type === "incomplete") {
+    return reason !== "content-filter";
+  }
+  return false;
+}
+
+const ContinuePausedBar: FC = () => {
+  const [continuing, setContinuing] = useState(false);
+  const paused = useAuiState((s) => {
+    if (s.thread.isRunning) return false;
+    const messages = s.thread.messages;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return false;
+    const status = last.status as
+      | { type?: string; reason?: string }
+      | undefined;
+    return isContinuableStatus(status?.type, status?.reason);
+  });
+
+  useEffect(() => {
+    const onStatus = (e: Event) => {
+      const detail = (e as CustomEvent<{ phase?: string }>).detail;
+      setContinuing(detail?.phase === "continuing");
+    };
+    window.addEventListener("aether:continue-status", onStatus);
+    return () => window.removeEventListener("aether:continue-status", onStatus);
+  }, []);
+
+  if (!paused || continuing) return null;
+
+  return (
+    <div
+      className="mb-1.5 flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--elevated)] px-3 py-2 animate-[fadeIn_160ms_ease-out]"
+      role="status"
+    >
+      <div className="min-w-0">
+        <div className="text-[13px] font-medium text-[var(--text)]">
+          Response paused
+        </div>
+        <div className="text-[12px] text-[var(--muted)]">
+          The reply hit a time limit. Continue to finish from here.
+        </div>
+      </div>
+      <Button
+        type="button"
+        size="sm"
+        className="shrink-0"
+        onClick={() => {
+          window.dispatchEvent(new CustomEvent("aether:continue-or-retry"));
+        }}
+      >
+        Continue
+      </Button>
+    </div>
+  );
+};
+
 /* ─── Composer ─── */
 
 const Composer: FC = () => {
@@ -267,13 +327,12 @@ const Composer: FC = () => {
   const [resumeBusy, setResumeBusy] = useState(false);
   const isRunning = useAuiState((s) => s.thread.isRunning);
 
-  // Reset transient state when thread stops running (after send/stop/error)
+  // Auto-dismiss attach errors so they don't stick after chips are gone.
   useEffect(() => {
-    if (!isRunning) {
-      const t = setTimeout(() => setErrors([]), 100);
-      return () => clearTimeout(t);
-    }
-  }, [isRunning]);
+    if (errors.length === 0) return;
+    const t = window.setTimeout(() => setErrors([]), 6000);
+    return () => window.clearTimeout(t);
+  }, [errors]);
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -510,6 +569,7 @@ const Composer: FC = () => {
         </button>
       )}
 
+      <ContinuePausedBar />
       <AgentStatusStrip />
 
       {pending && (
@@ -546,10 +606,20 @@ const Composer: FC = () => {
         <AttachmentChips />
 
         {errors.length > 0 && (
-          <div className="px-2.5 pb-1 text-xs text-[var(--error-text)]">
-            {errors.map((err) => (
-              <div key={err}>{err}</div>
-            ))}
+          <div className="flex items-start gap-2 px-2.5 pb-1 text-xs text-[var(--error-text)]">
+            <div className="min-w-0 flex-1">
+              {errors.map((err) => (
+                <div key={err}>{err}</div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setErrors([])}
+              className="shrink-0 rounded p-0.5 opacity-70 hover:opacity-100"
+              aria-label="Dismiss"
+            >
+              <XIcon className="size-3.5" />
+            </button>
           </div>
         )}
 
@@ -709,7 +779,7 @@ const ComposerAction: FC<{
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--hover-overlay)]"
               >
                 <FileIcon className="size-4 text-[var(--muted)]" />
-                Upload files
+                Upload from device
               </button>
               {(driveAvailable || githubAvailable) && (
                 <div className="px-2 pb-1.5 pt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--muted-soft)]">
@@ -832,8 +902,8 @@ const MessageError: FC = () => {
       <ErrorPrimitive.Root className="mt-2 rounded-xl border border-[var(--error-border)] bg-[var(--error-bg)] p-3 text-sm text-[var(--error-text)]">
         <ErrorPrimitive.Message className="whitespace-pre-wrap" />
         <p className="mt-1.5 text-[12px] text-[var(--muted)]">
-          If this was a time limit, use Continue to resume from the partial
-          reply. Otherwise Retry regenerates, or pick another model.
+          If this was a time limit, use Continue below to resume from the
+          partial reply. Otherwise Retry regenerates, or pick another model.
         </p>
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
@@ -887,8 +957,10 @@ const AssistantActionBar: FC = () => {
     const messages = s.thread.messages;
     const last = messages[messages.length - 1];
     if (!last || last.id !== s.message.id) return false;
-    const statusType = s.message.status?.type;
-    return statusType === "incomplete" || statusType === "interrupted";
+    const status = s.message.status as
+      | { type?: string; reason?: string }
+      | undefined;
+    return isContinuableStatus(status?.type, status?.reason);
   });
 
   return (

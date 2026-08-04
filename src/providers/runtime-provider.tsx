@@ -156,6 +156,19 @@ function useChatThreadRuntime() {
     clearError?: () => void;
   } | null>(null);
 
+  const emitContinueStatus = useCallback(
+    (detail: {
+      phase: "idle" | "continuing";
+      segment?: number;
+      max?: number;
+    }) => {
+      window.dispatchEvent(
+        new CustomEvent("aether:continue-status", { detail }),
+      );
+    },
+    [],
+  );
+
   const scheduleAutoContinue = useCallback((reason: string) => {
     if (continueScheduledRef.current) return false;
     if (continueCountRef.current >= MAX_AUTO_CONTINUES) return false;
@@ -164,6 +177,11 @@ function useChatThreadRuntime() {
     continueCountRef.current += 1;
     const segment = continueCountRef.current;
 
+    emitContinueStatus({
+      phase: "continuing",
+      segment,
+      max: MAX_AUTO_CONTINUES,
+    });
     window.dispatchEvent(
       new CustomEvent("aether:notice", {
         detail: `Server time limit hit — continuing automatically (${segment}/${MAX_AUTO_CONTINUES})…`,
@@ -175,6 +193,7 @@ function useChatThreadRuntime() {
       const api = chatApiRef.current;
       if (!api) {
         continueScheduledRef.current = false;
+        emitContinueStatus({ phase: "idle" });
         return;
       }
       continueSegmentRef.current = true;
@@ -192,17 +211,18 @@ function useChatThreadRuntime() {
           console.error("[chat] auto-continue failed", err);
           continueSegmentRef.current = false;
           continueScheduledRef.current = false;
+          emitContinueStatus({ phase: "idle" });
           window.dispatchEvent(
             new CustomEvent("aether:notice", {
               detail:
-                "Could not auto-continue. Click Retry on the message to resume.",
+                "Could not auto-continue. Click Continue on the message to resume.",
             }),
           );
         });
     }, 280);
 
     return true;
-  }, []);
+  }, [emitContinueStatus]);
 
   const chat = useChat({
     messages: seedMessages,
@@ -246,6 +266,7 @@ function useChatThreadRuntime() {
           scheduleAutoContinue("onError"));
       if (continuing) return;
 
+      emitContinueStatus({ phase: "idle" });
       clearChatContext();
       void import("@/lib/chat-errors").then(({ friendlyChatError }) => {
         const detail = friendlyChatError(error);
@@ -254,7 +275,7 @@ function useChatThreadRuntime() {
           new CustomEvent("aether:notice", {
             detail:
               continueCountRef.current >= MAX_AUTO_CONTINUES
-                ? "This reply hit the server time limit again. Click Retry to continue, or pick another model."
+                ? "This reply hit the server time limit again. Click Continue to resume, or pick another model."
                 : detail,
           }),
         );
@@ -289,6 +310,8 @@ function useChatThreadRuntime() {
             isDisconnect ? "onFinish:disconnect" : "onFinish:error",
           ));
       if (continuing) return;
+
+      emitContinueStatus({ phase: "idle" });
 
       if (!isAbort && !isDisconnect && !isError) {
         continueCountRef.current = 0;
@@ -431,6 +454,15 @@ function useChatThreadRuntime() {
 
       if (preferContinue && hasContinuableAssistant(messagesRef.current)) {
         continueSegmentRef.current = true;
+        if (continueCountRef.current < MAX_AUTO_CONTINUES) {
+          continueCountRef.current += 1;
+        }
+        const segment = Math.max(1, continueCountRef.current);
+        emitContinueStatus({
+          phase: "continuing",
+          segment,
+          max: MAX_AUTO_CONTINUES,
+        });
         if (lastHarnessRef.current) {
           armHarnessRef.current(lastHarnessRef.current);
         }
@@ -439,14 +471,10 @@ function useChatThreadRuntime() {
         } catch {
           // ignore
         }
-        window.dispatchEvent(
-          new CustomEvent("aether:notice", {
-            detail: "Continuing from where it left off…",
-          }),
-        );
         void api.sendMessage({ text: CONTINUE_USER_TEXT }).catch((err) => {
           console.error("[chat] manual continue failed", err);
           continueSegmentRef.current = false;
+          emitContinueStatus({ phase: "idle" });
           window.dispatchEvent(
             new CustomEvent("aether:notice", {
               detail: "Could not continue. Try sending a short “continue” message.",
@@ -464,7 +492,7 @@ function useChatThreadRuntime() {
     return () => {
       window.removeEventListener("aether:continue-or-retry", onContinueOrRetry);
     };
-  }, []);
+  }, [emitContinueStatus]);
 
   return useAISDKRuntime(chat, {
     isDisabled: !hasKey,

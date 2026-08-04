@@ -14,7 +14,7 @@ export type Theme = "dark" | "light" | "white";
 
 export const THEMES: { id: Theme; label: string }[] = [
   { id: "dark", label: "Dark" },
-  { id: "light", label: "Light" },
+  { id: "light", label: "Parchment" },
   { id: "white", label: "White" },
 ];
 
