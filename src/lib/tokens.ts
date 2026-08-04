@@ -1,23 +1,24 @@
 /**
  * Design tokens for the Aether chat UI.
- * Warm editorial paper palette — Cormorant Garamond serif, Inter UI.
- * Runtime themes live in globals.css (parchment / Make light / white).
+ * Warm editorial palette — Cormorant Garamond serif, Inter UI.
+ * Runtime themes live in globals.css (dark charcoal / light parchment / white).
+ * Values below match the Dark (charcoal) theme — the CSS :root default.
  */
 export const colors = {
-  canvas: "#faf7f1",
-  elevated: "#f4efe6",
-  elevatedDeep: "#ece6d9",
-  surface: "#faf7f1",
-  border: "rgba(0, 0, 0, 0.08)",
-  borderSubtle: "rgba(0, 0, 0, 0.05)",
-  accent: "#d4734f",
-  accentHover: "#c26442",
-  accentMuted: "rgba(212, 115, 79, 0.10)",
-  text: "#1a1714",
-  textSecondary: "#2e2a24",
-  muted: "#6b6458",
-  mutedSoft: "#9a9285",
-  danger: "#b42318",
+  canvas: "#17150f",
+  elevated: "#252219",
+  elevatedDeep: "#2d2a20",
+  surface: "#1e1c15",
+  border: "rgba(255, 245, 220, 0.08)",
+  borderSubtle: "rgba(255, 245, 220, 0.05)",
+  accent: "#a83232",
+  accentHover: "#be3838",
+  accentMuted: "rgba(168, 50, 50, 0.10)",
+  text: "#ede9de",
+  textSecondary: "#d4d0c5",
+  muted: "#9a9588",
+  mutedSoft: "#635e52",
+  danger: "#d4183d",
 } as const;
 
 export const fonts = {

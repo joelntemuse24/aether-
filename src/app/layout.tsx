@@ -46,7 +46,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#17150f",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#faf7f1" },
+    { media: "(prefers-color-scheme: dark)", color: "#17150f" },
+  ],
   width: "device-width",
   initialScale: 1,
 };
@@ -57,7 +60,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="light" suppressHydrationWarning>
       <body
         className={`${cormorant.variable} ${cormorantSC.variable} ${inter.variable} ${jetbrainsMono.variable} antialiased`}
       >

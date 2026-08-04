@@ -1,7 +1,5 @@
 "use client";
 
-import "highlight.js/styles/github.css";
-
 import { useEffect, useMemo, useRef, useState, type FC } from "react";
 import hljs from "highlight.js";
 import { marked } from "marked";
