@@ -173,7 +173,11 @@ export const githubReadFileInput = z.object({
   repo: z
     .string()
     .describe("GitHub repository as owner/repo or a github.com URL."),
-  path: z.string().describe("File path inside the repo (e.g. README.md)."),
+  path: z
+    .string()
+    .describe(
+      "Single file path inside the repo (e.g. README.md). One path per call — for multiple files, issue parallel github_read_file calls.",
+    ),
   ref: z
     .string()
     .optional()
@@ -275,7 +279,7 @@ Guidelines:
   - "drive_search" / "drive_read": search/read the user's Google Drive when connected.
   - "github_get_repo": metadata for a connected user's repository (owner/repo or github.com URL).
   - "github_list_contents": list files/folders in a repo path.
-  - "github_read_file": read a text file from a repo (README, source, config).
+  - "github_read_file": read one text file from a repo (README, source, config). One path per call — use parallel tool calls for multiple files; never concatenate multiple JSON objects in a single tool input.
 - When the user pastes a github.com link or asks about a repo and GitHub tools are available: call github_get_repo, then github_list_contents / github_read_file. Never fall back to Drive for a GitHub URL.
 - Web research discipline (enforced):
   - Prefer 1–2 focused web_search calls, then draft. Near-duplicate queries are blocked.

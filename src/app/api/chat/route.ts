@@ -2,12 +2,15 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import {
   convertToModelMessages,
+  InvalidToolInputError,
+  NoSuchToolError,
   stepCountIs,
   streamText,
   type LanguageModel,
   type UIMessage,
 } from "ai";
 import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
+import { repairToolCallInputJson } from "@/lib/repair-tool-json";
 import { budgetForDepth, harnessSystemAddendum } from "@/lib/harness/budgets";
 import {
   collectMessageText,
@@ -414,6 +417,20 @@ export async function POST(req: Request) {
             toolOrder: loop.toolOrder,
             prepareStep: () => loop.prepareStep(),
             stopWhen: stepCountIs(budget.maxSteps),
+            // Models (esp. Claude) sometimes concatenate two JSON objects in
+            // one tool_use input when they meant parallel calls. Take the first.
+            repairToolCall: async ({ toolCall, error }) => {
+              if (NoSuchToolError.isInstance(error)) return null;
+              if (!InvalidToolInputError.isInstance(error)) return null;
+              const repaired = repairToolCallInputJson(toolCall.input);
+              if (!repaired) return null;
+              console.info("[chat] repaired tool input JSON", {
+                tool: toolCall.toolName,
+                before: toolCall.input.slice(0, 160),
+                after: repaired.slice(0, 160),
+              });
+              return { ...toolCall, input: repaired };
+            },
           }
         : {}),
       maxOutputTokens: 8192,
