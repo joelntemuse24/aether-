@@ -21,8 +21,10 @@ import {
   XIcon,
 } from "lucide-react";
 import { useArtifact } from "@/providers/artifact-provider";
+import { useTheme } from "@/providers/theme-provider";
 import type { ArtifactKind } from "@/lib/tools";
 import { cn } from "@/lib/utils";
+import { fonts } from "@/lib/tokens";
 
 const EXT_BY_LANG: Record<string, string> = {
   javascript: "js",
@@ -88,11 +90,70 @@ function slugify(title: string): string {
   );
 }
 
+/** Theme tokens mirrored into sandboxed iframe previews. */
+type PreviewTheme = {
+  canvas: string;
+  elevated: string;
+  text: string;
+  textSecondary: string;
+  muted: string;
+  accent: string;
+  border: string;
+  codeBg: string;
+};
+
+const PREVIEW_THEME_FALLBACK: PreviewTheme = {
+  canvas: "#faf7f1",
+  elevated: "#f4efe6",
+  text: "#1a1714",
+  textSecondary: "#2e2a24",
+  muted: "#6b6458",
+  accent: "#d4734f",
+  border: "rgba(0,0,0,0.08)",
+  codeBg: "#f3eee3",
+};
+
+function readPreviewTheme(): PreviewTheme {
+  if (typeof document === "undefined") return PREVIEW_THEME_FALLBACK;
+  const s = getComputedStyle(document.documentElement);
+  const pick = (name: string, fallback: string) => {
+    const v = s.getPropertyValue(name).trim();
+    return v || fallback;
+  };
+  return {
+    canvas: pick("--canvas", PREVIEW_THEME_FALLBACK.canvas),
+    elevated: pick("--elevated", PREVIEW_THEME_FALLBACK.elevated),
+    text: pick("--text", PREVIEW_THEME_FALLBACK.text),
+    textSecondary: pick(
+      "--text-secondary",
+      PREVIEW_THEME_FALLBACK.textSecondary,
+    ),
+    muted: pick("--muted", PREVIEW_THEME_FALLBACK.muted),
+    accent: pick("--accent", PREVIEW_THEME_FALLBACK.accent),
+    border: pick("--border", PREVIEW_THEME_FALLBACK.border),
+    codeBg: pick("--code-bg", PREVIEW_THEME_FALLBACK.codeBg),
+  };
+}
+
+function usePreviewTheme(): PreviewTheme {
+  const { theme, accent } = useTheme();
+  const [vars, setVars] = useState<PreviewTheme>(PREVIEW_THEME_FALLBACK);
+  useEffect(() => {
+    setVars(readPreviewTheme());
+  }, [theme, accent]);
+  return vars;
+}
+
 /** Build the HTML document rendered inside the live-preview iframe. */
-function buildPreviewDoc(kind: ArtifactKind, lang: string, content: string): string {
+function buildPreviewDoc(
+  kind: ArtifactKind,
+  lang: string,
+  content: string,
+  theme: PreviewTheme,
+): string {
   if (kind === "svg" || lang === "svg") {
     return `<!doctype html><html><head><meta charset="utf-8"><style>
-      html,body{margin:0;height:100%;display:flex;align-items:center;justify-content:center;background:#fff}
+      html,body{margin:0;height:100%;display:flex;align-items:center;justify-content:center;background:${theme.canvas}}
       svg{max-width:100%;max-height:100%}
     </style></head><body>${content}</body></html>`;
   }
@@ -116,9 +177,9 @@ function buildPreviewDoc(kind: ArtifactKind, lang: string, content: string): str
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
-      body{font-family:system-ui,-apple-system,sans-serif;margin:16px;background:#fff;color:#111}
+      body{font-family:${fonts.ui};margin:16px;background:${theme.canvas};color:${theme.text}}
       #root{min-height:40px}
-      .aether-err{color:#b00020;white-space:pre-wrap;font-family:monospace;font-size:12px}
+      .aether-err{color:#b00020;white-space:pre-wrap;font-family:${fonts.mono};font-size:12px}
     </style></head><body>
     <div id="root"></div>
     <script type="text/babel" data-presets="react,typescript">
@@ -144,6 +205,84 @@ function buildPreviewDoc(kind: ArtifactKind, lang: string, content: string): str
   </body></html>`;
 }
 
+/** Document (markdown → HTML) preview styled like Aether chat reading. */
+function buildDocumentPreviewDoc(html: string, theme: PreviewTheme): string {
+  return `<!doctype html><html><head><meta charset="utf-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+    html, body {
+      margin: 0;
+      background: ${theme.canvas};
+      color: ${theme.text};
+    }
+    body {
+      font-family: "Cormorant Garamond", Georgia, Cambria, "Times New Roman", Times, serif;
+      font-size: 18px;
+      line-height: 1.72;
+      letter-spacing: -0.01em;
+      max-width: 46rem;
+      margin: 0 auto;
+      padding: 28px 32px 48px;
+    }
+    h1, h2, h3, h4 {
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-weight: 500;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+      color: ${theme.text};
+      margin: 1.4em 0 0.5em;
+    }
+    h1 { font-size: 1.65rem; }
+    h2 { font-size: 1.3rem; }
+    h3 { font-size: 1.1rem; }
+    p, li { color: ${theme.textSecondary}; }
+    a { color: ${theme.accent}; text-decoration: underline; text-underline-offset: 2px; }
+    hr { border: 0; border-top: 1px solid ${theme.border}; margin: 1.5em 0; }
+    pre {
+      background: ${theme.codeBg};
+      border: 1px solid ${theme.border};
+      padding: 12px 14px;
+      border-radius: 10px;
+      overflow: auto;
+      font-size: 0.78rem;
+      line-height: 1.55;
+    }
+    code {
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.86em;
+    }
+    :not(pre) > code {
+      background: ${theme.codeBg};
+      border-radius: 4px;
+      padding: 0.1em 0.35em;
+    }
+    table { border-collapse: collapse; width: 100%; font-family: Inter, system-ui, sans-serif; font-size: 0.85rem; }
+    th {
+      background: ${theme.elevated};
+      text-align: left;
+      font-weight: 500;
+      color: ${theme.text};
+    }
+    td, th { border: 1px solid ${theme.border}; padding: 8px 10px; color: ${theme.textSecondary}; }
+    blockquote {
+      border-left: 3px solid ${theme.accent};
+      margin: 1em 0;
+      padding: 0.15em 0 0.15em 14px;
+      color: ${theme.muted};
+    }
+    img { max-width: 100%; border-radius: 8px; }
+    @media print {
+      body { background: #fff; color: #111; max-width: none; }
+      a { color: #111; }
+    }
+  </style></head><body>${html}</body></html>`;
+}
+
 const HighlightedCode: FC<{ code: string; language?: string }> = ({
   code,
   language,
@@ -163,7 +302,7 @@ const HighlightedCode: FC<{ code: string; language?: string }> = ({
   }, [code, language]);
 
   return (
-    <pre className="h-full overflow-auto bg-[#0d1117] p-4 text-[12.5px] leading-relaxed">
+    <pre className="h-full overflow-auto bg-[var(--code-bg)] p-4 text-[12.5px] leading-relaxed text-[var(--text)]">
       <code
         className="hljs !bg-transparent font-[family-name:var(--font-mono)]"
         dangerouslySetInnerHTML={{ __html: html }}
@@ -323,6 +462,7 @@ const BarChart: FC<{ series: { label: string; value: number }[] }> = ({
 export function ArtifactPanel() {
   const { artifact, open, closeArtifact, persistArtifactContent } =
     useArtifact();
+  const previewTheme = usePreviewTheme();
   const [copied, setCopied] = useState(false);
   const [content, setContent] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -570,8 +710,8 @@ export function ArtifactPanel() {
             ref={iframeRef}
             title="SVG preview"
             sandbox=""
-            srcDoc={buildPreviewDoc("svg", "svg", debounced)}
-            className="h-full w-full border-0 bg-white"
+            srcDoc={buildPreviewDoc("svg", "svg", debounced, previewTheme)}
+            className="h-full w-full border-0 bg-[var(--canvas)]"
           />
         )}
         {kind === "svg" && tab === "code" && (
@@ -584,16 +724,8 @@ export function ArtifactPanel() {
             ref={iframeRef}
             title="Document preview"
             sandbox=""
-            srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>
-              body{font-family:Georgia,'Times New Roman',serif;line-height:1.7;color:#1a1a1a;max-width:46rem;margin:0 auto;padding:28px 32px}
-              h1,h2,h3{font-family:system-ui,sans-serif;line-height:1.25}
-              pre{background:#f4f4f5;padding:12px;border-radius:8px;overflow:auto}
-              code{font-family:ui-monospace,monospace;font-size:.9em}
-              table{border-collapse:collapse;width:100%} td,th{border:1px solid #ddd;padding:6px 10px}
-              blockquote{border-left:3px solid #ddd;margin:0;padding-left:14px;color:#555}
-              img{max-width:100%}
-            </style></head><body>${documentHtml}</body></html>`}
-            className="h-full w-full border-0 bg-white"
+            srcDoc={buildDocumentPreviewDoc(documentHtml, previewTheme)}
+            className="h-full w-full border-0 bg-[var(--canvas)]"
           />
         )}
         {kind === "document" && tab === "edit" && (
@@ -622,8 +754,8 @@ export function ArtifactPanel() {
             ref={iframeRef}
             title="Live preview"
             sandbox="allow-scripts"
-            srcDoc={buildPreviewDoc("code", lang, debounced)}
-            className="h-full w-full border-0 bg-white"
+            srcDoc={buildPreviewDoc("code", lang, debounced, previewTheme)}
+            className="h-full w-full border-0 bg-[var(--canvas)]"
           />
         )}
         {kind === "code" && tab === "code" && (
