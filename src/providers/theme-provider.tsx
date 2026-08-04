@@ -9,13 +9,12 @@ import {
   type ReactNode,
 } from "react";
 
-/** dark = warm charcoal; light = warm parchment; white = near-white. */
-export type Theme = "dark" | "light" | "white";
+/** light = warm parchment; dark = warm brownish charcoal. System preference is ignored. */
+export type Theme = "dark" | "light";
 
 export const THEMES: { id: Theme; label: string }[] = [
-  { id: "dark", label: "Dark" },
   { id: "light", label: "Light" },
-  { id: "white", label: "White" },
+  { id: "dark", label: "Dark" },
 ];
 
 /** Accent palette ids. `default` is the current clay/terracotta. */
@@ -36,7 +35,7 @@ export const ACCENTS: {
 type ThemeContextValue = {
   theme: Theme;
   accent: AccentId;
-  /** True for warm parchment or bright white (not dark). */
+  /** True for warm parchment (not dark charcoal). */
   isLightSurface: boolean;
   toggleTheme: () => void;
   setTheme: (t: Theme) => void;
@@ -47,11 +46,11 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const THEME_KEY = "aether:theme";
 const ACCENT_KEY = "aether:accent";
-/** Remap after brief #42 where dark id was parchment. */
-const THEME_MAP_KEY = "aether:theme-map-v3";
+/** Drop White; never follow prefers-color-scheme. */
+const THEME_MAP_KEY = "aether:theme-map-v4";
 
 function isTheme(value: string | null): value is Theme {
-  return value === "dark" || value === "light" || value === "white";
+  return value === "dark" || value === "light";
 }
 
 function isAccent(value: string | null): value is AccentId {
@@ -68,8 +67,8 @@ function readInitialTheme(): Theme {
   try {
     if (!localStorage.getItem(THEME_MAP_KEY)) {
       const prev = localStorage.getItem(THEME_KEY);
-      // #42 stored parchment under "dark" — move those users to Light.
-      if (prev === "dark") {
+      // Retired "white" → Light. Do not consult prefers-color-scheme.
+      if (prev === "white") {
         localStorage.setItem(THEME_KEY, "light");
       }
       localStorage.setItem(THEME_MAP_KEY, "1");
@@ -96,11 +95,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const root = document.documentElement;
+    // :root CSS = parchment Light. Only Dark sets an attribute.
     if (theme === "dark") {
-      root.removeAttribute("data-theme");
+      root.setAttribute("data-theme", "dark");
     } else {
-      root.setAttribute("data-theme", theme);
+      root.removeAttribute("data-theme");
     }
+    // Belt: never leave a host/legacy class claiming dark paint.
+    root.classList.remove("dark");
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
@@ -117,16 +119,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setTheme = useCallback((t: Theme) => setThemeState(t), []);
   const setAccent = useCallback((a: AccentId) => setAccentState(a), []);
   const toggleTheme = useCallback(
-    () =>
-      setThemeState((prev) => {
-        if (prev === "dark") return "light";
-        if (prev === "light") return "white";
-        return "dark";
-      }),
+    () => setThemeState((prev) => (prev === "dark" ? "light" : "dark")),
     [],
   );
 
-  const isLightSurface = theme === "light" || theme === "white";
+  const isLightSurface = theme === "light";
 
   return (
     <ThemeContext.Provider

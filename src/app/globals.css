@@ -2,47 +2,13 @@
 @import "highlight.js/styles/github-dark.css";
 
 /*
- * Appearance:
- * - dark  → warm charcoal (production dark — not Make’s cool gray)
- * - light → warm parchment (the white-warm paper background)
- * - white → near-white canvas
+ * Appearance (system prefers-color-scheme is ignored for paint):
+ * - light (default :root) → warm parchment
+ * - dark  (data-theme="dark") → warm brownish charcoal
  */
 
-/* ─── dark ─── */
+/* ─── light = warm parchment (default) ─── */
 :root {
-  --canvas: #17150f;
-  --elevated: #252219;
-  --elevated-deep: #2d2a20;
-  --surface: #1e1c15;
-  --border: rgba(255, 245, 220, 0.08);
-  --border-subtle: rgba(255, 245, 220, 0.05);
-  --accent: #a83232;
-  --accent-hover: #be3838;
-  --accent-muted: rgba(168, 50, 50, 0.10);
-  --text: #ede9de;
-  --text-secondary: #d4d0c5;
-  --muted: #9a9588;
-  --muted-soft: #635e52;
-  --danger: #d4183d;
-  --hover-overlay: rgba(255, 255, 255, 0.05);
-  --scrollbar-thumb: rgba(255, 245, 220, 0.10);
-  --scrollbar-color: rgba(255, 245, 220, 0.12);
-  --selection-bg: rgba(168, 50, 50, 0.25);
-  --focus-ring: rgba(168, 50, 50, 0.40);
-  --code-bg: var(--elevated-deep);
-  --error-border: rgba(239, 68, 68, 0.3);
-  --error-bg: rgba(127, 29, 29, 0.2);
-  --error-text: #f87171;
-  --overlay: rgba(10, 9, 6, 0.6);
-  --hljs-theme: "highlight.js/styles/github-dark.css";
-
-  --background: var(--canvas);
-  --foreground: var(--text);
-  color-scheme: dark;
-}
-
-/* ─── light = warm parchment ─── */
-:root[data-theme="light"] {
   --canvas: #faf7f1;
   --elevated: #f4efe6;
   --elevated-deep: #ece6d9;
@@ -68,50 +34,45 @@
   --overlay: rgba(0, 0, 0, 0.3);
   --error-text: #991b1b;
   --hljs-theme: "highlight.js/styles/github.css";
-  color-scheme: light;
+
+  --background: var(--canvas);
+  --foreground: var(--text);
+  /* only light — do not follow OS dark for native widgets */
+  color-scheme: only light;
 }
 
-/* ─── white ─── */
-:root[data-theme="white"] {
-  --canvas: #fbfbfa;
-  --elevated: #f3f3f1;
-  --elevated-deep: #ebebe8;
-  --surface: #ffffff;
-  --border: rgba(0, 0, 0, 0.08);
-  --border-subtle: rgba(0, 0, 0, 0.05);
-  --accent: #d4734f;
-  --accent-hover: #c26442;
-  --accent-muted: rgba(212, 115, 79, 0.10);
-  --text: #1a1714;
-  --text-secondary: #2e2a24;
-  --muted: #6b6458;
-  --muted-soft: #9a9285;
-  --danger: #b42318;
-  --hover-overlay: rgba(0, 0, 0, 0.04);
-  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
-  --scrollbar-color: rgba(0, 0, 0, 0.18);
-  --selection-bg: rgba(212, 115, 79, 0.15);
-  --focus-ring: rgba(212, 115, 79, 0.35);
-  --code-bg: #f0f0ee;
-  --error-border: rgba(239, 68, 68, 0.25);
-  --error-bg: rgba(254, 242, 242, 0.9);
-  --overlay: rgba(0, 0, 0, 0.3);
-  --error-text: #991b1b;
-  --hljs-theme: "highlight.js/styles/github.css";
-  color-scheme: light;
+/* ─── dark = warm brownish charcoal ─── */
+:root[data-theme="dark"] {
+  --canvas: #17150f;
+  --elevated: #252219;
+  --elevated-deep: #2d2a20;
+  --surface: #1e1c15;
+  --border: rgba(255, 245, 220, 0.08);
+  --border-subtle: rgba(255, 245, 220, 0.05);
+  --accent: #a83232;
+  --accent-hover: #be3838;
+  --accent-muted: rgba(168, 50, 50, 0.10);
+  --text: #ede9de;
+  --text-secondary: #d4d0c5;
+  --muted: #9a9588;
+  --muted-soft: #635e52;
+  --danger: #d4183d;
+  --hover-overlay: rgba(255, 255, 255, 0.05);
+  --scrollbar-thumb: rgba(255, 245, 220, 0.10);
+  --scrollbar-color: rgba(255, 245, 220, 0.12);
+  --selection-bg: rgba(168, 50, 50, 0.25);
+  --focus-ring: rgba(168, 50, 50, 0.40);
+  --code-bg: var(--elevated-deep);
+  --error-border: rgba(239, 68, 68, 0.3);
+  --error-bg: rgba(127, 29, 29, 0.2);
+  --error-text: #f87171;
+  --overlay: rgba(10, 9, 6, 0.6);
+  --hljs-theme: "highlight.js/styles/github-dark.css";
+  color-scheme: only dark;
 }
 
-/* ─── Accent themes ─── */
+/* ─── Accent themes (base = light surface; dark overrides below) ─── */
 :root[data-accent="mono"] {
-  --accent: #e8e4d9;
-  --accent-hover: #f5f1e6;
-  --accent-muted: rgba(232, 228, 217, 0.12);
-  --selection-bg: rgba(232, 228, 217, 0.22);
-  --focus-ring: rgba(232, 228, 217, 0.45);
-}
-
-:root[data-theme="light"][data-accent="mono"],
-:root[data-theme="white"][data-accent="mono"] {
   --accent: #1a1714;
   --accent-hover: #000000;
   --accent-muted: rgba(26, 23, 20, 0.08);
@@ -119,16 +80,15 @@
   --focus-ring: rgba(26, 23, 20, 0.35);
 }
 
-:root[data-accent="sky"] {
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --accent-muted: rgba(59, 130, 246, 0.14);
-  --selection-bg: rgba(59, 130, 246, 0.28);
-  --focus-ring: rgba(59, 130, 246, 0.45);
+:root[data-theme="dark"][data-accent="mono"] {
+  --accent: #e8e4d9;
+  --accent-hover: #f5f1e6;
+  --accent-muted: rgba(232, 228, 217, 0.12);
+  --selection-bg: rgba(232, 228, 217, 0.22);
+  --focus-ring: rgba(232, 228, 217, 0.45);
 }
 
-:root[data-theme="light"][data-accent="sky"],
-:root[data-theme="white"][data-accent="sky"] {
+:root[data-accent="sky"] {
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
   --accent-muted: rgba(37, 99, 235, 0.10);
@@ -136,21 +96,28 @@
   --focus-ring: rgba(37, 99, 235, 0.35);
 }
 
-:root[data-accent="burgundy"] {
-  --accent: #7a1f3d;
-  --accent-hover: #9b2850;
-  --accent-muted: rgba(122, 31, 61, 0.16);
-  --selection-bg: rgba(122, 31, 61, 0.30);
-  --focus-ring: rgba(122, 31, 61, 0.45);
+:root[data-theme="dark"][data-accent="sky"] {
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-muted: rgba(59, 130, 246, 0.14);
+  --selection-bg: rgba(59, 130, 246, 0.28);
+  --focus-ring: rgba(59, 130, 246, 0.45);
 }
 
-:root[data-theme="light"][data-accent="burgundy"],
-:root[data-theme="white"][data-accent="burgundy"] {
+:root[data-accent="burgundy"] {
   --accent: #8b2348;
   --accent-hover: #6e1a38;
   --accent-muted: rgba(139, 35, 72, 0.10);
   --selection-bg: rgba(139, 35, 72, 0.14);
   --focus-ring: rgba(139, 35, 72, 0.35);
+}
+
+:root[data-theme="dark"][data-accent="burgundy"] {
+  --accent: #7a1f3d;
+  --accent-hover: #9b2850;
+  --accent-muted: rgba(122, 31, 61, 0.16);
+  --selection-bg: rgba(122, 31, 61, 0.30);
+  --focus-ring: rgba(122, 31, 61, 0.45);
 }
 
 @theme inline {
@@ -204,23 +171,17 @@ body::before {
   inset: 0;
   pointer-events: none;
   z-index: 9999;
-  opacity: 0.045;
+  opacity: 0.055;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
   background-repeat: repeat;
-  background-size: 180px 180px;
+  background-size: 160px 160px;
+  mix-blend-mode: multiply;
+}
+
+:root[data-theme="dark"] body::before {
+  opacity: 0.045;
   mix-blend-mode: overlay;
-}
-
-:root[data-theme="light"] body::before {
-  opacity: 0.055;
-  mix-blend-mode: multiply;
-  background-size: 160px 160px;
-}
-
-:root[data-theme="white"] body::before {
-  opacity: 0.035;
-  mix-blend-mode: multiply;
-  background-size: 160px 160px;
+  background-size: 180px 180px;
 }
 
 /* Optical sizing for reading serif when available */
@@ -246,63 +207,42 @@ body::before {
   color: inherit;
 }
 
-/* Light / white mode code token colors */
-:root[data-theme="light"] .hljs,
-:root[data-theme="white"] .hljs {
+/* Light mode code token colors (default). Dark uses github-dark import. */
+:root:not([data-theme="dark"]) .hljs {
   color: #24292e;
 }
-:root[data-theme="light"] .hljs-comment,
-:root[data-theme="light"] .hljs-quote,
-:root[data-theme="white"] .hljs-comment,
-:root[data-theme="white"] .hljs-quote {
+:root:not([data-theme="dark"]) .hljs-comment,
+:root:not([data-theme="dark"]) .hljs-quote {
   color: #6a737d;
 }
-:root[data-theme="light"] .hljs-keyword,
-:root[data-theme="light"] .hljs-selector-tag,
-:root[data-theme="light"] .hljs-literal,
-:root[data-theme="light"] .hljs-type,
-:root[data-theme="white"] .hljs-keyword,
-:root[data-theme="white"] .hljs-selector-tag,
-:root[data-theme="white"] .hljs-literal,
-:root[data-theme="white"] .hljs-type {
+:root:not([data-theme="dark"]) .hljs-keyword,
+:root:not([data-theme="dark"]) .hljs-selector-tag,
+:root:not([data-theme="dark"]) .hljs-literal,
+:root:not([data-theme="dark"]) .hljs-type {
   color: #d73a49;
 }
-:root[data-theme="light"] .hljs-string,
-:root[data-theme="light"] .hljs-doctag,
-:root[data-theme="white"] .hljs-string,
-:root[data-theme="white"] .hljs-doctag {
+:root:not([data-theme="dark"]) .hljs-string,
+:root:not([data-theme="dark"]) .hljs-doctag {
   color: #032f62;
 }
-:root[data-theme="light"] .hljs-title,
-:root[data-theme="light"] .hljs-section,
-:root[data-theme="light"] .hljs-name,
-:root[data-theme="light"] .hljs-attribute,
-:root[data-theme="white"] .hljs-title,
-:root[data-theme="white"] .hljs-section,
-:root[data-theme="white"] .hljs-name,
-:root[data-theme="white"] .hljs-attribute {
+:root:not([data-theme="dark"]) .hljs-title,
+:root:not([data-theme="dark"]) .hljs-section,
+:root:not([data-theme="dark"]) .hljs-name,
+:root:not([data-theme="dark"]) .hljs-attribute {
   color: #6f42c1;
 }
-:root[data-theme="light"] .hljs-number,
-:root[data-theme="light"] .hljs-symbol,
-:root[data-theme="light"] .hljs-bullet,
-:root[data-theme="light"] .hljs-built_in,
-:root[data-theme="light"] .hljs-code,
-:root[data-theme="white"] .hljs-number,
-:root[data-theme="white"] .hljs-symbol,
-:root[data-theme="white"] .hljs-bullet,
-:root[data-theme="white"] .hljs-built_in,
-:root[data-theme="white"] .hljs-code {
+:root:not([data-theme="dark"]) .hljs-number,
+:root:not([data-theme="dark"]) .hljs-symbol,
+:root:not([data-theme="dark"]) .hljs-bullet,
+:root:not([data-theme="dark"]) .hljs-built_in,
+:root:not([data-theme="dark"]) .hljs-code {
   color: #005cc5;
 }
-:root[data-theme="light"] .hljs-meta,
-:root[data-theme="white"] .hljs-meta {
+:root:not([data-theme="dark"]) .hljs-meta {
   color: #6a737d;
 }
-:root[data-theme="light"] .hljs-variable,
-:root[data-theme="light"] .hljs-template-variable,
-:root[data-theme="white"] .hljs-variable,
-:root[data-theme="white"] .hljs-template-variable {
+:root:not([data-theme="dark"]) .hljs-variable,
+:root:not([data-theme="dark"]) .hljs-template-variable {
   color: #e36209;
 }
 
