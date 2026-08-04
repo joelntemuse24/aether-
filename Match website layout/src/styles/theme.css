@@ -1,100 +1,178 @@
-@custom-variant dark (&:is(.dark *));
+/* Only OUR class drives the dark variant. A host `.dark` is now inert. */
+@custom-variant dark (&:where(.aether-dark, .aether-dark *));
 
-:root {
+/*
+ * Appearance tokens — declared on :root AND the app shell so the shell is
+ * always the nearest ancestor for var(--canvas) etc., even if a Make/host
+ * wrapper injects `.dark` above us.
+ *
+ *   light → warm parchment (#f1ede6)
+ *   dark  → Make charcoal gray (#1a1a1c) — host-safe copy of existing dark
+ *   white → near-white (#fffdfa)
+ */
+
+:root,
+.aether-light,
+.aether-app-shell.aether-light {
   --font-size: 16px;
 
-  /* Semantic layer — warm editorial ink palette */
-  --canvas:          #17150f;
-  --surface:         #1e1c15;
-  --elevated:        #252219;
-  --elevated-deep:   #2d2a20;
-  --border:          rgba(255,245,220,0.08);
-  --text:            #ede9de;
-  --muted:           #9a9588;
-  --muted-soft:      #635e52;
-  --accent:          #a83232;
-  --accent-hover:    #be3838;
-  --accent-muted:    rgba(168,50,50,0.10);
-  --font-serif:      'Cormorant Garamond', 'Cormorant', Georgia, serif;
-  --font-sc:         'Cormorant SC', 'Cormorant Garamond', Georgia, serif;
-  --font-mono:       'JetBrains Mono', monospace;
-  --font-geist-mono: 'JetBrains Mono', monospace;
+  /* Semantic layer — warm editorial paper */
+  --canvas: #f1ede6;
+  --surface: #f7f3ec;
+  --elevated: #ebe6dc;
+  --elevated-deep: #e3ddd2;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-subtle: rgba(0, 0, 0, 0.05);
+  --text: #1a1714;
+  --text-secondary: #2e2a24;
+  --muted: #6b6458;
+  --muted-soft: #9a9285;
+  --accent: #d4734f;
+  --accent-hover: #c26442;
+  --accent-muted: rgba(212, 115, 79, 0.10);
+  --danger: #b42318;
+  --hover-overlay: rgba(0, 0, 0, 0.04);
+  --code-bg: #ebe6dc;
+  --overlay: rgba(0, 0, 0, 0.3);
+  --font-serif: "Cormorant Garamond", "Cormorant", Georgia, serif;
+  --font-sc: "Cormorant SC", "Cormorant Garamond", Georgia, serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-geist-mono: "JetBrains Mono", monospace;
 
-  /* Tailwind token contract — keep names */
-  --background: #17150f;
-  --foreground: #ede9de;
-  --card: #ffffff;
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: #030213;
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.95 0.0058 264.53);
-  --secondary-foreground: #030213;
-  --muted: #ececf0;
-  --muted-foreground: #717182;
-  --accent: #e9ebef;
-  --accent-foreground: #030213;
-  --destructive: #d4183d;
+  /* Tailwind / shadcn contract */
+  --background: var(--canvas);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--elevated);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--elevated);
+  --secondary-foreground: var(--text);
+  --muted-foreground: var(--muted);
+  --accent-foreground: var(--text);
+  --destructive: var(--danger);
   --destructive-foreground: #ffffff;
-  --border: rgba(0, 0, 0, 0.1);
   --input: transparent;
-  --input-background: #f3f3f5;
+  --input-background: var(--elevated);
   --switch-background: #cbced4;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: oklch(0.708 0 0);
+  --ring: rgba(212, 115, 79, 0.35);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #030213;
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: var(--elevated);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--elevated-deep);
+  --sidebar-accent-foreground: var(--text);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+.aether-dark,
+.aether-app-shell.aether-dark {
+  --canvas: #1a1a1c;
+  --surface: #222226;
+  --elevated: #2a2a2e;
+  --elevated-deep: #323236;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --text: #ededef;
+  --text-secondary: #d4d4d6;
+  --muted: #9a9a9e;
+  --muted-soft: #6a6a6e;
+  --accent: #a83232;
+  --accent-hover: #be3838;
+  --accent-muted: rgba(168, 50, 50, 0.10);
+  --danger: #d4183d;
+  --hover-overlay: rgba(255, 255, 255, 0.05);
+  --code-bg: #2a2a2e;
+  --overlay: rgba(10, 10, 12, 0.6);
+
+  --background: var(--canvas);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--elevated);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--elevated);
+  --secondary-foreground: var(--text);
+  --muted-foreground: var(--muted);
+  --accent-foreground: var(--text);
   --destructive: oklch(0.396 0.141 25.723);
   --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
+  --input: var(--elevated);
+  --input-background: var(--elevated);
   --ring: oklch(0.439 0 0);
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  --sidebar: var(--elevated);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--elevated-deep);
+  --sidebar-accent-foreground: var(--text);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+.aether-white,
+.aether-app-shell.aether-white {
+  --canvas: #fffdfa;
+  --surface: #ffffff;
+  --elevated: #f3f3f1;
+  --elevated-deep: #ebebe8;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-subtle: rgba(0, 0, 0, 0.05);
+  --text: #1a1714;
+  --text-secondary: #2e2a24;
+  --muted: #6b6458;
+  --muted-soft: #9a9285;
+  --accent: #d4734f;
+  --accent-hover: #c26442;
+  --accent-muted: rgba(212, 115, 79, 0.10);
+  --danger: #b42318;
+  --hover-overlay: rgba(0, 0, 0, 0.04);
+  --code-bg: #f0f0ee;
+  --overlay: rgba(0, 0, 0, 0.3);
+
+  --background: var(--canvas);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--elevated);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--elevated);
+  --secondary-foreground: var(--text);
+  --muted-foreground: var(--muted);
+  --accent-foreground: var(--text);
+  --destructive: var(--danger);
+  --destructive-foreground: #ffffff;
+  --input: transparent;
+  --input-background: var(--elevated);
+  --ring: rgba(212, 115, 79, 0.35);
+  --sidebar: var(--elevated);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--elevated-deep);
+  --sidebar-accent-foreground: var(--text);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
 @theme inline {
@@ -138,9 +216,23 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* color-scheme only governs scrollbars/native controls, never your paint. */
+html {
+  color-scheme: only light;
+}
+html.aether-dark {
+  color-scheme: only dark;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+
+  html,
+  body {
+    background: var(--canvas);
+    color: var(--text);
   }
 
   body {
@@ -148,9 +240,9 @@
   }
 
   /**
-  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
-  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
-  */
+   * Default typography styles for HTML elements (h1-h4, p, label, button, input).
+   * These are in @layer base, so Tailwind utility classes override them.
+   */
 
   html {
     font-size: var(--font-size);
