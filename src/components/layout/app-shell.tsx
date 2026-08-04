@@ -14,6 +14,7 @@ import { useArtifact } from "@/providers/artifact-provider";
 import { useAttachments } from "@/providers/attachments-provider";
 import { useDrive } from "@/providers/drive-provider";
 import { cn } from "@/lib/utils";
+import { ArtifactDraftingPeek } from "@/components/layout/artifact-drafting-peek";
 
 // Lazy-loaded: pulls in highlight.js + marked only when an artifact is shown.
 const ArtifactPanel = dynamic(
@@ -157,6 +158,7 @@ export function AppShell() {
 
       <SyncLocalChatsBanner />
       <SyncLocalMemory />
+      <ArtifactDraftingPeek />
 
       {notices.length > 0 && (
         <div className="fixed bottom-4 left-1/2 z-[120] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-[var(--border)] bg-[var(--elevated)] px-3 py-2 text-xs text-[var(--text-secondary)] shadow-none backdrop-blur-md">

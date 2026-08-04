@@ -337,14 +337,19 @@ function toArtifact(id: string, input: CreateArtifactInput): Artifact {
 }
 
 const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const { openArtifact, refreshSaved, artifact: openPanelArtifact, open } =
-    useArtifact();
+  const {
+    openArtifact,
+    stageArtifact,
+    refreshSaved,
+    artifact: openPanelArtifact,
+    open,
+    setDrafting,
+  } = useArtifact();
   const running = partIsRunning(part);
   const input = part.args as Partial<CreateArtifactInput> | undefined;
   const result = part.result as CreateArtifactOutput | undefined;
   const complete =
     part.result !== undefined && !!input?.content && !!input?.title;
-  const openedRef = useRef(false);
   const lastSyncedLen = useRef(0);
 
   const streamingTitle =
@@ -377,41 +382,53 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       : null;
   const artifact = completeArtifact ?? draft;
 
-  // Open early while writing; keep the panel in sync if the user left it open.
+  // Announce drafting for the locational peek; clear when done or panel open.
+  useEffect(() => {
+    if (running && !open && (streamingTitle || kindHint)) {
+      setDrafting({
+        id: artifactId,
+        title: streamingTitle || "Artifact",
+        kind: kindHint || "document",
+        charCount: streamingContent?.length,
+      });
+      return;
+    }
+    if (!running || open) {
+      setDrafting(null);
+    }
+  }, [
+    running,
+    open,
+    streamingTitle,
+    kindHint,
+    artifactId,
+    streamingContent?.length,
+    setDrafting,
+  ]);
+
+  // Stage while writing; live-sync if open; open when complete.
   useEffect(() => {
     if (!artifact) return;
 
     if (complete) {
-      if (!openedRef.current || (open && openPanelArtifact?.id === artifact.id)) {
-        openedRef.current = true;
-        openArtifact({
-          ...artifact,
-          persisted: !!result?.persisted,
-        });
-      }
+      openArtifact({
+        ...artifact,
+        persisted: !!result?.persisted,
+      });
       if (result?.persisted) void refreshSaved();
       lastSyncedLen.current = artifact.code.length;
       return;
     }
 
     if (!running) return;
-    // Wait for a little body so we don't flash an empty panel.
     if (artifact.code.length < 24) return;
 
-    if (!openedRef.current) {
-      openedRef.current = true;
-      lastSyncedLen.current = artifact.code.length;
-      openArtifact(artifact);
-      return;
-    }
+    // Keep content ready for the peek → open path without forcing the panel.
+    stageArtifact(artifact);
+    lastSyncedLen.current = artifact.code.length;
 
-    // Live-update only if the panel is still showing this draft.
-    if (
-      open &&
-      openPanelArtifact?.id === artifact.id &&
-      artifact.code.length !== lastSyncedLen.current
-    ) {
-      lastSyncedLen.current = artifact.code.length;
+    // Live-update only if the panel is already showing this draft.
+    if (open && openPanelArtifact?.id === artifact.id) {
       openArtifact(artifact);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
