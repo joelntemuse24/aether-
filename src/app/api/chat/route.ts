@@ -39,10 +39,11 @@ import { friendlyChatError } from "@/lib/chat-errors";
 import { CONTINUE_SYSTEM_ADDENDUM } from "@/lib/chat-continue";
 
 /**
- * Vercel always enforces a function wall clock — you cannot remove this.
- * Fluid/Pro supports up to ~800s; long artifact + tool runs need the headroom.
+ * Vercel enforces a plan-specific function wall clock.
+ * Pro allows up to 300s — stay under that so deploys validate.
+ * Long artifact turns rely on client auto-continue across segments.
  */
-export const maxDuration = 800;
+export const maxDuration = 275;
 export const runtime = "nodejs";
 
 type ProviderId = "openrouter" | "openai" | "anthropic" | "custom";
