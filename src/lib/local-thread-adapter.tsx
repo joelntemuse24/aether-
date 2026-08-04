@@ -561,7 +561,11 @@ export function createAetherThreadListAdapter(): RemoteThreadListAdapter {
     },
 
     async initialize(threadId: string) {
-      const remoteId = threadId;
+      // assistant-ui hands us `__LOCALID_…` for optimistic threads. Mint a
+      // normal public id so URLs look like `/c/<uuid>` instead of that prefix.
+      const remoteId = threadId.startsWith("__LOCALID_")
+        ? crypto.randomUUID()
+        : threadId;
       if (await ensureMode()) {
         const { cloudCreateThread } = await import(
           "@/lib/conversations/cloud-client"

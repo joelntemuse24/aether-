@@ -77,8 +77,8 @@ export function createFailoverLanguageModel(
           throw err;
         }
         console.warn(
-          `[hosted] ${label} failover ${c.upstreamId} → ${candidates[i + 1].upstreamId}`,
-          err instanceof Error ? err.message : err,
+          `[hosted] ${label} failover ${c.upstreamId} → ${candidates[i + 1]?.upstreamId ?? "end"}`,
+          err instanceof Error ? err.message || err.name : err,
         );
       }
     }

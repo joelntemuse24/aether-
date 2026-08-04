@@ -40,10 +40,10 @@ import { CONTINUE_SYSTEM_ADDENDUM } from "@/lib/chat-continue";
 
 /**
  * Vercel enforces a plan-specific function wall clock.
- * Pro allows up to 300s — stay under that so deploys validate.
- * Long artifact turns rely on client auto-continue across segments.
+ * Pro allows up to 300s — use the full budget.
+ * Longer Opus / tool / artifact turns rely on client auto-continue across segments.
  */
-export const maxDuration = 275;
+export const maxDuration = 300;
 export const runtime = "nodejs";
 
 type ProviderId = "openrouter" | "openai" | "anthropic" | "custom";
