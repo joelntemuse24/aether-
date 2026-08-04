@@ -33,6 +33,7 @@ import { localMemoryContextForChat } from "@/lib/memory/local";
 import {
   CONTINUE_USER_TEXT,
   MAX_AUTO_CONTINUES,
+  hasContinuableAssistant,
   shouldAutoContinue,
 } from "@/lib/chat-continue";
 import type { HarnessChatContext } from "@/lib/harness/types";
@@ -151,6 +152,7 @@ function useChatThreadRuntime() {
   const errorRef = useRef<Error | undefined>(undefined);
   const chatApiRef = useRef<{
     sendMessage: (msg: { text: string }) => Promise<void>;
+    regenerate?: () => Promise<void>;
     clearError?: () => void;
   } | null>(null);
 
@@ -305,6 +307,7 @@ function useChatThreadRuntime() {
   addToolResultRef.current = chat.addToolResult as unknown as AddToolResult;
   chatApiRef.current = {
     sendMessage: (msg) => chat.sendMessage(msg),
+    regenerate: () => chat.regenerate(),
     clearError: () => {
       const withClear = chat as typeof chat & { clearError?: () => void };
       withClear.clearError?.();
@@ -409,6 +412,59 @@ function useChatThreadRuntime() {
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [aui]);
+
+  // Retry on a cut-off turn → continue segment (keep partial work).
+  // Otherwise regenerate from the last user message.
+  useEffect(() => {
+    const onContinueOrRetry = () => {
+      if (statusRef.current === "submitted" || statusRef.current === "streaming") {
+        return;
+      }
+      const api = chatApiRef.current;
+      if (!api) return;
+
+      const preferContinue =
+        !!errorRef.current ||
+        statusRef.current === "error" ||
+        (hasContinuableAssistant(messagesRef.current) &&
+          continueCountRef.current > 0);
+
+      if (preferContinue && hasContinuableAssistant(messagesRef.current)) {
+        continueSegmentRef.current = true;
+        if (lastHarnessRef.current) {
+          armHarnessRef.current(lastHarnessRef.current);
+        }
+        try {
+          api.clearError?.();
+        } catch {
+          // ignore
+        }
+        window.dispatchEvent(
+          new CustomEvent("aether:notice", {
+            detail: "Continuing from where it left off…",
+          }),
+        );
+        void api.sendMessage({ text: CONTINUE_USER_TEXT }).catch((err) => {
+          console.error("[chat] manual continue failed", err);
+          continueSegmentRef.current = false;
+          window.dispatchEvent(
+            new CustomEvent("aether:notice", {
+              detail: "Could not continue. Try sending a short “continue” message.",
+            }),
+          );
+        });
+        return;
+      }
+
+      void api.regenerate?.().catch((err) => {
+        console.error("[chat] regenerate failed", err);
+      });
+    };
+    window.addEventListener("aether:continue-or-retry", onContinueOrRetry);
+    return () => {
+      window.removeEventListener("aether:continue-or-retry", onContinueOrRetry);
+    };
+  }, []);
 
   return useAISDKRuntime(chat, {
     isDisabled: !hasKey,

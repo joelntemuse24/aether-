@@ -52,7 +52,7 @@ export function connectDrive(): void {
 export type DriveListParams = {
   folderId?: string;
   q?: string;
-  type?: "all" | "recent" | "pdf" | "image" | "doc" | "sheet";
+  type?: "all" | "recent" | "pdf" | "image" | "doc" | "sheet" | "slides";
   pageToken?: string;
 };
 

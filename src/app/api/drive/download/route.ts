@@ -7,6 +7,7 @@ import {
   MAX_EMBEDDED_FILE_BYTES,
   MAX_EMBEDDED_IMAGE_BYTES,
 } from "@/lib/attachments";
+import { extractOfficeText, isOfficeFile } from "@/lib/office-text";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -251,7 +252,7 @@ export async function POST(req: Request) {
       // Only embed moderately sized PDFs. Huge base64 blobs in the browser
       // freeze the chat composer (see attachment-payloads side store).
       if (blob.size > MAX_EMBEDDED_FILE_BYTES) {
-        const mb = (MAX_EMBEDDED_FILE_BYTES / (1024 * 1024)).toFixed(0);
+        const mb = (MAX_EMBEDDED_FILE_BYTES / (1024 * 1024)).toFixed(1);
         return NextResponse.json({
           attachment: {
             id,
@@ -277,6 +278,37 @@ export async function POST(req: Request) {
       });
     }
 
+    if (isOfficeFile(name, mimeType)) {
+      const buf = Buffer.from(await blob.arrayBuffer());
+      try {
+        const text = await extractOfficeText(buf, name, mimeType);
+        if (text) {
+          return NextResponse.json({
+            attachment: {
+              id,
+              name,
+              kind: "text",
+              mime: "text/plain",
+              size: text.length,
+              text,
+            },
+          });
+        }
+      } catch (err) {
+        console.error("[drive/download] office extract", err);
+      }
+      return NextResponse.json({
+        attachment: {
+          id,
+          name,
+          kind: "file",
+          mime: mimeType,
+          size: blob.size,
+        },
+        error: `"${name}" couldn't be read as text. Convert to Google Docs/Slides or paste the content.`,
+      });
+    }
+
     return NextResponse.json({
       attachment: {
         id,
@@ -285,6 +317,7 @@ export async function POST(req: Request) {
         mime: mimeType,
         size: blob.size,
       },
+      error: `"${name}" was attached by name only (unsupported file type for model reading).`,
     });
   } catch (err) {
     console.error("[drive/download]", err);

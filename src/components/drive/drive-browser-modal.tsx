@@ -28,7 +28,7 @@ import { MAX_ATTACHMENTS } from "@/lib/attachments";
 import { useAttachments } from "@/providers/attachments-provider";
 
 type ViewMode = "grid" | "list";
-type TypeFilter = "all" | "recent" | "pdf" | "image" | "doc" | "sheet";
+type TypeFilter = "all" | "recent" | "pdf" | "image" | "doc" | "sheet" | "slides";
 
 type Breadcrumb = { id: string; name: string };
 
@@ -45,6 +45,7 @@ const TYPE_FILTERS: { id: TypeFilter; label: string }[] = [
   { id: "image", label: "Images" },
   { id: "doc", label: "Docs" },
   { id: "sheet", label: "Sheets" },
+  { id: "slides", label: "Slides" },
 ];
 
 export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
@@ -58,6 +59,8 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
     { id: "root", name: "My Drive" },
   ]);
   const [files, setFiles] = useState<DriveFileItem[]>([]);
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Map<string, DriveFileItem>>(
@@ -78,6 +81,7 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setNextPageToken(null);
     try {
       const result = await listDriveFiles({
         folderId: type === "recent" || debouncedQuery ? undefined : folderId,
@@ -85,13 +89,46 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
         type,
       });
       setFiles(result.files);
+      setNextPageToken(result.nextPageToken);
     } catch (err) {
       setFiles([]);
+      setNextPageToken(null);
       setError(err instanceof Error ? err.message : "Failed to load files");
     } finally {
       setLoading(false);
     }
   }, [folderId, debouncedQuery, type]);
+
+  const loadMore = useCallback(async () => {
+    if (!nextPageToken || loadingMore || loading) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const result = await listDriveFiles({
+        folderId: type === "recent" || debouncedQuery ? undefined : folderId,
+        q: debouncedQuery || undefined,
+        type,
+        pageToken: nextPageToken,
+      });
+      setFiles((prev) => {
+        const seen = new Set(prev.map((f) => f.id));
+        const appended = result.files.filter((f) => !seen.has(f.id));
+        return [...prev, ...appended];
+      });
+      setNextPageToken(result.nextPageToken);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load more files");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [
+    nextPageToken,
+    loadingMore,
+    loading,
+    folderId,
+    debouncedQuery,
+    type,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -440,6 +477,26 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
                   onToggle={() => toggleSelect(file)}
                 />
               ))}
+            </div>
+          )}
+
+          {!loading && !error && nextPageToken && (
+            <div className="flex justify-center pt-3">
+              <Button
+                variant="ghost"
+                onClick={() => void loadMore()}
+                disabled={loadingMore}
+                className="text-[13px]"
+              >
+                {loadingMore ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Loader2Icon className="size-3.5 animate-spin" />
+                    Loading…
+                  </span>
+                ) : (
+                  "Load more"
+                )}
+              </Button>
             </div>
           )}
         </div>
