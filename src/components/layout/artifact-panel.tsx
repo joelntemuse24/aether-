@@ -561,7 +561,51 @@ export function ArtifactPanel() {
   };
 
   const onExportPdf = () => {
-    iframeRef.current?.contentWindow?.print();
+    // Prefer the live preview iframe when it's mounted (preview tab).
+    const live = iframeRef.current?.contentWindow;
+    if (live && tab === "preview") {
+      live.focus();
+      live.print();
+      return;
+    }
+
+    // Edit tab (or iframe not ready): print a temporary document.
+    // Empty sandbox="" blocks window.print() — do not sandbox this frame.
+    const html = buildDocumentPreviewDoc(
+      marked.parse(content, { async: false }) as string,
+      previewTheme,
+    );
+    const frame = document.createElement("iframe");
+    frame.setAttribute("title", "Print preview");
+    frame.style.cssText =
+      "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none";
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument;
+    const win = frame.contentWindow;
+    if (!doc || !win) {
+      frame.remove();
+      return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    const cleanup = () => {
+      frame.remove();
+    };
+    win.addEventListener("afterprint", cleanup, { once: true });
+    // If afterprint never fires (some browsers), still tear down.
+    window.setTimeout(cleanup, 60_000);
+
+    // Wait a tick so styles/fonts can attach before the dialog opens.
+    window.setTimeout(() => {
+      try {
+        win.focus();
+        win.print();
+      } catch {
+        cleanup();
+      }
+    }, 50);
   };
 
   const KindIcon =
@@ -721,7 +765,9 @@ export function ArtifactPanel() {
           <iframe
             ref={iframeRef}
             title="Document preview"
-            sandbox=""
+            /* allow-modals: required for contentWindow.print() / Save as PDF.
+               Empty sandbox="" silently blocks print. No scripts in this doc. */
+            sandbox="allow-modals allow-same-origin"
             srcDoc={buildDocumentPreviewDoc(documentHtml, previewTheme)}
             className="h-full w-full border-0 bg-[var(--canvas)]"
           />
