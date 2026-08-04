@@ -266,6 +266,7 @@ function useChatThreadRuntime() {
           scheduleAutoContinue("onError"));
       if (continuing) return;
 
+      emitContinueStatus({ phase: "idle" });
       clearChatContext();
       void import("@/lib/chat-errors").then(({ friendlyChatError }) => {
         const detail = friendlyChatError(error);
