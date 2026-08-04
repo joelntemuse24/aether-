@@ -109,18 +109,13 @@ const ToolShell: FC<{
   running: boolean;
   error?: boolean;
   subtitle?: string;
-  defaultOpen?: boolean;
   children?: React.ReactNode;
   headerAction?: React.ReactNode;
-}> = ({ name, running, error, subtitle, defaultOpen, children, headerAction }) => {
-  const [open, setOpen] = useState(defaultOpen ?? false);
+}> = ({ name, running, error, subtitle, children, headerAction }) => {
+  // Always collapsed by default — header stays visible; user expands for detail.
+  const [open, setOpen] = useState(false);
   const display = getToolDisplay(name);
   const Icon = ICONS[name] ?? WrenchIcon;
-
-  // When a finished tool prefers to open (errors, useful results), sync once.
-  useEffect(() => {
-    if (defaultOpen) setOpen(true);
-  }, [defaultOpen]);
 
   return (
     <div
@@ -222,7 +217,6 @@ const PythonToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       running={running}
       error={error}
       subtitle={description}
-      defaultOpen={!!error || (running && !!code)}
     >
       {code && (
         <CodeSnippet code={code} label={running ? "Writing code…" : "Code"} />
@@ -274,8 +268,6 @@ const WebSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
             : query
           : undefined
       }
-      // Keep collapsed by default — research turns often fire several searches.
-      defaultOpen={!!error || !!output?.warning}
     >
       {output?.error && (
         <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
@@ -440,7 +432,6 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     <ToolShell
       name={TOOL_NAMES.createArtifact}
       running={running}
-      defaultOpen={running && !!streamingContent}
       subtitle={
         streamingTitle
           ? result?.persisted
@@ -510,7 +501,6 @@ const MemorySearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       running={running}
       error={error}
       subtitle={input?.query}
-      defaultOpen={!running && results.length > 0}
     >
       {results.length === 0 && !running ? (
         <p className="text-[12px] text-[var(--muted)]">No memories matched.</p>
@@ -564,7 +554,6 @@ const MemoryWriteToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       running={running}
       error={error}
       subtitle={input?.title || saved?.title}
-      defaultOpen={!running && !!saved}
     >
       {(saved || input) && (
         <div className="rounded-lg border border-[var(--border)] bg-[var(--elevated)] px-2.5 py-2">
@@ -615,7 +604,6 @@ const DriveSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       running={running}
       error={error}
       subtitle={input?.query}
-      defaultOpen={!running}
     >
       {output?.error && (
         <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
@@ -664,7 +652,6 @@ const DriveReadToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       running={running}
       error={error}
       subtitle={output?.name || input?.fileId}
-      defaultOpen={!running && !!output?.text}
     >
       {output?.error && (
         <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
@@ -713,7 +700,6 @@ const GitHubGetRepoToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       running={running}
       error={error}
       subtitle={repo?.fullName || input?.repo}
-      defaultOpen={!running && (!!repo || !!output?.error)}
     >
       {output?.error && (
         <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
@@ -774,7 +760,6 @@ const GitHubListContentsToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
           ? `${input.repo}${pathLabel && pathLabel !== "/" ? ` · ${pathLabel}` : ""}`
           : pathLabel
       }
-      defaultOpen={!running && (entries.length > 0 || !!output?.error)}
     >
       {output?.error && (
         <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
@@ -820,7 +805,6 @@ const GitHubReadFileToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       running={running}
       error={error}
       subtitle={output?.path || input?.path || input?.repo}
-      defaultOpen={!running && (!!output?.text || !!output?.error)}
     >
       {output?.error && (
         <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
@@ -864,7 +848,6 @@ const FetchUrlToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       running={running}
       error={error}
       subtitle={output?.title || href}
-      defaultOpen={!running && (!!output?.text || !!output?.error)}
     >
       {href && (
         <a
@@ -919,7 +902,6 @@ const ToolSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
             : input.query
           : undefined
       }
-      defaultOpen={!running && unlocked.length > 0}
     >
       {output?.note && (
         <p className="mb-2 text-[12px] text-[var(--muted)]">{output.note}</p>
@@ -944,13 +926,11 @@ const ToolSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 
 const GenericToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const running = partIsRunning(part);
-  const hasArgs = !!part.argsText;
   return (
     <ToolShell
       name={part.toolName}
       running={running}
       error={part.isError}
-      defaultOpen={running && hasArgs}
     >
       {part.argsText && (
         <CodeSnippet
