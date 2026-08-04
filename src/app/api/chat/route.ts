@@ -36,12 +36,14 @@ import { listHostedCandidates } from "@/lib/hosted/client";
 import { isHostedConfigured } from "@/lib/hosted/config";
 import { createFailoverLanguageModel } from "@/lib/hosted/failover";
 import { friendlyChatError } from "@/lib/chat-errors";
+import { CONTINUE_SYSTEM_ADDENDUM } from "@/lib/chat-continue";
 
 /**
- * Vercel always enforces a function wall clock — you cannot remove this.
- * Fluid/Pro supports higher values (up to ~800); 300 covers deep tool runs.
+ * Vercel enforces a plan-specific function wall clock.
+ * Pro allows up to 300s — stay under that so deploys validate.
+ * Long artifact turns rely on client auto-continue across segments.
  */
-export const maxDuration = 300;
+export const maxDuration = 275;
 export const runtime = "nodejs";
 
 type ProviderId = "openrouter" | "openai" | "anthropic" | "custom";
@@ -214,6 +216,7 @@ export async function POST(req: Request) {
       );
     }
     const toolsEnabled = getHeader(req, "x-tools") !== "0";
+    const continueSegment = body.continueSegment === true;
     const userSystem =
       typeof body.system === "string" && body.system.length <= 8000
         ? body.system
@@ -286,6 +289,7 @@ export async function POST(req: Request) {
     const system = [
       toolsEnabled ? TOOLS_SYSTEM_PROMPT : null,
       harnessAddendum,
+      continueSegment ? CONTINUE_SYSTEM_ADDENDUM : null,
       userSystem,
       memoryForPrompt,
       projectBlock,

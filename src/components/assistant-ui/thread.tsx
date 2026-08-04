@@ -245,7 +245,7 @@ function AttachmentChips() {
 const Composer: FC = () => {
   const { hasKey, setOpenSettings, openConnectedAccounts, chatHeaders } =
     useSettings();
-  const { addFiles } = useAttachments();
+  const { addFiles, hasAttachments, attachments } = useAttachments();
   const {
     connected: driveConnected,
     authenticated: driveAuthed,
@@ -300,8 +300,16 @@ const Composer: FC = () => {
   }) => {
     if (!hasKey || isRunning || classifying || resumeBusy) return;
     const state = composerRuntime.getState();
-    const text = (opts?.text ?? state.text).trim();
-    if (!text && !state.attachments?.length) return;
+    let text = (opts?.text ?? state.text).trim();
+    // Attachments live in AttachmentsProvider, not composerRuntime — allow
+    // attach-only sends by synthesizing a short prompt when needed.
+    if (!text && !hasAttachments && !state.attachments?.length) return;
+    if (!text && hasAttachments) {
+      text =
+        attachments.length === 1
+          ? `Please review the attached file: ${attachments[0].name}`
+          : `Please review the ${attachments.length} attached files.`;
+    }
 
     let classification = opts?.classification;
     let runId = opts?.runId;
@@ -373,8 +381,8 @@ const Composer: FC = () => {
     setLastPlanSteps(classification?.planSteps);
     setPending(null);
 
-    if (opts?.text != null) {
-      composerRuntime.setText(opts.text);
+    if (opts?.text != null || composerRuntime.getState().text.trim() !== text) {
+      composerRuntime.setText(text);
     }
     if (composerRuntime.getState().canSend) {
       composerRuntime.send();
@@ -609,7 +617,7 @@ const Composer: FC = () => {
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/*,.pdf,.txt,.md,.markdown,.csv,.json,.js,.jsx,.ts,.tsx,.py,.html,.css,.xml,.yaml,.yml,.toml,.sh,.sql,.rs,.go"
+        accept="image/*,.pdf,.txt,.md,.markdown,.csv,.json,.js,.jsx,.ts,.tsx,.py,.html,.css,.xml,.yaml,.yml,.toml,.ini,.env,.sh,.sql,.rs,.go,.java,.c,.cpp,.h,.hpp"
         className="hidden"
         onChange={handleFileChange}
       />
@@ -824,7 +832,8 @@ const MessageError: FC = () => {
       <ErrorPrimitive.Root className="mt-2 rounded-xl border border-[var(--error-border)] bg-[var(--error-bg)] p-3 text-sm text-[var(--error-text)]">
         <ErrorPrimitive.Message className="whitespace-pre-wrap" />
         <p className="mt-1.5 text-[12px] text-[var(--muted)]">
-          Use Retry on this message to continue, or pick another model.
+          If this was a time limit, Aether tries to continue automatically.
+          Otherwise use Retry, or pick another model.
         </p>
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
