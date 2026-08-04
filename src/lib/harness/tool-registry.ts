@@ -182,7 +182,7 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     });
     tools[TOOL_NAMES.githubReadFile] = tool({
       description:
-        "Read a text file from a GitHub repository by path (README, source, config). Pass owner/repo (or URL), path, optional ref.",
+        "Read one text file from a GitHub repository by path (README, source, config). Pass owner/repo (or URL), a single path, optional ref. For multiple files, call this tool multiple times in parallel — never put two JSON objects in one call.",
       inputSchema: githubReadFileInput,
       execute: async ({ repo, path, ref }) =>
         githubReadFileForUser(ctx.userId!, repo, path, ref),
