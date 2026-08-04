@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import {
   Plus,
   PanelLeftCloseIcon,
@@ -15,12 +15,41 @@ import {
   ThumbsUp,
   ThumbsDown,
   ArrowDown,
+  Moon,
+  Sun,
+  Circle,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 type Message = { id: string; role: "user" | "assistant"; content: string };
 type Thread  = { id: string; title: string; messages: Message[] };
+type Theme = "dark" | "light" | "white";
+
+const THEME_KEY = "aether:theme";
+const THEME_CLASSES = ["aether-dark", "aether-light", "aether-white"] as const;
+
+function themeClass(theme: Theme) {
+  return theme === "dark" ? "aether-dark" : theme === "white" ? "aether-white" : "aether-light";
+}
+
+function themeCanvas(theme: Theme) {
+  return theme === "dark" ? "#1a1a1c" : theme === "white" ? "#fffdfa" : "#f1ede6";
+}
+
+function themeText(theme: Theme) {
+  return theme === "dark" ? "#ededef" : "#1a1714";
+}
+
+function readStoredTheme(): Theme {
+  try {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored === "dark" || stored === "light" || stored === "white") return stored;
+  } catch {
+    // ignore
+  }
+  return "light";
+}
 
 // ─── Sparkle (matches thread.tsx) ─────────────────────────────────────────
 
@@ -58,12 +87,18 @@ function Label({ children, accent }: { children: React.ReactNode; accent?: boole
 function Sidebar({
   collapsed, onToggle, threads, activeThreadId,
   onSelectThread, onNewThread, onDeleteThread, onOpenSettings,
+  theme, onToggleTheme,
 }: {
   collapsed: boolean; onToggle: () => void; threads: Thread[];
   activeThreadId: string | null; onSelectThread: (id: string) => void;
   onNewThread: () => void; onDeleteThread: (id: string) => void;
   onOpenSettings: () => void;
+  theme: Theme; onToggleTheme: () => void;
 }) {
+  const themeTitle =
+    theme === "dark" ? "Switch to Light" : theme === "light" ? "Switch to White" : "Switch to Dark";
+  const ThemeIcon = theme === "dark" ? Sun : theme === "white" ? Moon : Circle;
+
   if (collapsed) {
     return (
       <aside
@@ -71,7 +106,7 @@ function Sidebar({
         style={{ background: "var(--elevated)", borderRight: "1px solid var(--border)" }}
       >
         <button onClick={onToggle} title="Expand sidebar"
-          className="mb-3 flex size-8 items-center justify-center rounded-lg transition-colors hover:bg-white/5"
+          className="mb-3 flex size-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--hover-overlay)]"
           style={{ color: "var(--muted)" }}>
           <PanelLeftIcon className="size-4" />
         </button>
@@ -80,8 +115,13 @@ function Sidebar({
           style={{ color: "var(--accent)" }}>
           <Plus className="size-4" />
         </button>
+        <button onClick={onToggleTheme} title={themeTitle} aria-label="Cycle theme"
+          className="mb-2 flex size-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--hover-overlay)]"
+          style={{ color: "var(--muted)" }}>
+          <ThemeIcon className="size-4" />
+        </button>
         <button onClick={onOpenSettings} title="Settings"
-          className="flex size-8 items-center justify-center rounded-lg transition-colors hover:bg-white/5"
+          className="flex size-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--hover-overlay)]"
           style={{ color: "var(--muted)" }}>
           <Settings className="size-4" />
         </button>
@@ -160,15 +200,20 @@ function Sidebar({
       </div>
 
       {/* Settings footer */}
-      <div className="p-3" style={{ borderTop: "1px solid var(--border)" }}>
+      <div className="flex items-center gap-1 p-3" style={{ borderTop: "1px solid var(--border)" }}>
         <button onClick={onOpenSettings}
-          className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors hover:bg-white/5"
+          className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors hover:bg-[var(--hover-overlay)]"
           style={{ color: "var(--muted)" }}>
           <Settings className="size-3.5 shrink-0" />
           <div className="min-w-0 flex-1 text-left">
             <div className="truncate" style={{ fontSize: 12, color: "var(--text)", fontFamily: "'Inter', sans-serif" }}>Settings</div>
             <Label>Model · API key</Label>
           </div>
+        </button>
+        <button onClick={onToggleTheme} title={themeTitle} aria-label="Cycle theme"
+          className="flex size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-[var(--hover-overlay)]"
+          style={{ color: "var(--muted)" }}>
+          <ThemeIcon className="size-3.5" />
         </button>
       </div>
     </aside>
@@ -440,14 +485,49 @@ export default function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [model, setModel] = useState(MODELS[0].id);
   const [showScroll, setShowScroll] = useState(false);
+  const [theme, setTheme] = useState<Theme>("light");
   const viewportRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const appShellRef = useRef<HTMLDivElement>(null);
 
   const active = threads.find((t) => t.id === activeId) ?? null;
   const messages = active?.messages ?? [];
   const isEmpty = messages.length === 0;
 
+  useEffect(() => {
+    setTheme(readStoredTheme());
+  }, []);
+
+  useLayoutEffect(() => {
+    const cls = themeClass(theme);
+    const canvas = themeCanvas(theme);
+    const text = themeText(theme);
+
+    for (const el of [document.documentElement, document.body, appShellRef.current]) {
+      if (!el) continue;
+      el.classList.remove(...THEME_CLASSES);
+      el.classList.add(cls);
+    }
+
+    // Strip a host-injected legacy class so nothing else claims the variant.
+    document.documentElement.classList.remove("dark");
+
+    document.documentElement.style.backgroundColor = canvas;
+    document.body.style.backgroundColor = canvas;
+    document.body.style.color = text;
+
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // ignore
+    }
+  }, [theme]);
+
   useEffect(() => { if (!isRunning) bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length, isRunning]);
+
+  const cycleTheme = () => {
+    setTheme((prev) => (prev === "dark" ? "light" : prev === "light" ? "white" : "dark"));
+  };
 
   const handleSend = (text: string) => {
     let tid = activeId;
@@ -476,8 +556,15 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-dvh w-full overflow-hidden"
-      style={{ background: "var(--canvas)", color: "var(--text)", fontFamily: "'Inter', sans-serif" }}>
+    <div
+      ref={appShellRef}
+      className="aether-app-shell flex h-dvh min-h-screen w-full min-w-full overflow-hidden"
+      style={{
+        backgroundColor: themeCanvas(theme),
+        color: themeText(theme),
+        fontFamily: "'Inter', sans-serif",
+      }}
+    >
 
       {/* Desktop sidebar */}
       <div className="hidden h-full md:flex">
@@ -485,7 +572,8 @@ export default function App() {
           threads={threads} activeThreadId={activeId} onSelectThread={setActiveId}
           onNewThread={() => setActiveId(null)}
           onDeleteThread={(id) => { setThreads((p) => p.filter((t) => t.id !== id)); if (activeId === id) setActiveId(null); }}
-          onOpenSettings={() => setSettingsOpen(true)} />
+          onOpenSettings={() => setSettingsOpen(true)}
+          theme={theme} onToggleTheme={cycleTheme} />
       </div>
 
       {/* Mobile drawer */}
@@ -499,7 +587,8 @@ export default function App() {
               onSelectThread={(id) => { setActiveId(id); setMobileSidebar(false); }}
               onNewThread={() => { setActiveId(null); setMobileSidebar(false); }}
               onDeleteThread={(id) => { setThreads((p) => p.filter((t) => t.id !== id)); if (activeId === id) setActiveId(null); }}
-              onOpenSettings={() => { setSettingsOpen(true); setMobileSidebar(false); }} />
+              onOpenSettings={() => { setSettingsOpen(true); setMobileSidebar(false); }}
+              theme={theme} onToggleTheme={cycleTheme} />
           </div>
         </div>
       )}
