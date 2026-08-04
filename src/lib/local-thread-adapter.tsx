@@ -44,6 +44,41 @@ export function clearActiveThreadIf(remoteId: string) {
   }
 }
 
+function readActiveThreadId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(ACTIVE_THREAD_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearActiveThreadId() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(ACTIVE_THREAD_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Pending composer attachments clear on this event (real chat switches only). */
+export function announceThreadSwitch() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("aether:thread-switched"));
+}
+
+/**
+ * User started a blank chat. Drop the previous active id so the first
+ * remoteId assignment for this chat is not mistaken for A→B (which used to
+ * wipe attachments mid-clarify / first send).
+ */
+export function beginNewChatSession() {
+  const prev = readActiveThreadId();
+  clearActiveThreadId();
+  if (prev) announceThreadSwitch();
+}
+
 type StoredThread = {
   remoteId: string;
   status: "regular" | "archived";

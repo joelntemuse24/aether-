@@ -18,6 +18,7 @@ import {
   loadThreadUIMessages,
   loadThreadUIMessagesAsync,
   persistThreadUIMessages,
+  announceThreadSwitch,
 } from "@/lib/local-thread-adapter";
 import { readThreadIdFromLocation } from "@/lib/thread-url";
 import { useSettings } from "./settings-provider";
@@ -46,8 +47,14 @@ function loadInitialThreadIdFromUrl(): string | undefined {
 function saveActiveThreadId(threadId: string) {
   if (typeof window === "undefined") return;
   try {
+    const prev = localStorage.getItem(ACTIVE_THREAD_KEY);
+    if (prev === threadId) return;
     localStorage.setItem(ACTIVE_THREAD_KEY, threadId);
-    window.dispatchEvent(new CustomEvent("aether:thread-switched"));
+    // Only a real leave A→B (sidebar / deep link). First id on a blank chat
+    // has no prev (cleared by beginNewChatSession) and must not wipe attaches.
+    if (prev && prev !== threadId) {
+      announceThreadSwitch();
+    }
   } catch {
     // ignore quota / private mode
   }

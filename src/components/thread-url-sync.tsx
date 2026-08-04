@@ -8,6 +8,7 @@ import {
   parseThreadIdFromPath,
   threadPath,
 } from "@/lib/thread-url";
+import { beginNewChatSession } from "@/lib/local-thread-adapter";
 
 /**
  * Keeps the browser URL and the active conversation in sync.
@@ -76,6 +77,8 @@ export function ThreadUrlSync() {
 
       // Bare `/` from back/forward or explicit navigation → new chat.
       aui.threads().switchToNewThread();
+      // Drop stale active id so first-send initialize isn't treated as A→B.
+      beginNewChatSession();
     })();
 
     return () => {
