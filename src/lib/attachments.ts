@@ -227,7 +227,16 @@ export async function processFiles(
   }
 
   if (files.length > remainingSlots) {
-    errors.push(`Only ${remainingSlots} more file(s) could be added.`);
+    const skipped = files.length - remainingSlots;
+    if (existingCount === 0) {
+      errors.push(
+        `You can attach up to ${MAX_ATTACHMENTS} files. ${skipped} skipped.`,
+      );
+    } else {
+      errors.push(
+        `Skipped ${skipped} file(s) — only ${remainingSlots} attachment slot(s) left.`,
+      );
+    }
   }
 
   return { attachments, errors };

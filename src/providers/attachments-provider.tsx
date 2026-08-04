@@ -106,7 +106,16 @@ function applySlotAndBudgetCap(
   }
 
   if (truncatedBySlots) {
-    errors.push(`Only ${remaining} more file(s) could be added.`);
+    const skipped = candidates.length - kept.length;
+    if (prev.length === 0) {
+      errors.push(
+        `You can attach up to ${MAX_ATTACHMENTS} files. ${Math.max(skipped, 1)} skipped.`,
+      );
+    } else {
+      errors.push(
+        `Skipped ${Math.max(skipped, 1)} file(s) — only ${remaining} attachment slot(s) left.`,
+      );
+    }
   }
 
   return { kept, errors };
