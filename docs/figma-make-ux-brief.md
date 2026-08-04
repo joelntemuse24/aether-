@@ -1,107 +1,145 @@
-# Figma Make brief — Aether UI/UX polish
+# Figma Make — next-pass prompt (Aether)
 
-Paste everything under **Prompt for Figma Make** into Figma Make. Attach / open the **Relevant files** listed below (or screenshots of those screens in the live app) so Make matches the real product, not a generic chat template.
+Use this **inside the existing Make file**  
+`https://www.figma.com/make/ipxnTHtemrhVnpNwyaiFff/Redesign-Aether-Chat-App`
 
----
-
-## Prompt for Figma Make
-
-```
-You are redesigning UI/UX polish for Aether — a BYOK + hosted AI chat app (Next.js). This is NOT a marketing landing page and NOT a dashboard. Preserve the existing product structure and visual language; raise craft, clarity, and calm.
-
-### Product feel
-- Quiet, literary, tool-aware chat — closer to a focused writing desk than ChatGPT chrome.
-- Brand “Aether” should stay present but never shout over the conversation.
-- Themes already exist: Dark, Light (warm parchment), White (near-white). Design tokens must work in all three; do not invent a purple/indigo AI cliché theme.
-
-### Hard layout rules
-- First viewport of empty chat = one composition (greeting + composer), not a control panel.
-- No card-heavy hero. Cards only where the user is choosing/acting (attachments, Drive picker, settings rows).
-- One job per section. Reduce pill clusters, stat strips, icon salads, floating badges on media.
-- Mobile and desktop both matter; composer and sidebar must feel intentional under 640px.
-
-### What to redesign (priority order)
-
-1) **Chat thread + long-run clarity**
-   - Assistant message actions: Continue vs Retry must be visually distinct when a turn was cut off by a time limit.
-   - While tools/artifacts are building: expandable “construction” states (writing artifact, tool args streaming) — readable, not noisy.
-   - Auto-continue segments: subtle inline status (“Continuing… 2/3”) near the composer or last message — not a toast pile.
-   - Error / incomplete message treatment that invites Continue without looking like a hard failure.
-
-2) **Composer**
-   - Attach menu (Upload / Drive / GitHub), model picker, mic, Send/Stop.
-   - Attachment chips: show when a file is model-readable vs name-only; avoid scary red unless blocked.
-   - Drag-drop affordance without turning the composer into a dashed “dropzone card.”
-
-3) **Sidebar**
-   - Recent chats search empty state (“No matches”).
-   - Projects + Vault: replace browser prompt/confirm energy with proper lightweight dialogs (create / rename / delete).
-   - Theme cycle control should feel native, not a leftover icon.
-
-4) **Settings / Connected accounts**
-   - BYOK vs Aether Cloud, model advanced custom base URL, Drive/GitHub connect states.
-   - Clear hierarchy; less “settings dump.”
-
-5) **Drive browser modal**
-   - Grid/list, filters (All / Recent / PDF / Images / Docs / Sheets / Slides), breadcrumbs, multi-select, Load more.
-   - Feel like a file picker inside Aether, not Google Drive pasted in.
-
-6) **Artifact panel**
-   - Document / code / data / svg / image kinds.
-   - Live “writing” state + Open affordance.
-   - Export actions (copy / download / print-PDF) without looking like a separate app.
-
-7) **Notices / sync banner**
-   - Bottom notices + local→cloud sync prompt: one coherent system, auto-dismiss rules, no overlapping stacks.
-
-### Deliverables in Figma
-- Desktop + mobile frames for: Empty chat, Active streaming w/ tools+artifact, Timeout/Continue state, Composer with attachments, Sidebar (search empty + project dialog), Settings, Drive modal, Artifact panel open.
-- A small component set: buttons, icon buttons, chips, tool shell, notice, dialog, sidebar row.
-- Explicit light / white / dark examples for the chat shell + composer at minimum.
-
-### Do NOT
-- Redesign the product into a SaaS marketing site.
-- Add purple glow, glassmorphism stacks, or dashboard KPI strips.
-- Invent PPT/DOCX export UI as if Office files are generated natively (artifacts are markdown/code/pdf-print today).
-- Hide the brand; don’t let a generic headline overpower “Aether.”
-```
+Do **not** start a new Make from scratch. This is a refinement of the prototype already in that thread.
 
 ---
 
-## Relevant files (attach or screenshot these)
+## Prompt (paste into Figma Make)
 
-### Shell / layout
-- `src/components/layout/app-shell.tsx` — overall chrome, notices
-- `src/components/layout/sidebar.tsx` — recent, search, projects
-- `src/components/layout/vault-sidebar.tsx` — vault UI + confirm flows
-- `src/components/layout/artifact-panel.tsx` — artifact side panel
-- `src/components/sync-local-chats-banner.tsx` — sync prompt
-- `src/app/globals.css` — theme tokens (dark / light / white)
+```
+CONTEXT — READ FIRST
+You already redesigned Aether in this Make file. App.tsx is a working high-fidelity prototype of the consumer chat shell (sidebar, thread, composer w/ mic+stop, tool chips, artifact inspector, preferences, vault, dark/light). Keep that foundation.
 
-### Chat surface
-- `src/components/assistant-ui/thread.tsx` — greeting, composer, messages, Continue/Retry, attachments
-- `src/components/assistant-ui/tool-ui.tsx` — tool shells + artifact construction streaming
-- `src/components/assistant-ui/agent-status-strip.tsx` — thinking / status line
-- `src/components/model-picker.tsx` — model selector
+This is a NEXT PASS, not a greenfield redesign.
+- Preserve the information architecture and consumer tone you already established.
+- Do NOT reintroduce developer jargon (BYOK, OpenRouter, harness, API key theater).
+- Do NOT invent a marketing landing page or purple/glow AI template.
+- Prefer editing App.tsx / existing components over creating a parallel app.
 
-### Modals / settings
-- `src/components/settings/settings-dialog.tsx` — settings / BYOK / cloud
-- `src/components/drive/drive-browser-modal.tsx` — Drive picker (incl. Load more, filters)
+I am re-attaching the CURRENT production Aether UI source (and key libs) so you can reconcile the prototype with what’s shipping. Where Make and prod differ, choose the better consumer UX — but keep prod capabilities that Make simplified away if they’re still needed.
 
-### Theme
-- `src/providers/theme-provider.tsx` — Dark / Light / White
+WHAT’S ALREADY GOOD IN THIS MAKE (keep / polish, don’t rebuild)
+- Consumer empty chat + composer as one composition
+- Mic states, Stop while generating, message edit/retry/restore energy
+- Light tool chips instead of heavy engineering panels
+- Artifact as soft inspector (not a hard split that eats the thread on mobile)
+- Preferences (not a key vault); Advanced buried
+- Sidebar: Recent, Projects, Artifacts, Vault, theme
+- Dark + warm light parchment tokens
 
-### Optional product context (behavior, not visuals)
-- `src/lib/chat-continue.ts` — auto-continue semantics (for Continue UX copy)
-- `src/lib/tools.ts` — artifact kinds + tool labels
-- `AGENTS.md` — product constraints (BYOK, no `/settings` route, Drive returns `/?connect=drive`)
+WHAT PRODUCTION HAS ADDED / WHAT THIS PASS MUST DESIGN (gaps)
+Use the attached prod files as ground truth for behavior; design the UI clearly even if Make is mock-data only.
+
+1) Continue vs Retry (critical)
+Prod now auto-continues when a long reply hits the ~275s server limit, and Retry on a cut-off turn should CONTINUE (keep partial work), not regenerate from scratch.
+Design:
+- Distinct Continue action on incomplete / timed-out assistant turns
+- Quiet inline status: “Continuing… 2/3” near composer or last message (not a toast pile)
+- Incomplete/error treatment that invites Continue without looking like a hard crash
+- Retry remains for completed turns (regenerate)
+
+2) White theme (third appearance)
+Prod has Dark / Light (parchment) / White (near-white). Make currently toggles only dark↔light.
+Add White as a first-class appearance in Preferences + sidebar cycle. Tokens must stay calm — not flat gray SaaS, not cream+terracotta cliché.
+
+3) Attachment honesty
+Prod embeds PDFs/images within budgets; Office (docx/pptx/xlsx) extracts to text; over-budget files are name-only.
+Design composer chips for:
+- Readable (model can see content)
+- Name-only / limited (soft warning, not scary red unless blocked)
+Attach menu: Upload files · Google Drive · GitHub (connected vs connect). Don’t pitch Drive to everyone.
+
+4) Drive picker polish
+Prod: Load more pagination, Slides filter, Docs/Sheets/PDF/Images, breadcrumbs, multi-select.
+Refine the Drive modal to match Aether shell language (not a pasted Google UI). Include Load more + Slides.
+
+5) Tool / artifact construction while streaming
+Prod streams create_artifact content and tool args; expandable “Writing…” construction.
+Design live construction states: expandable tool row showing writing progress; artifact panel can open early and update while writing.
+
+6) Notices / sync system
+Prod: bottom notices + sync-local-chats banner can stack.
+One coherent notice system: auto-dismiss rules, single stack, no overlapping cards with sync banner.
+
+7) Projects / Vault dialogs
+Replace browser prompt/confirm energy with lightweight in-app dialogs (create / rename / delete). Vault can stay powerful; make create/delete feel finished.
+
+8) Sidebar search empty state
+When Recent filter matches nothing: “No matches” — not a blank hole.
+
+HARD RULES (same north star as the original brief)
+- Consumer Claude/ChatGPT intuition. Labels shouldn’t need a paragraph.
+- One composition per viewport; cards only when they ARE the interaction.
+- One job per region: Sidebar=nav, Main=conversation, Composer=input, Inspector=artifact.
+- Keep Aether fonts (serif display / UI sans / mono). Not Inter-only.
+- Motion: 2–3 intentional (sidebar, inspector, listening pulse, message appear).
+- Brand “Aether” present in the shell; no marketing page inside the app.
+
+DELIVERABLES (update THIS Make, don’t fork a new product)
+Desktop:
+- Empty chat
+- Active thread with tool construction + artifact open
+- Timeout / Continue state (Continue visible; Continuing 2/3 status)
+- Composer: attachments readable vs name-only; mic; stop
+- Preferences with Dark / Light / White
+- Drive modal with Load more + Slides
+- Sidebar search empty + project create/rename dialog
+Mobile:
+- Shell drawer + composer + Continue state + artifact as drawer/inspector
+Also: small component notes for Continue button, continue status line, attachment chip variants, notice toast.
+
+SUCCESS
+- Cut-off turns feel resumable, not failed.
+- Three appearances feel intentional.
+- Attachments/Drive communicate trust without developer copy.
+- Prototype still feels like the same Aether Make — just sharper and aligned with shipping prod.
+```
+
+---
+
+## Attach these files to the Make prompt
+
+Re-attach from the Aether repo (zip or multi-file). Prefer **current `master` / latest PR**, not an old zip if you have one.
+
+### Must attach (UI + behavior Make needs)
+| File | Why |
+|------|-----|
+| `src/components/layout/app-shell.tsx` | Chrome, notices stack |
+| `src/components/layout/sidebar.tsx` | Nav, search, projects, theme |
+| `src/components/layout/vault-sidebar.tsx` | Vault + confirm flows to replace |
+| `src/components/layout/artifact-panel.tsx` | Artifact inspector |
+| `src/components/assistant-ui/thread.tsx` | Composer, Continue/Retry, attachments, mic/stop |
+| `src/components/assistant-ui/tool-ui.tsx` | Tool shells + streaming artifact construction |
+| `src/components/assistant-ui/agent-status-strip.tsx` | Status line (keep quiet) |
+| `src/components/model-picker.tsx` | Featured models + search |
+| `src/components/settings/settings-dialog.tsx` | Preferences / Advanced |
+| `src/components/drive/drive-browser-modal.tsx` | Load more, Slides, filters |
+| `src/components/sync-local-chats-banner.tsx` | Sync notice |
+| `src/app/globals.css` | Dark / Light / White tokens |
+| `src/app/layout.tsx` | Fonts |
+| `src/providers/theme-provider.tsx` | Theme cycle |
+
+### Strongly recommended (behavior Make should respect)
+| File | Why |
+|------|-----|
+| `src/lib/chat-continue.ts` | Continue segment semantics + copy |
+| `src/lib/attachments.ts` | Readable vs name-only budgets |
+| `src/lib/office-text.ts` | Office → text (docx/pptx/xlsx) |
+| `src/lib/tools.ts` | Artifact kinds + tool labels |
+| `docs/figma-make-ux-brief.md` | Prior brief / constraints |
+| `AGENTS.md` | Product constraints |
+
+### Optional primitives
+`src/components/ui/button.tsx`, `src/components/ui/label.tsx`, `src/components/assistant-ui/markdown-text.tsx`, `src/components/assistant-ui/thread-header.tsx`
 
 ### Live reference
-- Production: `https://aether-seven-theta.vercel.app/`
-- Capture: empty state, mid-tool turn, artifact open, settings, Drive modal, mobile composer.
+https://aether-seven-theta.vercel.app/  
+Capture: empty, streaming+tools, continue/timeout (if you can repro), Drive modal, settings appearances, mobile composer.
 
 ---
 
-## Notes for you (human)
-- Functional backend work for attachments / Drive / Office text / continue is shipping separately in code; Make should **assume those behaviors exist** and design the UI around them.
-- Prefer refining the existing Aether visual system over a full rebrand.
+## Tip for Make
+Say explicitly in the chat: *“Work in the existing App.tsx prototype; attach the listed prod files; this is a refinement pass focused on Continue, White theme, attachments, Drive Load more, and notices.”*
