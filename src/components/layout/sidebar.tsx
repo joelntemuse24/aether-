@@ -235,10 +235,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             aria-label="Cycle theme"
             title={
               theme === "dark"
-                ? "Switch to parchment"
+                ? "Switch to Light"
                 : theme === "light"
                   ? "Switch to white"
-                  : "Switch to dark"
+                  : "Switch to parchment"
             }
           >
             {theme === "dark" ? (
@@ -429,10 +429,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               aria-label="Cycle theme"
               title={
                 theme === "dark"
-                  ? "Switch to parchment"
+                  ? "Switch to Light"
                   : theme === "light"
                     ? "Switch to white"
-                    : "Switch to dark"
+                    : "Switch to parchment"
               }
             >
               {theme === "dark" ? (

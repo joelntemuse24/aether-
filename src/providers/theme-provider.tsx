@@ -9,12 +9,12 @@ import {
   type ReactNode,
 } from "react";
 
-/** dark = default charcoal; light = warm parchment; white = brighter near-white canvas. */
+/** dark = prod parchment; light = Figma Make light; white = near-white. */
 export type Theme = "dark" | "light" | "white";
 
 export const THEMES: { id: Theme; label: string }[] = [
-  { id: "dark", label: "Dark" },
-  { id: "light", label: "Parchment" },
+  { id: "dark", label: "Parchment" },
+  { id: "light", label: "Light" },
   { id: "white", label: "White" },
 ];
 
@@ -24,19 +24,19 @@ export type AccentId = "default" | "mono" | "sky" | "burgundy";
 export const ACCENTS: {
   id: AccentId;
   label: string;
-  /** Swatch color shown in Settings (dark-theme approx). */
+  /** Swatch color shown in Settings. */
   swatch: string;
 }[] = [
-  { id: "default", label: "Default", swatch: "#a83232" },
-  { id: "mono", label: "Mono", swatch: "#e8e4d9" },
-  { id: "sky", label: "Sky", swatch: "#3b82f6" },
-  { id: "burgundy", label: "Burgundy", swatch: "#7a1f3d" },
+  { id: "default", label: "Default", swatch: "#d4734f" },
+  { id: "mono", label: "Mono", swatch: "#1a1714" },
+  { id: "sky", label: "Sky", swatch: "#2563eb" },
+  { id: "burgundy", label: "Burgundy", swatch: "#8b2348" },
 ];
 
 type ThemeContextValue = {
   theme: Theme;
   accent: AccentId;
-  /** True for warm parchment or bright white (not dark). */
+  /** All current appearance modes use light paper surfaces. */
   isLightSurface: boolean;
   toggleTheme: () => void;
   setTheme: (t: Theme) => void;
@@ -108,7 +108,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const isLightSurface = theme === "light" || theme === "white";
+  const isLightSurface = true;
 
   return (
     <ThemeContext.Provider

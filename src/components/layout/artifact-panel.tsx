@@ -1,6 +1,6 @@
 "use client";
 
-import "highlight.js/styles/github-dark.css";
+import "highlight.js/styles/github.css";
 
 import { useEffect, useMemo, useRef, useState, type FC } from "react";
 import hljs from "highlight.js";
