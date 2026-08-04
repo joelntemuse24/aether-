@@ -342,6 +342,15 @@ body::before {
   }
 }
 
+@keyframes aetherPeek {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
 /* Selection color */
 ::selection {
   background: var(--selection-bg);
