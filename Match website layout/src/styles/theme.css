@@ -2,13 +2,9 @@
 @custom-variant dark (&:where(.aether-dark, .aether-dark *));
 
 /*
- * Appearance tokens — declared on :root AND the app shell so the shell is
- * always the nearest ancestor for var(--canvas) etc., even if a Make/host
- * wrapper injects `.dark` above us.
- *
- *   light → warm parchment (#f1ede6)
- *   dark  → Make charcoal gray (#1a1a1c) — host-safe copy of existing dark
- *   white → near-white (#fffdfa)
+ * Two modes only — system prefers-color-scheme is ignored for paint.
+ *   light → warm parchment (#faf7f1)
+ *   dark  → warm brownish charcoal (#17150f)
  */
 
 :root,
@@ -16,11 +12,10 @@
 .aether-app-shell.aether-light {
   --font-size: 16px;
 
-  /* Semantic layer — warm editorial paper */
-  --canvas: #f1ede6;
-  --surface: #f7f3ec;
-  --elevated: #ebe6dc;
-  --elevated-deep: #e3ddd2;
+  --canvas: #faf7f1;
+  --surface: #faf7f1;
+  --elevated: #f4efe6;
+  --elevated-deep: #ece6d9;
   --border: rgba(0, 0, 0, 0.08);
   --border-subtle: rgba(0, 0, 0, 0.05);
   --text: #1a1714;
@@ -32,14 +27,13 @@
   --accent-muted: rgba(212, 115, 79, 0.10);
   --danger: #b42318;
   --hover-overlay: rgba(0, 0, 0, 0.04);
-  --code-bg: #ebe6dc;
+  --code-bg: #f3eee3;
   --overlay: rgba(0, 0, 0, 0.3);
   --font-serif: "Cormorant Garamond", "Cormorant", Georgia, serif;
   --font-sc: "Cormorant SC", "Cormorant Garamond", Georgia, serif;
   --font-mono: "JetBrains Mono", monospace;
   --font-geist-mono: "JetBrains Mono", monospace;
 
-  /* Tailwind / shadcn contract */
   --background: var(--canvas);
   --foreground: var(--text);
   --card: var(--surface);
@@ -78,23 +72,23 @@
 
 .aether-dark,
 .aether-app-shell.aether-dark {
-  --canvas: #1a1a1c;
-  --surface: #222226;
-  --elevated: #2a2a2e;
-  --elevated-deep: #323236;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-subtle: rgba(255, 255, 255, 0.05);
-  --text: #ededef;
-  --text-secondary: #d4d4d6;
-  --muted: #9a9a9e;
-  --muted-soft: #6a6a6e;
+  --canvas: #17150f;
+  --surface: #1e1c15;
+  --elevated: #252219;
+  --elevated-deep: #2d2a20;
+  --border: rgba(255, 245, 220, 0.08);
+  --border-subtle: rgba(255, 245, 220, 0.05);
+  --text: #ede9de;
+  --text-secondary: #d4d0c5;
+  --muted: #9a9588;
+  --muted-soft: #635e52;
   --accent: #a83232;
   --accent-hover: #be3838;
   --accent-muted: rgba(168, 50, 50, 0.10);
   --danger: #d4183d;
   --hover-overlay: rgba(255, 255, 255, 0.05);
-  --code-bg: #2a2a2e;
-  --overlay: rgba(10, 10, 12, 0.6);
+  --code-bg: #2d2a20;
+  --overlay: rgba(10, 9, 6, 0.6);
 
   --background: var(--canvas);
   --foreground: var(--text);
@@ -112,59 +106,12 @@
   --destructive-foreground: oklch(0.637 0.237 25.331);
   --input: var(--elevated);
   --input-background: var(--elevated);
-  --ring: oklch(0.439 0 0);
+  --ring: rgba(168, 50, 50, 0.40);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: var(--elevated);
-  --sidebar-foreground: var(--text);
-  --sidebar-primary: var(--accent);
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: var(--elevated-deep);
-  --sidebar-accent-foreground: var(--text);
-  --sidebar-border: var(--border);
-  --sidebar-ring: var(--ring);
-}
-
-.aether-white,
-.aether-app-shell.aether-white {
-  --canvas: #fffdfa;
-  --surface: #ffffff;
-  --elevated: #f3f3f1;
-  --elevated-deep: #ebebe8;
-  --border: rgba(0, 0, 0, 0.08);
-  --border-subtle: rgba(0, 0, 0, 0.05);
-  --text: #1a1714;
-  --text-secondary: #2e2a24;
-  --muted: #6b6458;
-  --muted-soft: #9a9285;
-  --accent: #d4734f;
-  --accent-hover: #c26442;
-  --accent-muted: rgba(212, 115, 79, 0.10);
-  --danger: #b42318;
-  --hover-overlay: rgba(0, 0, 0, 0.04);
-  --code-bg: #f0f0ee;
-  --overlay: rgba(0, 0, 0, 0.3);
-
-  --background: var(--canvas);
-  --foreground: var(--text);
-  --card: var(--surface);
-  --card-foreground: var(--text);
-  --popover: var(--elevated);
-  --popover-foreground: var(--text);
-  --primary: var(--accent);
-  --primary-foreground: #ffffff;
-  --secondary: var(--elevated);
-  --secondary-foreground: var(--text);
-  --muted-foreground: var(--muted);
-  --accent-foreground: var(--text);
-  --destructive: var(--danger);
-  --destructive-foreground: #ffffff;
-  --input: transparent;
-  --input-background: var(--elevated);
-  --ring: rgba(212, 115, 79, 0.35);
   --sidebar: var(--elevated);
   --sidebar-foreground: var(--text);
   --sidebar-primary: var(--accent);
@@ -216,7 +163,7 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* color-scheme only governs scrollbars/native controls, never your paint. */
+/* color-scheme only governs scrollbars/native controls — never follow OS dark for paint. */
 html {
   color-scheme: only light;
 }
@@ -238,11 +185,6 @@ html.aether-dark {
   body {
     @apply bg-background text-foreground;
   }
-
-  /**
-   * Default typography styles for HTML elements (h1-h4, p, label, button, input).
-   * These are in @layer base, so Tailwind utility classes override them.
-   */
 
   html {
     font-size: var(--font-size);

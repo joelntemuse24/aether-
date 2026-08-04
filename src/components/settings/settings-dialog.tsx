@@ -9,7 +9,6 @@ import {
   ChevronRightIcon,
   Loader2Icon,
   LinkIcon,
-  CircleIcon,
   MoonIcon,
   SunIcon,
 } from "lucide-react";
@@ -147,15 +146,10 @@ export function SettingsDialog() {
             </div>
             <div className="space-y-2">
               <Label className="sr-only">Theme</Label>
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-2 gap-1.5">
                 {THEMES.map((item) => {
                   const selected = theme === item.id;
-                  const Icon =
-                    item.id === "dark"
-                      ? MoonIcon
-                      : item.id === "white"
-                        ? CircleIcon
-                        : SunIcon;
+                  const Icon = item.id === "dark" ? MoonIcon : SunIcon;
                   return (
                     <button
                       key={item.id}
@@ -181,7 +175,7 @@ export function SettingsDialog() {
               <div className="grid grid-cols-4 gap-1.5">
                 {ACCENTS.map((item) => {
                   const selected = accent === item.id;
-                  const lightSurface = theme === "light" || theme === "white";
+                  const lightSurface = theme === "light";
                   const swatch =
                     item.id === "mono"
                       ? lightSurface

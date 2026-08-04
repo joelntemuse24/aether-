@@ -17,34 +17,34 @@ import {
   ArrowDown,
   Moon,
   Sun,
-  Circle,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 type Message = { id: string; role: "user" | "assistant"; content: string };
 type Thread  = { id: string; title: string; messages: Message[] };
-type Theme = "dark" | "light" | "white";
+type Theme = "dark" | "light";
 
 const THEME_KEY = "aether:theme";
-const THEME_CLASSES = ["aether-dark", "aether-light", "aether-white"] as const;
+const THEME_CLASSES = ["aether-dark", "aether-light"] as const;
 
 function themeClass(theme: Theme) {
-  return theme === "dark" ? "aether-dark" : theme === "white" ? "aether-white" : "aether-light";
+  return theme === "dark" ? "aether-dark" : "aether-light";
 }
 
 function themeCanvas(theme: Theme) {
-  return theme === "dark" ? "#1a1a1c" : theme === "white" ? "#fffdfa" : "#f1ede6";
+  return theme === "dark" ? "#17150f" : "#faf7f1";
 }
 
 function themeText(theme: Theme) {
-  return theme === "dark" ? "#ededef" : "#1a1714";
+  return theme === "dark" ? "#ede9de" : "#1a1714";
 }
 
 function readStoredTheme(): Theme {
   try {
     const stored = localStorage.getItem(THEME_KEY);
-    if (stored === "dark" || stored === "light" || stored === "white") return stored;
+    if (stored === "dark" || stored === "light") return stored;
+    if (stored === "white") return "light";
   } catch {
     // ignore
   }
@@ -95,9 +95,8 @@ function Sidebar({
   onOpenSettings: () => void;
   theme: Theme; onToggleTheme: () => void;
 }) {
-  const themeTitle =
-    theme === "dark" ? "Switch to Light" : theme === "light" ? "Switch to White" : "Switch to Dark";
-  const ThemeIcon = theme === "dark" ? Sun : theme === "white" ? Moon : Circle;
+  const themeTitle = theme === "dark" ? "Switch to Light" : "Switch to Dark";
+  const ThemeIcon = theme === "dark" ? Sun : Moon;
 
   if (collapsed) {
     return (
@@ -526,7 +525,7 @@ export default function App() {
   useEffect(() => { if (!isRunning) bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length, isRunning]);
 
   const cycleTheme = () => {
-    setTheme((prev) => (prev === "dark" ? "light" : prev === "light" ? "white" : "dark"));
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };
 
   const handleSend = (text: string) => {
