@@ -1,9 +1,14 @@
+import { isAbortError, isServerTimeoutError } from "@/lib/chat-continue";
+
 /** User-facing chat error copy (safe for client + server). */
 
 export function friendlyChatError(error: unknown): string {
+  if (isAbortError(error)) {
+    return "";
+  }
   const raw = error instanceof Error ? error.message : String(error ?? "");
-  if (/timed out after|Task timed out|Runtime Timeout|AbortError/i.test(raw)) {
-    return "This reply ran too long for the server limit and was stopped. Click Retry on the message to continue from where it left off.";
+  if (isServerTimeoutError(error)) {
+    return "This reply hit the server time limit. Continuing automatically from where it left off…";
   }
   if (/saturat|overloaded|All providers are saturated|429|rate limit/i.test(raw)) {
     return "That model route is busy. We try backups automatically — click Retry, or pick another model.";

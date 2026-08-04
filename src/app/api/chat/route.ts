@@ -36,6 +36,7 @@ import { listHostedCandidates } from "@/lib/hosted/client";
 import { isHostedConfigured } from "@/lib/hosted/config";
 import { createFailoverLanguageModel } from "@/lib/hosted/failover";
 import { friendlyChatError } from "@/lib/chat-errors";
+import { CONTINUE_SYSTEM_ADDENDUM } from "@/lib/chat-continue";
 
 /**
  * Vercel always enforces a function wall clock — you cannot remove this.
@@ -214,6 +215,7 @@ export async function POST(req: Request) {
       );
     }
     const toolsEnabled = getHeader(req, "x-tools") !== "0";
+    const continueSegment = body.continueSegment === true;
     const userSystem =
       typeof body.system === "string" && body.system.length <= 8000
         ? body.system
@@ -286,6 +288,7 @@ export async function POST(req: Request) {
     const system = [
       toolsEnabled ? TOOLS_SYSTEM_PROMPT : null,
       harnessAddendum,
+      continueSegment ? CONTINUE_SYSTEM_ADDENDUM : null,
       userSystem,
       memoryForPrompt,
       projectBlock,

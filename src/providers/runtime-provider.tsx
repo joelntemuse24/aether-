@@ -30,6 +30,12 @@ import { TOOL_NAMES, type ExecutePythonInput } from "@/lib/tools";
 import { useHarness } from "./harness-provider";
 import { useProjects } from "./projects-provider";
 import { localMemoryContextForChat } from "@/lib/memory/local";
+import {
+  CONTINUE_USER_TEXT,
+  MAX_AUTO_CONTINUES,
+  shouldAutoContinue,
+} from "@/lib/chat-continue";
+import type { HarnessChatContext } from "@/lib/harness/types";
 
 function loadInitialThreadIdFromUrl(): string | undefined {
   // Only the URL selects the chat on boot. Bare `/` is always a new conversation.
@@ -63,7 +69,7 @@ type AddToolResult = (result: {
 function useChatThreadRuntime() {
   const { chatHeaders, activeModel, hasKey, settings } = useSettings();
   const { attachments, clearAttachments } = useAttachments();
-  const { peekChatContext, clearChatContext } = useHarness();
+  const { peekChatContext, clearChatContext, armChatContext } = useHarness();
   const { activeProjectId } = useProjects();
   const aui = useAui();
   const attachmentsRef = useRef(attachments);
@@ -72,6 +78,8 @@ function useChatThreadRuntime() {
   voiceRef.current = settings.voice;
   const peekHarnessRef = useRef(peekChatContext);
   peekHarnessRef.current = peekChatContext;
+  const armHarnessRef = useRef(armChatContext);
+  armHarnessRef.current = armChatContext;
   const projectIdRef = useRef(activeProjectId);
   projectIdRef.current = activeProjectId;
   const threadIdRef = useRef<string | undefined>(undefined);
@@ -84,6 +92,12 @@ function useChatThreadRuntime() {
     const key = readThreadStorageKey(aui);
     return key ? loadThreadUIMessages(key) : [];
   });
+
+  const continueSegmentRef = useRef(false);
+  const continueCountRef = useRef(0);
+  const continueScheduledRef = useRef(false);
+  const lastHarnessRef = useRef<HarnessChatContext | null>(null);
+  const runStartedAtRef = useRef<number | null>(null);
 
   // Rebuild transport only when provider/model headers change — not on every
   // attach. body() reads the latest attachments via ref at send time.
@@ -111,17 +125,20 @@ function useChatThreadRuntime() {
 
           const textPrefix = buildTextAttachmentPrefix(current);
           const harness = peekHarnessRef.current();
+          if (harness) lastHarnessRef.current = harness;
           const memoryContext = localMemoryContextForChat();
+          const continueSegment = continueSegmentRef.current;
 
           return {
             model: activeModel,
             attachments: fileAttachments,
             textPrefix: textPrefix || undefined,
             system: resolveVoicePrompt(voiceRef.current),
-            harness: harness ?? undefined,
+            harness: harness ?? lastHarnessRef.current ?? undefined,
             memoryContext: memoryContext || undefined,
             projectId: projectIdRef.current ?? undefined,
             conversationId: threadIdRef.current ?? undefined,
+            continueSegment: continueSegment || undefined,
           };
         },
       }),
@@ -131,6 +148,59 @@ function useChatThreadRuntime() {
   const addToolResultRef = useRef<AddToolResult | null>(null);
   const messagesRef = useRef<UIMessage[]>(seedMessages);
   const statusRef = useRef<string>("ready");
+  const errorRef = useRef<Error | undefined>(undefined);
+  const chatApiRef = useRef<{
+    sendMessage: (msg: { text: string }) => Promise<void>;
+    clearError?: () => void;
+  } | null>(null);
+
+  const scheduleAutoContinue = useCallback((reason: string) => {
+    if (continueScheduledRef.current) return false;
+    if (continueCountRef.current >= MAX_AUTO_CONTINUES) return false;
+
+    continueScheduledRef.current = true;
+    continueCountRef.current += 1;
+    const segment = continueCountRef.current;
+
+    window.dispatchEvent(
+      new CustomEvent("aether:notice", {
+        detail: `Server time limit hit — continuing automatically (${segment}/${MAX_AUTO_CONTINUES})…`,
+      }),
+    );
+    console.info("[chat] auto-continue scheduled", { reason, segment });
+
+    window.setTimeout(() => {
+      const api = chatApiRef.current;
+      if (!api) {
+        continueScheduledRef.current = false;
+        return;
+      }
+      continueSegmentRef.current = true;
+      if (lastHarnessRef.current) {
+        armHarnessRef.current(lastHarnessRef.current);
+      }
+      try {
+        api.clearError?.();
+      } catch {
+        // ignore
+      }
+      void api
+        .sendMessage({ text: CONTINUE_USER_TEXT })
+        .catch((err) => {
+          console.error("[chat] auto-continue failed", err);
+          continueSegmentRef.current = false;
+          continueScheduledRef.current = false;
+          window.dispatchEvent(
+            new CustomEvent("aether:notice", {
+              detail:
+                "Could not auto-continue. Click Retry on the message to resume.",
+            }),
+          );
+        });
+    }, 280);
+
+    return true;
+  }, []);
 
   const chat = useChat({
     messages: seedMessages,
@@ -155,30 +225,96 @@ function useChatThreadRuntime() {
       if (key && messagesRef.current.length > 0) {
         persistThreadUIMessages(key, messagesRef.current);
       }
+
+      const runDurationMs =
+        runStartedAtRef.current != null
+          ? Date.now() - runStartedAtRef.current
+          : 0;
+      const continuing =
+        continueScheduledRef.current ||
+        (shouldAutoContinue({
+          isAbort: false,
+          isDisconnect: false,
+          isError: true,
+          error,
+          messages: messagesRef.current,
+          runDurationMs,
+          continueCount: continueCountRef.current,
+        }) &&
+          scheduleAutoContinue("onError"));
+      if (continuing) return;
+
       clearChatContext();
       void import("@/lib/chat-errors").then(({ friendlyChatError }) => {
+        const detail = friendlyChatError(error);
+        if (!detail) return;
         window.dispatchEvent(
           new CustomEvent("aether:notice", {
-            detail: friendlyChatError(error),
+            detail:
+              continueCountRef.current >= MAX_AUTO_CONTINUES
+                ? "This reply hit the server time limit again. Click Retry to continue, or pick another model."
+                : detail,
           }),
         );
       });
     },
-    onFinish: () => {
+    onFinish: ({ isAbort, isDisconnect, isError }) => {
       const key = threadIdRef.current;
       if (key && messagesRef.current.length > 0) {
         persistThreadUIMessages(key, messagesRef.current);
       }
+
+      const runDurationMs =
+        runStartedAtRef.current != null
+          ? Date.now() - runStartedAtRef.current
+          : 0;
+
+      // End of this segment — next sendMessage sets the flag again if needed.
+      continueSegmentRef.current = false;
+
+      const continuing =
+        continueScheduledRef.current ||
+        (shouldAutoContinue({
+          isAbort,
+          isDisconnect,
+          isError,
+          error: errorRef.current,
+          messages: messagesRef.current,
+          runDurationMs,
+          continueCount: continueCountRef.current,
+        }) &&
+          scheduleAutoContinue(
+            isDisconnect ? "onFinish:disconnect" : "onFinish:error",
+          ));
+      if (continuing) return;
+
+      if (!isAbort && !isDisconnect && !isError) {
+        continueCountRef.current = 0;
+        lastHarnessRef.current = null;
+      }
+      if (isAbort) {
+        continueCountRef.current = 0;
+      }
+
       clearAttachments();
       clearChatContext();
+      runStartedAtRef.current = null;
     },
   });
 
   addToolResultRef.current = chat.addToolResult as unknown as AddToolResult;
+  chatApiRef.current = {
+    sendMessage: (msg) => chat.sendMessage(msg),
+    clearError: () => {
+      const withClear = chat as typeof chat & { clearError?: () => void };
+      withClear.clearError?.();
+    },
+  };
 
-  const { messages, setMessages, status } = chat;
+  const { messages, setMessages, status, error } = chat;
   messagesRef.current = messages;
   statusRef.current = status;
+  errorRef.current = error;
 
   const loadedKeyRef = useRef<string | null>(
     seedMessages.length > 0 ? (readThreadStorageKey(aui) ?? null) : null,
@@ -202,6 +338,21 @@ function useChatThreadRuntime() {
       cancelled = true;
     };
   }, [aui, messages.length, setMessages]);
+
+  // Track per-segment run start; unlock further continues once a segment is live.
+  useEffect(() => {
+    if (status === "submitted") {
+      runStartedAtRef.current = Date.now();
+      continueScheduledRef.current = false;
+      return;
+    }
+    if (status === "streaming") {
+      continueScheduledRef.current = false;
+      if (runStartedAtRef.current == null) {
+        runStartedAtRef.current = Date.now();
+      }
+    }
+  }, [status]);
 
   // Assign a durable thread id as soon as a turn starts so /c/<id> + drafts work
   // before assistant-ui's end-of-run history flush.
