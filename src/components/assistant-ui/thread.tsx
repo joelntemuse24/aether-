@@ -957,8 +957,10 @@ const AssistantActionBar: FC = () => {
     const messages = s.thread.messages;
     const last = messages[messages.length - 1];
     if (!last || last.id !== s.message.id) return false;
-    const statusType = s.message.status?.type;
-    return statusType === "incomplete" || statusType === "interrupted";
+    const status = s.message.status as
+      | { type?: string; reason?: string }
+      | undefined;
+    return isContinuableStatus(status?.type, status?.reason);
   });
 
   return (
