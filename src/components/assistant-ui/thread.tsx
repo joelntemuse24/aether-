@@ -67,6 +67,7 @@ import {
   type MicState,
   type SpeechSession,
 } from "@/lib/speech";
+import { looksLikeTimeoutCopy } from "@/lib/chat-continue";
 
 const isNewChatView = (s: AssistantState) =>
   s.thread.messages.length === 0 &&
@@ -249,41 +250,68 @@ function isContinuableStatus(type: string | undefined, reason?: string) {
   return false;
 }
 
+type ContinuePhase = "idle" | "continuing" | "needs-continue";
+
 const ContinuePausedBar: FC = () => {
-  const [continuing, setContinuing] = useState(false);
-  const paused = useAuiState((s) => {
+  const [phase, setPhase] = useState<ContinuePhase>("idle");
+  const isRunning = useAuiState((s) => s.thread.isRunning);
+  const pausedFromMessage = useAuiState((s) => {
     if (s.thread.isRunning) return false;
     const messages = s.thread.messages;
     const last = messages[messages.length - 1];
     if (!last || last.role !== "assistant") return false;
     const status = last.status as
-      | { type?: string; reason?: string }
+      | { type?: string; reason?: string; error?: unknown }
       | undefined;
-    return isContinuableStatus(status?.type, status?.reason);
+    if (isContinuableStatus(status?.type, status?.reason)) return true;
+    if (status?.type === "incomplete" && status.reason === "error") {
+      return looksLikeTimeoutCopy(String(status.error ?? ""));
+    }
+    return false;
   });
 
   useEffect(() => {
     const onStatus = (e: Event) => {
-      const detail = (e as CustomEvent<{ phase?: string }>).detail;
-      setContinuing(detail?.phase === "continuing");
+      const detail = (e as CustomEvent<{ phase?: ContinuePhase }>).detail;
+      if (
+        detail?.phase === "idle" ||
+        detail?.phase === "continuing" ||
+        detail?.phase === "needs-continue"
+      ) {
+        setPhase(detail.phase);
+      }
     };
     window.addEventListener("aether:continue-status", onStatus);
     return () => window.removeEventListener("aether:continue-status", onStatus);
   }, []);
 
-  if (!paused || continuing) return null;
+  // Fresh successful runs clear the bar; starting a run also hides it.
+  useEffect(() => {
+    if (isRunning) setPhase("idle");
+  }, [isRunning]);
+
+  const show =
+    !isRunning &&
+    phase !== "continuing" &&
+    (phase === "needs-continue" || pausedFromMessage);
+
+  if (!show) return null;
+
+  const timedOut = phase === "needs-continue" || pausedFromMessage;
 
   return (
     <div
-      className="mb-1.5 flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--elevated)] px-3 py-2 animate-[fadeIn_160ms_ease-out]"
+      className="mb-1.5 flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--elevated)] px-3 py-2.5 animate-[fadeIn_160ms_ease-out]"
       role="status"
     >
       <div className="min-w-0">
         <div className="text-[13px] font-medium text-[var(--text)]">
-          Response paused
+          {timedOut ? "Timed out" : "Response paused"}
         </div>
-        <div className="text-[12px] text-[var(--muted)]">
-          The reply hit a time limit. Continue to finish from here.
+        <div className="text-[12px] leading-snug text-[var(--muted)]">
+          {timedOut
+            ? "Pick up from the partial reply — tools and context stay intact."
+            : "The model stopped mid-thought. Continue to keep going."}
         </div>
       </div>
       <Button
@@ -897,14 +925,42 @@ const ComposerAction: FC<{
 };
 
 const MessageError: FC = () => {
+  const errorText = useAuiState((s) => {
+    const status = s.message.status as
+      | { type?: string; reason?: string; error?: unknown }
+      | undefined;
+    if (status?.type !== "incomplete" || status.reason !== "error") return "";
+    return String(status.error ?? "");
+  });
+  const isTimeout = looksLikeTimeoutCopy(errorText);
+
   return (
     <MessagePrimitive.Error>
       <ErrorPrimitive.Root className="mt-2 rounded-xl border border-[var(--error-border)] bg-[var(--error-bg)] p-3 text-sm text-[var(--error-text)]">
         <ErrorPrimitive.Message className="whitespace-pre-wrap" />
-        <p className="mt-1.5 text-[12px] text-[var(--muted)]">
-          If this was a time limit, use Continue below to resume from the
-          partial reply. Otherwise Retry regenerates, or pick another model.
-        </p>
+        {isTimeout ? (
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent("aether:continue-or-retry"),
+                );
+              }}
+            >
+              Continue
+            </Button>
+            <span className="text-[12px] text-[var(--muted)]">
+              Resumes from the partial reply with tools intact.
+            </span>
+          </div>
+        ) : (
+          <p className="mt-1.5 text-[12px] text-[var(--muted)]">
+            Retry regenerates from the last user message, or pick another
+            model. If this was a time limit, use Continue below.
+          </p>
+        )}
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   );
@@ -937,9 +993,12 @@ const AssistantMessage: FC = () => {
           }
         >
           <span
-            className="inline-block size-2 animate-pulse rounded-full bg-[var(--accent)]"
+            className="inline-flex items-center gap-2 text-[15px] text-[var(--muted)]"
             aria-label="Generating"
-          />
+          >
+            <span className="size-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
+            Working…
+          </span>
         </AuiIf>
         <MessageError />
       </div>
@@ -953,15 +1012,36 @@ const AssistantMessage: FC = () => {
 };
 
 const AssistantActionBar: FC = () => {
+  const [needsContinue, setNeedsContinue] = useState(false);
   const preferContinue = useAuiState((s) => {
     const messages = s.thread.messages;
     const last = messages[messages.length - 1];
     if (!last || last.id !== s.message.id) return false;
     const status = s.message.status as
-      | { type?: string; reason?: string }
+      | { type?: string; reason?: string; error?: unknown }
       | undefined;
-    return isContinuableStatus(status?.type, status?.reason);
+    if (isContinuableStatus(status?.type, status?.reason)) return true;
+    if (status?.type === "incomplete" && status.reason === "error") {
+      return looksLikeTimeoutCopy(String(status.error ?? ""));
+    }
+    return false;
   });
+
+  useEffect(() => {
+    const onStatus = (e: Event) => {
+      const detail = (e as CustomEvent<{ phase?: ContinuePhase }>).detail;
+      setNeedsContinue(detail?.phase === "needs-continue");
+    };
+    window.addEventListener("aether:continue-status", onStatus);
+    return () => window.removeEventListener("aether:continue-status", onStatus);
+  }, []);
+
+  const isLast = useAuiState((s) => {
+    const messages = s.thread.messages;
+    const last = messages[messages.length - 1];
+    return !!last && last.id === s.message.id;
+  });
+  const showContinue = preferContinue || (needsContinue && isLast);
 
   return (
     <ActionBarPrimitive.Root
@@ -979,14 +1059,27 @@ const AssistantActionBar: FC = () => {
           </AuiIf>
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
-      <TooltipIconButton
-        tooltip={preferContinue ? "Continue" : "Retry"}
-        onClick={() => {
-          window.dispatchEvent(new CustomEvent("aether:continue-or-retry"));
-        }}
-      >
-        <RefreshCwIcon className="size-3.5" />
-      </TooltipIconButton>
+      {showContinue ? (
+        <button
+          type="button"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent("aether:continue-or-retry"));
+          }}
+          className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface)]"
+        >
+          <RefreshCwIcon className="size-3.5" />
+          Continue
+        </button>
+      ) : (
+        <TooltipIconButton
+          tooltip="Retry"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent("aether:continue-or-retry"));
+          }}
+        >
+          <RefreshCwIcon className="size-3.5" />
+        </TooltipIconButton>
+      )}
       <RestoreToHereButton />
     </ActionBarPrimitive.Root>
   );

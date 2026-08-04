@@ -9,6 +9,9 @@ import {
 } from "@/lib/attachments";
 import { extractOfficeText, isOfficeFile } from "@/lib/office-text";
 
+export const maxDuration = 120;
+export const runtime = "nodejs";
+
 const MAX_BYTES = 25 * 1024 * 1024;
 
 function parseDriveError(body: string): { reason?: string; message?: string } {
@@ -37,7 +40,7 @@ function parseDriveError(body: string): { reason?: string; message?: string } {
 async function fetchWithAuth(
   url: string,
   accessToken: string,
-  timeoutMs = 60_000,
+  timeoutMs = 90_000,
 ): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

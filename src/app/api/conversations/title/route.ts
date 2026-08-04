@@ -10,7 +10,7 @@ import { createHostedLanguageModel } from "@/lib/hosted/client";
 import { isHostedConfigured } from "@/lib/hosted/config";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 45;
 
 type ProviderId = "openrouter" | "openai" | "anthropic" | "custom";
 
