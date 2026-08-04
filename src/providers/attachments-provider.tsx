@@ -191,7 +191,7 @@ export function AttachmentsProvider({ children }: { children: ReactNode }) {
         window.dispatchEvent(
           new CustomEvent("aether:notice", {
             detail:
-              "Pending attachments were cleared because you switched chats.",
+              "Pending attachments were cleared because you left this chat.",
           }),
         );
       }

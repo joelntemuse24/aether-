@@ -38,7 +38,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useSettings } from "@/providers/settings-provider";
 import { useTheme } from "@/providers/theme-provider";
-import { listLocalThreads } from "@/lib/local-thread-adapter";
+import { listLocalThreads, beginNewChatSession } from "@/lib/local-thread-adapter";
 import { useSession, signOut } from "@/providers/session-provider";
 import { useProjects } from "@/providers/projects-provider";
 import { useArtifact } from "@/providers/artifact-provider";
@@ -78,6 +78,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   }, [status, savedCloud, refreshSaved]);
 
   const goNewChat = () => {
+    beginNewChatSession();
     router.push(NEW_CHAT_PATH);
   };
 

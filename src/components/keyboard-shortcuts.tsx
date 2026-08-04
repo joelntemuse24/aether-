@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useAui } from "@assistant-ui/react";
 import { useSettings } from "@/providers/settings-provider";
+import { beginNewChatSession } from "@/lib/local-thread-adapter";
 
 /**
  * Global shortcuts for a ChatGPT/Claude-class chat surface.
@@ -29,6 +30,7 @@ export function KeyboardShortcuts() {
       if (meta && (e.key === "n" || e.key === "N")) {
         e.preventDefault();
         aui.threads().switchToNewThread();
+        beginNewChatSession();
         requestAnimationFrame(() => {
           document
             .querySelector<HTMLTextAreaElement>(
