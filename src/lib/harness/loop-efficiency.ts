@@ -32,6 +32,12 @@ export const DEFERRED_TOOL_ORDER = [
 
 const DEFERRED_SET = new Set<string>(DEFERRED_TOOL_ORDER);
 
+const GITHUB_TOOL_NAMES = [
+  TOOL_NAMES.githubGetRepo,
+  TOOL_NAMES.githubListContents,
+  TOOL_NAMES.githubReadFile,
+] as const;
+
 export type ToolCatalogEntry = {
   name: string;
   description: string;
@@ -245,6 +251,79 @@ export function rankDeferredTools(
   return scored
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
     .map(({ name, description, keywords }) => ({ name, description, keywords }));
+}
+
+/**
+ * Deferred tools that should be active on step 0 — without waiting for
+ * tool_search. Used when:
+ * - the thread already invoked those tools (esp. continue segments), or
+ * - the conversation mentions a GitHub repo and GitHub tools are available.
+ *
+ * Continue turns send CONTINUE_USER_TEXT as the latest user message, which
+ * does not mention github.com — so seeding from lastUserText alone drops
+ * GitHub tools and causes AI_NoSuchToolError on resume.
+ */
+export function collectSeedUnlockedToolNames(input: {
+  messages: ReadonlyArray<{
+    role?: string;
+    parts?: ReadonlyArray<{ type?: string; text?: string; toolName?: string }>;
+  }>;
+  availableToolNames: readonly string[];
+  /** True when any message text mentions a github.com repo / owner/repo. */
+  mentionsGitHubRepo: boolean;
+}): string[] {
+  const available = new Set(input.availableToolNames);
+  const seeds = new Set<string>();
+
+  for (const msg of input.messages) {
+    const parts = Array.isArray(msg.parts) ? msg.parts : [];
+    for (const part of parts) {
+      if (!part || typeof part.type !== "string") continue;
+      // AI SDK UI tool parts: `tool-<name>`
+      if (part.type.startsWith("tool-")) {
+        const name = part.type.slice("tool-".length);
+        if (DEFERRED_SET.has(name) && available.has(name)) {
+          seeds.add(name);
+        }
+        continue;
+      }
+      // Some histories may carry dynamic tool parts with toolName.
+      if (
+        part.type === "dynamic-tool" &&
+        typeof part.toolName === "string" &&
+        DEFERRED_SET.has(part.toolName) &&
+        available.has(part.toolName)
+      ) {
+        seeds.add(part.toolName);
+      }
+    }
+  }
+
+  if (input.mentionsGitHubRepo) {
+    for (const name of GITHUB_TOOL_NAMES) {
+      if (available.has(name)) seeds.add(name);
+    }
+  }
+
+  return DEFERRED_TOOL_ORDER.filter((n) => seeds.has(n));
+}
+
+/** Flatten text parts across the thread (for GitHub-link detection). */
+export function collectMessageText(
+  messages: ReadonlyArray<{
+    parts?: ReadonlyArray<{ type?: string; text?: string }>;
+  }>,
+): string {
+  const chunks: string[] = [];
+  for (const msg of messages) {
+    const parts = Array.isArray(msg.parts) ? msg.parts : [];
+    for (const part of parts) {
+      if (part?.type === "text" && typeof part.text === "string" && part.text) {
+        chunks.push(part.text);
+      }
+    }
+  }
+  return chunks.join("\n");
 }
 
 export type ToolSearchOutput = {

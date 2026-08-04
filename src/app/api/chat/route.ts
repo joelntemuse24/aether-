@@ -7,9 +7,13 @@ import {
   type LanguageModel,
   type UIMessage,
 } from "ai";
-import { TOOL_NAMES, TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
+import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
 import { budgetForDepth, harnessSystemAddendum } from "@/lib/harness/budgets";
-import { createAgentLoopController } from "@/lib/harness/loop-efficiency";
+import {
+  collectMessageText,
+  collectSeedUnlockedToolNames,
+  createAgentLoopController,
+} from "@/lib/harness/loop-efficiency";
 import { updateAgentRunStatus } from "@/lib/harness/runs-store";
 import {
   buildToolRegistry,
@@ -372,20 +376,23 @@ export async function POST(req: Request) {
     const availableToolNames = toolsEnabled
       ? resolveAvailableToolNames({ userId, hasDrive, hasGitHub })
       : [];
-    // Pasted github.com links → unlock repo tools on step 0 (skip tool_search).
-    const seedUnlocked =
-      hasGitHub && messageMentionsGitHubRepo(lastUserText(messages))
-        ? [
-            TOOL_NAMES.githubGetRepo,
-            TOOL_NAMES.githubListContents,
-            TOOL_NAMES.githubReadFile,
-          ]
-        : undefined;
+    // Seed deferred tools from the whole thread — not just the last user
+    // message. Continue segments use CONTINUE_USER_TEXT, which would otherwise
+    // drop previously unlocked GitHub tools and cause AI_NoSuchToolError.
+    const seedUnlocked = toolsEnabled
+      ? collectSeedUnlockedToolNames({
+          messages,
+          availableToolNames,
+          mentionsGitHubRepo:
+            hasGitHub &&
+            messageMentionsGitHubRepo(collectMessageText(messages)),
+        })
+      : [];
     const loop = toolsEnabled
       ? createAgentLoopController({
           depth: harnessDepth,
           availableToolNames,
-          seedUnlocked,
+          seedUnlocked: seedUnlocked.length ? seedUnlocked : undefined,
         })
       : null;
 
