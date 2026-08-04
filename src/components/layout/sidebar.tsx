@@ -237,8 +237,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               theme === "dark"
                 ? "Switch to Light"
                 : theme === "light"
-                  ? "Switch to white"
-                  : "Switch to parchment"
+                  ? "Switch to White"
+                  : "Switch to Dark"
             }
           >
             {theme === "dark" ? (
@@ -431,8 +431,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 theme === "dark"
                   ? "Switch to Light"
                   : theme === "light"
-                    ? "Switch to white"
-                    : "Switch to parchment"
+                    ? "Switch to White"
+                    : "Switch to Dark"
               }
             >
               {theme === "dark" ? (

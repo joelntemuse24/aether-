@@ -10,6 +10,7 @@ import {
   Loader2Icon,
   LinkIcon,
   CircleIcon,
+  MoonIcon,
   SunIcon,
 } from "lucide-react";
 import { useSettings } from "@/providers/settings-provider";
@@ -151,7 +152,7 @@ export function SettingsDialog() {
                   const selected = theme === item.id;
                   const Icon =
                     item.id === "dark"
-                      ? SunIcon
+                      ? MoonIcon
                       : item.id === "white"
                         ? CircleIcon
                         : SunIcon;
