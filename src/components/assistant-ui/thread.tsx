@@ -617,7 +617,7 @@ const Composer: FC = () => {
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/*,.pdf,.txt,.md,.markdown,.csv,.json,.js,.jsx,.ts,.tsx,.py,.html,.css,.xml,.yaml,.yml,.toml,.ini,.env,.sh,.sql,.rs,.go,.java,.c,.cpp,.h,.hpp"
+        accept="image/*,.pdf,.docx,.pptx,.xlsx,.txt,.md,.markdown,.csv,.json,.js,.jsx,.ts,.tsx,.py,.html,.css,.xml,.yaml,.yml,.toml,.ini,.env,.sh,.sql,.rs,.go,.java,.c,.cpp,.h,.hpp"
         className="hidden"
         onChange={handleFileChange}
       />
@@ -832,8 +832,8 @@ const MessageError: FC = () => {
       <ErrorPrimitive.Root className="mt-2 rounded-xl border border-[var(--error-border)] bg-[var(--error-bg)] p-3 text-sm text-[var(--error-text)]">
         <ErrorPrimitive.Message className="whitespace-pre-wrap" />
         <p className="mt-1.5 text-[12px] text-[var(--muted)]">
-          If this was a time limit, Aether tries to continue automatically.
-          Otherwise use Retry, or pick another model.
+          If this was a time limit, use Continue to resume from the partial
+          reply. Otherwise Retry regenerates, or pick another model.
         </p>
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
@@ -883,6 +883,14 @@ const AssistantMessage: FC = () => {
 };
 
 const AssistantActionBar: FC = () => {
+  const preferContinue = useAuiState((s) => {
+    const messages = s.thread.messages;
+    const last = messages[messages.length - 1];
+    if (!last || last.id !== s.message.id) return false;
+    const statusType = s.message.status?.type;
+    return statusType === "incomplete" || statusType === "interrupted";
+  });
+
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
@@ -899,11 +907,14 @@ const AssistantActionBar: FC = () => {
           </AuiIf>
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
-      <ActionBarPrimitive.Reload asChild>
-        <TooltipIconButton tooltip="Retry">
-          <RefreshCwIcon className="size-3.5" />
-        </TooltipIconButton>
-      </ActionBarPrimitive.Reload>
+      <TooltipIconButton
+        tooltip={preferContinue ? "Continue" : "Retry"}
+        onClick={() => {
+          window.dispatchEvent(new CustomEvent("aether:continue-or-retry"));
+        }}
+      >
+        <RefreshCwIcon className="size-3.5" />
+      </TooltipIconButton>
       <RestoreToHereButton />
     </ActionBarPrimitive.Root>
   );

@@ -35,7 +35,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const folderId = url.searchParams.get("folderId") || "root";
   const q = url.searchParams.get("q")?.trim() || "";
-  const type = url.searchParams.get("type") || "all"; // all | recent | pdf | image | doc | sheet
+  const type = url.searchParams.get("type") || "all"; // all | recent | pdf | image | doc | sheet | slides
   const pageToken = url.searchParams.get("pageToken") || undefined;
 
   const clauses: string[] = ["trashed = false"];
@@ -59,6 +59,10 @@ export async function GET(req: Request) {
   } else if (type === "sheet") {
     clauses.push(
       "(mimeType = 'application/vnd.google-apps.spreadsheet' or mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType = 'application/vnd.ms-excel' or mimeType = 'text/csv')",
+    );
+  } else if (type === "slides") {
+    clauses.push(
+      "(mimeType = 'application/vnd.google-apps.presentation' or mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation' or mimeType = 'application/vnd.ms-powerpoint')",
     );
   }
 

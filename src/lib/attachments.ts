@@ -1,3 +1,5 @@
+import { extractOfficeText, isOfficeFile } from "@/lib/office-text";
+
 export type AttachmentKind = "image" | "text" | "file";
 
 export type PendingAttachment = {
@@ -73,17 +75,17 @@ const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB (matches most AI provider limit
 /** Max files pending on a message (local + Drive combined). */
 export const MAX_ATTACHMENTS = 6;
 /**
- * Max raw bytes we'll base64-embed for a non-image file (e.g. Drive PDF).
- * Larger files still attach as metadata-only so the UI stays responsive.
+ * Max raw bytes we'll base64-embed for a non-image file (e.g. PDF).
+ * Keep low: JSON + base64 (~4/3) must fit serverless body limits cleanly.
  */
-export const MAX_EMBEDDED_FILE_BYTES = 4 * 1024 * 1024;
+export const MAX_EMBEDDED_FILE_BYTES = 1.5 * 1024 * 1024;
 /** Max raw bytes we'll embed for a single image (vision models). */
-export const MAX_EMBEDDED_IMAGE_BYTES = 4 * 1024 * 1024;
+export const MAX_EMBEDDED_IMAGE_BYTES = 2 * 1024 * 1024;
 /**
  * Soft budget for total embedded binary payloads awaiting send.
- * Keeps JSON.stringify of the chat request from freezing the tab.
+ * Keeps JSON.stringify of the chat request from freezing the tab / 413s.
  */
-export const MAX_TOTAL_EMBEDDED_BYTES = 12 * 1024 * 1024;
+export const MAX_TOTAL_EMBEDDED_BYTES = 4 * 1024 * 1024;
 
 export function isTextFile(name: string, mime: string): boolean {
   if (mime.startsWith("text/")) return true;
@@ -126,7 +128,8 @@ function readAsDataURL(file: File): Promise<string> {
 }
 
 function mbLabel(bytes: number): string {
-  return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
+  const mb = bytes / (1024 * 1024);
+  return mb < 10 ? `${mb.toFixed(1)} MB` : `${mb.toFixed(0)} MB`;
 }
 
 export async function processFiles(
@@ -179,6 +182,28 @@ export async function processFiles(
         // Cap very large text files
         const capped = text.length > 120_000 ? text.slice(0, 120_000) + "\n\n[… truncated]" : text;
         attachments.push({ ...base, kind: "text", text: capped });
+      } else if (isOfficeFile(file.name, file.type || mime)) {
+        try {
+          const buf = await file.arrayBuffer();
+          const text = await extractOfficeText(buf, file.name, file.type || mime);
+          if (text) {
+            attachments.push({
+              ...base,
+              kind: "text",
+              mime: "text/plain",
+              text,
+              size: text.length,
+            });
+          } else {
+            attachments.push({ ...base, kind: "file" });
+            errors.push(
+              `"${file.name}" looks like a legacy Office file — convert to .docx/.pptx/.xlsx or paste the text.`,
+            );
+          }
+        } catch {
+          attachments.push({ ...base, kind: "file" });
+          errors.push(`Could not read text from "${file.name}".`);
+        }
       } else if (isPdfFile(file.name, file.type)) {
         // Embed local PDFs the same way Drive does (base64 data URL), within budget.
         if (file.size > MAX_EMBEDDED_FILE_BYTES) {
