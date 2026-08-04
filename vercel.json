@@ -8,7 +8,10 @@
       "maxDuration": 60
     },
     "src/app/api/conversations/title/route.ts": {
-      "maxDuration": 30
+      "maxDuration": 45
+    },
+    "src/app/api/drive/download/route.ts": {
+      "maxDuration": 120
     }
   }
 }

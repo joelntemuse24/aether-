@@ -35,6 +35,7 @@ import {
   CONTINUE_USER_TEXT,
   MAX_AUTO_CONTINUES,
   hasContinuableAssistant,
+  isServerTimeoutError,
   shouldAutoContinue,
 } from "@/lib/chat-continue";
 import type { HarnessChatContext } from "@/lib/harness/types";
@@ -104,6 +105,8 @@ function useChatThreadRuntime() {
   const continueSegmentRef = useRef(false);
   const continueCountRef = useRef(0);
   const continueScheduledRef = useRef(false);
+  /** User should see Continue — set when auto-continue budget is exhausted or skipped. */
+  const needsContinueRef = useRef(false);
   const lastHarnessRef = useRef<HarnessChatContext | null>(null);
   const runStartedAtRef = useRef<number | null>(null);
 
@@ -165,10 +168,12 @@ function useChatThreadRuntime() {
 
   const emitContinueStatus = useCallback(
     (detail: {
-      phase: "idle" | "continuing";
+      phase: "idle" | "continuing" | "needs-continue";
       segment?: number;
       max?: number;
+      reason?: string;
     }) => {
+      needsContinueRef.current = detail.phase === "needs-continue";
       window.dispatchEvent(
         new CustomEvent("aether:continue-status", { detail }),
       );
@@ -273,7 +278,26 @@ function useChatThreadRuntime() {
           scheduleAutoContinue("onError"));
       if (continuing) return;
 
-      emitContinueStatus({ phase: "idle" });
+      const timeoutish = shouldAutoContinue({
+        isAbort: false,
+        isDisconnect: false,
+        isError: true,
+        error,
+        messages: messagesRef.current,
+        runDurationMs,
+        // Probe as if we still had budget — surfaces the Continue CTA.
+        continueCount: 0,
+      });
+      emitContinueStatus(
+        timeoutish || isServerTimeoutError(error)
+          ? {
+              phase: "needs-continue",
+              reason: "timeout",
+              segment: continueCountRef.current,
+              max: MAX_AUTO_CONTINUES,
+            }
+          : { phase: "idle" },
+      );
       clearChatContext();
       void import("@/lib/chat-errors").then(({ friendlyChatError }) => {
         const detail = friendlyChatError(error);
@@ -283,7 +307,10 @@ function useChatThreadRuntime() {
             detail:
               continueCountRef.current >= MAX_AUTO_CONTINUES
                 ? "This reply hit the server time limit again. Click Continue to resume, or pick another model."
-                : detail,
+                : detail.replace(
+                    /Continuing automatically from where it left off…/i,
+                    "Click Continue to resume from where it left off.",
+                  ),
           }),
         );
       });
@@ -318,7 +345,24 @@ function useChatThreadRuntime() {
           ));
       if (continuing) return;
 
-      emitContinueStatus({ phase: "idle" });
+      // Only offer Continue when the run actually failed/cut off — not after
+      // a successful long reply (runDuration alone is not a signal).
+      const offerContinue =
+        !isAbort &&
+        hasContinuableAssistant(messagesRef.current) &&
+        (isDisconnect ||
+          isError ||
+          isServerTimeoutError(errorRef.current));
+      emitContinueStatus(
+        offerContinue
+          ? {
+              phase: "needs-continue",
+              reason: isDisconnect ? "disconnect" : "timeout",
+              segment: continueCountRef.current,
+              max: MAX_AUTO_CONTINUES,
+            }
+          : { phase: "idle" },
+      );
 
       if (!isAbort && !isDisconnect && !isError) {
         continueCountRef.current = 0;
@@ -454,6 +498,7 @@ function useChatThreadRuntime() {
       if (!api) return;
 
       const preferContinue =
+        needsContinueRef.current ||
         !!errorRef.current ||
         statusRef.current === "error" ||
         (hasContinuableAssistant(messagesRef.current) &&

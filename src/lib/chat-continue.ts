@@ -1,7 +1,7 @@
 import type { UIMessage } from "ai";
 
 /** Cap auto-continues so a stuck loop can't burn unbounded segments. */
-export const MAX_AUTO_CONTINUES = 3;
+export const MAX_AUTO_CONTINUES = 5;
 
 /** Ignore short disconnects (flaky network); long runs are likely platform kills. */
 export const MIN_DISCONNECT_RUN_MS = 45_000;
@@ -37,8 +37,16 @@ export function isAbortError(error: unknown): boolean {
 export function isServerTimeoutError(error: unknown): boolean {
   if (isAbortError(error)) return false;
   const raw = error instanceof Error ? error.message : String(error ?? "");
-  return /timed out after|Task timed out|Runtime Timeout|FUNCTION_INVOCATION_TIMEOUT|deadline exceeded|WS_TIMEOUT|function.*timeout|timeout of \d+ms exceeded/i.test(
+  return /timed out after|Task timed out|Runtime Timeout|FUNCTION_INVOCATION_TIMEOUT|deadline exceeded|WS_TIMEOUT|function.*timeout|timeout of \d+ms exceeded|server time limit/i.test(
     raw,
+  );
+}
+
+/** True when copy or status suggests the user should hit Continue. */
+export function looksLikeTimeoutCopy(text: string | undefined | null): boolean {
+  if (!text) return false;
+  return /time limit|timed out|timeout|cut off|interrupted by a platform/i.test(
+    text,
   );
 }
 

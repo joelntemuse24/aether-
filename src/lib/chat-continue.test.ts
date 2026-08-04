@@ -5,6 +5,7 @@ import {
   hasContinuableAssistant,
   isAbortError,
   isServerTimeoutError,
+  looksLikeTimeoutCopy,
   shouldAutoContinue,
   MAX_AUTO_CONTINUES,
 } from "./chat-continue";
@@ -27,6 +28,12 @@ describe("chat-continue", () => {
     const abort = new Error("The operation was aborted");
     abort.name = "AbortError";
     assert.equal(isServerTimeoutError(abort), false);
+  });
+
+  it("recognizes timeout copy for Continue CTAs", () => {
+    assert.equal(looksLikeTimeoutCopy("Server time limit hit"), true);
+    assert.equal(looksLikeTimeoutCopy("Task timed out after 300s"), true);
+    assert.equal(looksLikeTimeoutCopy("rate limited"), false);
   });
 
   it("requires assistant content before continuing", () => {
