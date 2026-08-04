@@ -35,15 +35,15 @@
 
 /* ─── Design tokens: light (warm parchment) ─── */
 :root[data-theme="light"] {
-  --canvas: #f7f4ec;
-  --elevated: #f0ebe0;
-  --elevated-deep: #e8e2d4;
-  --surface: #f7f4ec;
+  --canvas: #faf7f1;
+  --elevated: #f4efe6;
+  --elevated-deep: #ece6d9;
+  --surface: #faf7f1;
   --border: rgba(0, 0, 0, 0.08);
   --border-subtle: rgba(0, 0, 0, 0.05);
-  --accent: #c96442;
-  --accent-hover: #b5573a;
-  --accent-muted: rgba(201, 100, 66, 0.10);
+  --accent: #d4734f;
+  --accent-hover: #c26442;
+  --accent-muted: rgba(212, 115, 79, 0.10);
   --text: #1a1714;
   --text-secondary: #2e2a24;
   --muted: #6b6458;
@@ -52,9 +52,9 @@
   --hover-overlay: rgba(0, 0, 0, 0.04);
   --scrollbar-thumb: rgba(0, 0, 0, 0.12);
   --scrollbar-color: rgba(0, 0, 0, 0.18);
-  --selection-bg: rgba(201, 100, 66, 0.15);
-  --focus-ring: rgba(201, 100, 66, 0.35);
-  --code-bg: #efe9dc;
+  --selection-bg: rgba(212, 115, 79, 0.15);
+  --focus-ring: rgba(212, 115, 79, 0.35);
+  --code-bg: #f3eee3;
   --error-border: rgba(239, 68, 68, 0.25);
   --error-bg: rgba(254, 242, 242, 0.9);
   --overlay: rgba(0, 0, 0, 0.3);
@@ -73,9 +73,9 @@
   --surface: #ffffff;
   --border: rgba(0, 0, 0, 0.08);
   --border-subtle: rgba(0, 0, 0, 0.05);
-  --accent: #c96442;
-  --accent-hover: #b5573a;
-  --accent-muted: rgba(201, 100, 66, 0.10);
+  --accent: #d4734f;
+  --accent-hover: #c26442;
+  --accent-muted: rgba(212, 115, 79, 0.10);
   --text: #1a1714;
   --text-secondary: #2e2a24;
   --muted: #6b6458;
@@ -84,8 +84,8 @@
   --hover-overlay: rgba(0, 0, 0, 0.04);
   --scrollbar-thumb: rgba(0, 0, 0, 0.12);
   --scrollbar-color: rgba(0, 0, 0, 0.18);
-  --selection-bg: rgba(201, 100, 66, 0.15);
-  --focus-ring: rgba(201, 100, 66, 0.35);
+  --selection-bg: rgba(212, 115, 79, 0.15);
+  --focus-ring: rgba(212, 115, 79, 0.35);
   --code-bg: #f0f0ee;
   --error-border: rgba(239, 68, 68, 0.25);
   --error-bg: rgba(254, 242, 242, 0.9);
@@ -205,7 +205,7 @@ body::before {
 }
 
 :root[data-theme="light"] body::before {
-  opacity: 0.07;
+  opacity: 0.055;
   mix-blend-mode: multiply;
   background-size: 160px 160px;
 }

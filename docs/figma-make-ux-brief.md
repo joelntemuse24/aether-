@@ -1,5 +1,8 @@
 # Figma Make — next-pass prompt (Aether)
 
+> **Newer pass:** for artifact drafting peek + design-language document previews, use  
+> [`docs/figma-make-artifact-drafting.md`](./figma-make-artifact-drafting.md).
+
 Use this **inside the existing Make file**  
 `https://www.figma.com/make/ipxnTHtemrhVnpNwyaiFff/Redesign-Aether-Chat-App`
 
