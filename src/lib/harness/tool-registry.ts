@@ -202,7 +202,7 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
   if (hasDeferred && ctx.loop) {
     tools[TOOL_NAMES.toolSearch] = tool({
       description:
-        "Search for optional tools (memory, Google Drive, GitHub) by keyword and unlock matching definitions for later steps. Call when you need a capability that is not in the core tool list.",
+        "Discover and unlock optional tools by keyword (memory, Drive, GitHub). Call once with clear capability words — e.g. 'memory preferences', 'google drive files', 'github repository' — then use the unlocked tools in later steps of this turn. Sibling tools unlock together (read+write, full GitHub suite).",
       inputSchema: toolSearchInput,
       execute: async ({ query }) => ctx.loop!.runToolSearch(query),
     });

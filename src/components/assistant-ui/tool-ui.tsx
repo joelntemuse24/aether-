@@ -111,11 +111,35 @@ const ToolShell: FC<{
   subtitle?: string;
   children?: React.ReactNode;
   headerAction?: React.ReactNode;
-}> = ({ name, running, error, subtitle, children, headerAction }) => {
-  // Always collapsed by default — header stays visible; user expands for detail.
+  /**
+   * When true, expand while the tool is still constructing (streaming args /
+   * body). Collapses again when the run finishes so traces stay quiet.
+   */
+  expandWhileRunning?: boolean;
+}> = ({
+  name,
+  running,
+  error,
+  subtitle,
+  children,
+  headerAction,
+  expandWhileRunning,
+}) => {
+  // Collapsed by default; progressive construction can open while running.
   const [open, setOpen] = useState(false);
+  const userToggled = useRef(false);
   const display = getToolDisplay(name);
   const Icon = ICONS[name] ?? WrenchIcon;
+  const hasBody = !!children;
+
+  useEffect(() => {
+    if (userToggled.current) return;
+    if (expandWhileRunning && running && hasBody) {
+      setOpen(true);
+    } else if (expandWhileRunning && !running) {
+      setOpen(false);
+    }
+  }, [expandWhileRunning, running, hasBody]);
 
   return (
     <div
@@ -128,7 +152,10 @@ const ToolShell: FC<{
       <div className="flex items-center gap-2 px-3 py-2">
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => {
+            userToggled.current = true;
+            setOpen((v) => !v);
+          }}
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
           aria-expanded={open}
         >
@@ -217,6 +244,7 @@ const PythonToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       running={running}
       error={error}
       subtitle={description}
+      expandWhileRunning={!!code}
     >
       {code && (
         <CodeSnippet code={code} label={running ? "Writing code…" : "Code"} />
@@ -428,10 +456,15 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       ? `${streamingContent.length.toLocaleString()} chars`
       : undefined;
 
+  const hasConstructingBody =
+    (streamingContent !== undefined && streamingContent.length > 0) ||
+    (!!running && !!part.argsText);
+
   return (
     <ToolShell
       name={TOOL_NAMES.createArtifact}
       running={running}
+      expandWhileRunning={hasConstructingBody}
       subtitle={
         streamingTitle
           ? result?.persisted
@@ -441,7 +474,9 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
               : streamingTitle
           : kindHint
             ? `Creating ${kindHint}…`
-            : undefined
+            : running
+              ? "Preparing…"
+              : undefined
       }
       headerAction={
         artifact ? (
@@ -456,21 +491,36 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
         ) : undefined
       }
     >
-      {(kindHint || streamingLanguage) && (
+      {(kindHint || streamingLanguage || running) && (
         <div className="text-[12px] text-[var(--muted)]">
           {kindHint ? `${kindHint} artifact` : "artifact"}
           {streamingLanguage ? ` · ${streamingLanguage}` : ""}
-          {running && streamingContent !== undefined ? ` · ${previewLabel}…` : ""}
+          {running && streamingContent !== undefined
+            ? ` · ${previewLabel}…${charHint ? ` ${charHint}` : ""}`
+            : running
+              ? " · starting…"
+              : ""}
         </div>
       )}
       {streamingContent !== undefined && streamingContent.length > 0 && (
         <CodeSnippet
-          code={streamingContent}
+          code={
+            streamingContent.length > 6000
+              ? `${streamingContent.slice(0, 6000)}…`
+              : streamingContent
+          }
           label={running ? `${previewLabel}…` : "Content"}
         />
       )}
       {running && !streamingContent && part.argsText && (
-        <CodeSnippet code={part.argsText} label="Arguments" />
+        <CodeSnippet
+          code={
+            part.argsText.length > 2000
+              ? `${part.argsText.slice(0, 2000)}…`
+              : part.argsText
+          }
+          label="Writing…"
+        />
       )}
     </ToolShell>
   );
@@ -798,14 +848,28 @@ const GitHubReadFileToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     truncated?: boolean;
   } | undefined;
   const error = part.isError || (output ? output.ok === false : false);
+  const path =
+    output?.path ||
+    input?.path ||
+    extractPartialJsonString(part.argsText, "path");
+  const repo =
+    input?.repo || extractPartialJsonString(part.argsText, "repo");
 
   return (
     <ToolShell
       name={TOOL_NAMES.githubReadFile}
       running={running}
       error={error}
-      subtitle={output?.path || input?.path || input?.repo}
+      expandWhileRunning={running && !!(path || repo || part.argsText)}
+      subtitle={path || repo}
     >
+      {running && (path || repo) && !output?.text && (
+        <p className="text-[12px] text-[var(--muted)]">
+          {repo ? `${repo}` : ""}
+          {repo && path ? " · " : ""}
+          {path ? path : "Resolving path…"}
+        </p>
+      )}
       {output?.error && (
         <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
           {output.error}

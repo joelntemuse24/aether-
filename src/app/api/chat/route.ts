@@ -382,13 +382,16 @@ export async function POST(req: Request) {
     // Seed deferred tools from the whole thread — not just the last user
     // message. Continue segments use CONTINUE_USER_TEXT, which would otherwise
     // drop previously unlocked GitHub tools and cause AI_NoSuchToolError.
+    const threadText = toolsEnabled ? collectMessageText(messages) : "";
     const seedUnlocked = toolsEnabled
       ? collectSeedUnlockedToolNames({
           messages,
           availableToolNames,
           mentionsGitHubRepo:
-            hasGitHub &&
-            messageMentionsGitHubRepo(collectMessageText(messages)),
+            hasGitHub && messageMentionsGitHubRepo(threadText),
+          // Soft-seed memory/Drive/GitHub from conversation text so discovery
+          // is not solely dependent on a successful tool_search step.
+          intentText: threadText,
         })
       : [];
     const loop = toolsEnabled

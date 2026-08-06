@@ -368,11 +368,17 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
             </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div
+            className="flex flex-wrap items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1"
+            role="tablist"
+            aria-label="File type"
+          >
             {TYPE_FILTERS.map((f) => (
               <button
                 key={f.id}
                 type="button"
+                role="tab"
+                aria-selected={type === f.id}
                 onClick={() => {
                   setType(f.id);
                   if (f.id === "recent") {
@@ -381,10 +387,10 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
                   }
                 }}
                 className={cn(
-                  "rounded-md px-2.5 py-1 text-xs transition-colors",
+                  "rounded-lg px-2.5 py-1 text-[12px] transition-colors",
                   type === f.id
-                    ? "bg-[var(--accent-muted)] text-[var(--text)]"
-                    : "text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]",
+                    ? "bg-[var(--elevated-deep)] font-medium text-[var(--text)]"
+                    : "text-[var(--muted)] hover:text-[var(--text)]",
                 )}
               >
                 {f.label}
@@ -481,22 +487,22 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
           )}
 
           {!loading && !error && nextPageToken && (
-            <div className="flex justify-center pt-3">
-              <Button
-                variant="ghost"
+            <div className="flex justify-center border-t border-[var(--border)] pt-3 mt-3">
+              <button
+                type="button"
                 onClick={() => void loadMore()}
                 disabled={loadingMore}
-                className="text-[13px]"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--elevated)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--hover-overlay)] disabled:opacity-50"
               >
                 {loadingMore ? (
-                  <span className="inline-flex items-center gap-1.5">
+                  <>
                     <Loader2Icon className="size-3.5 animate-spin" />
                     Loading…
-                  </span>
+                  </>
                 ) : (
                   "Load more"
                 )}
-              </Button>
+              </button>
             </div>
           )}
         </div>

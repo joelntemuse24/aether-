@@ -44,6 +44,17 @@ export type ToolCatalogEntry = {
   keywords: string[];
 };
 
+/** Sibling suites — unlocking one tool unlocks the whole capability set. */
+const DEFERRED_SUITES: ReadonlyArray<readonly string[]> = [
+  [TOOL_NAMES.memorySearch, TOOL_NAMES.memoryWrite],
+  [TOOL_NAMES.driveSearch, TOOL_NAMES.driveRead],
+  [
+    TOOL_NAMES.githubGetRepo,
+    TOOL_NAMES.githubListContents,
+    TOOL_NAMES.githubReadFile,
+  ],
+];
+
 const CATALOG: Record<string, Omit<ToolCatalogEntry, "name">> = {
   [TOOL_NAMES.memorySearch]: {
     description:
@@ -58,6 +69,10 @@ const CATALOG: Record<string, Omit<ToolCatalogEntry, "name">> = {
       "constraint",
       "profile",
       "about me",
+      "what do you know",
+      "recall",
+      "saved",
+      "long term",
     ],
   },
   [TOOL_NAMES.memoryWrite]: {
@@ -70,6 +85,10 @@ const CATALOG: Record<string, Omit<ToolCatalogEntry, "name">> = {
       "store",
       "preference",
       "write memory",
+      "note that",
+      "from now on",
+      "always",
+      "don't forget",
     ],
   },
   [TOOL_NAMES.driveSearch]: {
@@ -82,6 +101,11 @@ const CATALOG: Record<string, Omit<ToolCatalogEntry, "name">> = {
       "docs",
       "spreadsheet",
       "gdrive",
+      "slides",
+      "sheet",
+      "my drive",
+      "google doc",
+      "google sheet",
     ],
   },
   [TOOL_NAMES.driveRead]: {
@@ -93,6 +117,9 @@ const CATALOG: Record<string, Omit<ToolCatalogEntry, "name">> = {
       "open file",
       "document",
       "docs",
+      "slides",
+      "sheet",
+      "gdrive",
     ],
   },
   [TOOL_NAMES.githubGetRepo]: {
@@ -105,6 +132,10 @@ const CATALOG: Record<string, Omit<ToolCatalogEntry, "name">> = {
       "codebase",
       "pull request",
       "gh",
+      "github.com",
+      "clone",
+      "branch",
+      "commit",
     ],
   },
   [TOOL_NAMES.githubListContents]: {
@@ -119,6 +150,8 @@ const CATALOG: Record<string, Omit<ToolCatalogEntry, "name">> = {
       "tree",
       "list files",
       "codebase",
+      "github.com",
+      "structure",
     ],
   },
   [TOOL_NAMES.githubReadFile]: {
@@ -132,9 +165,34 @@ const CATALOG: Record<string, Omit<ToolCatalogEntry, "name">> = {
       "readme",
       "code",
       "blob",
+      "github.com",
+      "package.json",
+      "tsconfig",
     ],
   },
 };
+
+/** Soft domain tokens → suite when lexical rank returns nothing useful. */
+const DOMAIN_FALLBACKS: ReadonlyArray<{
+  patterns: RegExp;
+  suite: readonly string[];
+}> = [
+  {
+    patterns:
+      /\b(memory|remember|preference|preferences|about me|recall|don'?t forget|from now on)\b/i,
+    suite: [TOOL_NAMES.memorySearch, TOOL_NAMES.memoryWrite],
+  },
+  {
+    patterns:
+      /\b(drive|gdrive|google\s*drive|google\s*doc|spreadsheet|slides?)\b/i,
+    suite: [TOOL_NAMES.driveSearch, TOOL_NAMES.driveRead],
+  },
+  {
+    patterns:
+      /\b(github|gh\.com|github\.com|repository|codebase|pull request|\brepo\b)\b/i,
+    suite: GITHUB_TOOL_NAMES,
+  },
+];
 
 const QUERY_STOP = new Set([
   "a",
@@ -211,14 +269,33 @@ function tokenize(text: string): string[] {
     .filter((t) => t.length > 1 && !QUERY_STOP.has(t));
 }
 
+/** Expand matched tools to their full capability suite (read+write, etc.). */
+export function expandDeferredSuites(
+  matchedNames: readonly string[],
+  availableNames: readonly string[],
+): string[] {
+  const available = new Set(availableNames);
+  const out = new Set<string>();
+  for (const name of matchedNames) {
+    if (!available.has(name) || !DEFERRED_SET.has(name)) continue;
+    out.add(name);
+    for (const suite of DEFERRED_SUITES) {
+      if (suite.includes(name)) {
+        for (const sibling of suite) {
+          if (available.has(sibling)) out.add(sibling);
+        }
+      }
+    }
+  }
+  return DEFERRED_TOOL_ORDER.filter((n) => out.has(n));
+}
+
 /** Lightweight lexical rank (BM25-flavored) over deferred tool descriptions. */
 export function rankDeferredTools(
   availableNames: readonly string[],
   query: string,
 ): ToolCatalogEntry[] {
   const qTokens = tokenize(query);
-  if (qTokens.length === 0) return [];
-
   const scored: Array<ToolCatalogEntry & { score: number }> = [];
   for (const name of availableNames) {
     if (!DEFERRED_SET.has(name)) continue;
@@ -238,6 +315,11 @@ export function rankDeferredTools(
         score += 1.5;
       }
     }
+    // Phrase hits on multi-word keywords (e.g. "google drive", "about me").
+    const qLower = query.toLowerCase();
+    for (const kw of meta.keywords) {
+      if (kw.includes(" ") && qLower.includes(kw)) score += 2.5;
+    }
     if (score > 0) {
       scored.push({
         name,
@@ -248,16 +330,54 @@ export function rankDeferredTools(
     }
   }
 
-  return scored
+  let ranked = scored
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
     .map(({ name, description, keywords }) => ({ name, description, keywords }));
+
+  // Domain fallback when lexical rank is empty — still unlock the right suite.
+  if (ranked.length === 0 && query.trim()) {
+    const available = new Set(availableNames);
+    const fallbackNames: string[] = [];
+    for (const fb of DOMAIN_FALLBACKS) {
+      if (fb.patterns.test(query)) {
+        for (const n of fb.suite) {
+          if (available.has(n)) fallbackNames.push(n);
+        }
+      }
+    }
+    ranked = fallbackNames.map((name) => {
+      const meta = CATALOG[name]!;
+      return {
+        name,
+        description: meta.description,
+        keywords: meta.keywords,
+      };
+    });
+  }
+
+  // Always expand suites so memory_search also unlocks memory_write, etc.
+  const expanded = expandDeferredSuites(
+    ranked.map((r) => r.name),
+    availableNames,
+  );
+  return expanded.map((name) => {
+    const fromRank = ranked.find((r) => r.name === name);
+    if (fromRank) return fromRank;
+    const meta = CATALOG[name]!;
+    return {
+      name,
+      description: meta.description,
+      keywords: meta.keywords,
+    };
+  });
 }
 
 /**
  * Deferred tools that should be active on step 0 — without waiting for
  * tool_search. Used when:
  * - the thread already invoked those tools (esp. continue segments), or
- * - the conversation mentions a GitHub repo and GitHub tools are available.
+ * - the conversation mentions a GitHub repo and GitHub tools are available, or
+ * - the latest user text clearly needs memory / Drive (soft seed).
  *
  * Continue turns send CONTINUE_USER_TEXT as the latest user message, which
  * does not mention github.com — so seeding from lastUserText alone drops
@@ -271,6 +391,11 @@ export function collectSeedUnlockedToolNames(input: {
   availableToolNames: readonly string[];
   /** True when any message text mentions a github.com repo / owner/repo. */
   mentionsGitHubRepo: boolean;
+  /**
+   * Optional free text (usually last user message or full thread) used to
+   * soft-seed memory/Drive suites so tool_search is not mandatory.
+   */
+  intentText?: string;
 }): string[] {
   const available = new Set(input.availableToolNames);
   const seeds = new Set<string>();
@@ -305,7 +430,18 @@ export function collectSeedUnlockedToolNames(input: {
     }
   }
 
-  return DEFERRED_TOOL_ORDER.filter((n) => seeds.has(n));
+  // Soft seed from intent text (memory / drive) without requiring tool_search.
+  if (input.intentText?.trim()) {
+    for (const fb of DOMAIN_FALLBACKS) {
+      if (!fb.patterns.test(input.intentText)) continue;
+      for (const n of fb.suite) {
+        if (available.has(n)) seeds.add(n);
+      }
+    }
+  }
+
+  // Expand any partial suite seeds (e.g. only github_get_repo used → full suite).
+  return expandDeferredSuites([...seeds], input.availableToolNames);
 }
 
 /** Flatten text parts across the thread (for GitHub-link detection). */
@@ -417,19 +553,25 @@ export function createAgentLoopController(input: {
           note: "No deferred tools are available in this session.",
         };
       }
-      const matches = rankDeferredTools(deferredAvailable, trimmed).slice(0, 4);
+      // rankDeferredTools expands suites; cap keeps the active set bounded.
+      const matches = rankDeferredTools(deferredAvailable, trimmed).slice(0, 6);
       for (const m of matches) unlocked.add(m.name);
+      // Re-list everything currently unlocked that matched this query's suite
+      // so the model sees the full capability set in the tool result.
+      const newlyOrAlready = deferredAvailable
+        .filter((n) => unlocked.has(n) && matches.some((m) => m.name === n))
+        .map((name) => {
+          const meta = CATALOG[name]!;
+          return { name, description: meta.description };
+        });
       return {
         ok: true,
         query: trimmed,
-        unlocked: matches.map((m) => ({
-          name: m.name,
-          description: m.description,
-        })),
+        unlocked: newlyOrAlready,
         note:
-          matches.length === 0
-            ? "No matching tools. Core tools (web_search, fetch_url, create_artifact, execute_python) are already available."
-            : `Unlocked ${matches.length} tool(s) for subsequent steps.`,
+          newlyOrAlready.length === 0
+            ? "No matching optional tools. Try keywords like 'memory', 'drive', or 'github'. Core tools (web_search, fetch_url, create_artifact, execute_python) are already available."
+            : `Unlocked ${newlyOrAlready.length} tool(s) for subsequent steps. Call them now if needed.`,
       };
     },
     gateWebSearch: (query: string): WebSearchOutput | null => {
