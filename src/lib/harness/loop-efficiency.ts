@@ -227,8 +227,9 @@ const QUERY_STOP = new Set([
 
 export function webSearchBudgetForDepth(depth: HarnessDepth): number {
   if (depth === "shallow") return 1;
-  if (depth === "deep") return 3;
-  return 2;
+  // Deep research needs headroom for title + outlet + follow-up (not 1–2 guesses).
+  if (depth === "deep") return 5;
+  return 3;
 }
 
 /** Optional tighter cap from time pressure ("5 minutes"). */

@@ -19,6 +19,7 @@ import {
   collectMessageText,
   collectSeedUnlockedToolNames,
   createAgentLoopController,
+  webSearchBudgetForDepth,
 } from "@/lib/harness/loop-efficiency";
 import { updateAgentRunStatus } from "@/lib/harness/runs-store";
 import {
@@ -450,12 +451,21 @@ export async function POST(req: Request) {
           intentText: threadText,
         })
       : [];
+    // Research/write intents need extra search headroom beyond pure depth caps
+    // (models otherwise burn 1–2 guesses on wrong outlets and stop).
+    const intentSearchCap =
+      harnessIntent === "research" || harnessIntent === "study"
+        ? Math.max(5, webSearchBudgetForDepth(harnessDepth))
+        : harnessIntent === "write"
+          ? Math.max(4, webSearchBudgetForDepth(harnessDepth))
+          : null;
     const loop = toolsEnabled
       ? createAgentLoopController({
           depth: harnessDepth,
           availableToolNames,
           seedUnlocked: seedUnlocked.length ? seedUnlocked : undefined,
-          maxWebSearches: timeBudget?.maxSearches ?? null,
+          maxWebSearches:
+            timeBudget?.maxSearches ?? intentSearchCap ?? null,
         })
       : null;
 
