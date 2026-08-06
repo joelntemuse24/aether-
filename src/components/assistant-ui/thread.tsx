@@ -67,7 +67,6 @@ import {
   type SpeechSession,
 } from "@/lib/speech";
 import { looksLikeTimeoutCopy } from "@/lib/chat-continue";
-import { readThreadIdFromLocation } from "@/lib/thread-url";
 
 /**
  * True only for a settled empty chat. Avoid welcome flash while history is
