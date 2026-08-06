@@ -155,28 +155,32 @@ export function AppShell() {
         }}
       />
 
-      <SyncLocalChatsBanner />
-      <SyncLocalMemory />
-
-      {notices.length > 0 && (
-        <div className="fixed bottom-4 left-1/2 z-[120] w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-[var(--border)] bg-[var(--elevated)] px-3 py-2 text-xs text-[var(--text-secondary)] shadow-none backdrop-blur-md">
-          <div className="flex items-start justify-between gap-2">
-            <div className="space-y-1">
-              {notices.map((err) => (
-                <div key={err}>{err}</div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setNotices([])}
-              className="shrink-0 text-[var(--muted)] hover:text-[var(--text)]"
-              aria-label="Dismiss"
-            >
-              ×
-            </button>
-          </div>
+      {/* One bottom stack: sync prompt + transient notices (no overlapping cards). */}
+      <div className="pointer-events-none fixed bottom-4 left-1/2 z-[120] flex w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 flex-col gap-2">
+        <div className="pointer-events-auto">
+          <SyncLocalChatsBanner />
         </div>
-      )}
+        {notices.length > 0 && (
+          <div className="pointer-events-auto rounded-xl border border-[var(--border)] bg-[var(--elevated)] px-3 py-2 text-xs text-[var(--text-secondary)] shadow-none backdrop-blur-md animate-[fadeIn_140ms_ease-out]">
+            <div className="flex items-start justify-between gap-2">
+              <div className="space-y-1">
+                {notices.map((err) => (
+                  <div key={err}>{err}</div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setNotices([])}
+                className="shrink-0 text-[var(--muted)] hover:text-[var(--text)]"
+                aria-label="Dismiss"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      <SyncLocalMemory />
     </div>
   );
 }

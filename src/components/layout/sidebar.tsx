@@ -48,6 +48,7 @@ import {
   VaultSidebar,
 } from "@/components/layout/vault-sidebar";
 import { Label } from "@/components/ui/label";
+import { SoftConfirm, SoftPrompt } from "@/components/ui/soft-dialog";
 import { NEW_CHAT_PATH } from "@/lib/thread-url";
 import { cn } from "@/lib/utils";
 
@@ -493,6 +494,9 @@ function ProjectsSection() {
     cloud,
   } = useProjects();
   const { status } = useSession();
+  const [dialog, setDialog] = useState<
+    null | "create" | "instructions" | "delete"
+  >(null);
 
   if (status !== "authenticated" || !cloud) return null;
 
@@ -502,11 +506,7 @@ function ProjectsSection() {
         <Label>Projects</Label>
         <button
           type="button"
-          onClick={() => {
-            const title = window.prompt("Project name");
-            if (!title?.trim()) return;
-            void create(title.trim());
-          }}
+          onClick={() => setDialog("create")}
           className="flex size-6 items-center justify-center rounded text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
           aria-label="New project"
           title="New project"
@@ -557,16 +557,7 @@ function ProjectsSection() {
           <div className="flex gap-1 px-0.5">
             <button
               type="button"
-              onClick={() => {
-                const next = window.prompt(
-                  "Project instructions (injected into chat)",
-                  activeProject.instructions ?? "",
-                );
-                if (next === null) return;
-                void update(activeProject.id, {
-                  instructions: next.trim() || null,
-                });
-              }}
+              onClick={() => setDialog("instructions")}
               className="flex-1 rounded-md px-2 py-1 text-left text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
             >
               {activeProject.instructions?.trim()
@@ -575,12 +566,7 @@ function ProjectsSection() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                if (!window.confirm(`Delete project “${activeProject.title}”?`)) {
-                  return;
-                }
-                void remove(activeProject.id);
-              }}
+              onClick={() => setDialog("delete")}
               className="rounded-md px-2 py-1 text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
               aria-label="Delete project"
               title="Delete project"
@@ -590,6 +576,53 @@ function ProjectsSection() {
           </div>
         </div>
       )}
+
+      <SoftPrompt
+        open={dialog === "create"}
+        title="New project"
+        description="Projects bind optional instructions to this chat."
+        label="Name"
+        placeholder="Project name"
+        confirmLabel="Create"
+        onClose={() => setDialog(null)}
+        onSubmit={(value) => {
+          if (!value.trim()) return;
+          void create(value.trim());
+        }}
+      />
+      <SoftPrompt
+        open={dialog === "instructions" && !!activeProject}
+        title="Project instructions"
+        description="Injected into chats bound to this project."
+        label="Instructions"
+        initialValue={activeProject?.instructions ?? ""}
+        placeholder="Optional guidance for the model…"
+        multiline
+        confirmLabel="Save"
+        onClose={() => setDialog(null)}
+        onSubmit={(value) => {
+          if (!activeProject) return;
+          void update(activeProject.id, {
+            instructions: value.trim() || null,
+          });
+        }}
+      />
+      <SoftConfirm
+        open={dialog === "delete" && !!activeProject}
+        title="Delete project?"
+        description={
+          activeProject
+            ? `“${activeProject.title}” will be removed. Chats stay; only the project binding goes.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        destructive
+        onClose={() => setDialog(null)}
+        onConfirm={() => {
+          if (!activeProject) return;
+          void remove(activeProject.id);
+        }}
+      />
     </div>
   );
 }

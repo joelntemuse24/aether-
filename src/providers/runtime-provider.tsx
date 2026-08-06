@@ -189,16 +189,12 @@ function useChatThreadRuntime() {
     continueCountRef.current += 1;
     const segment = continueCountRef.current;
 
+    // Quiet status lives in AgentStatusStrip ("Continuing… n/max") — no toast pile.
     emitContinueStatus({
       phase: "continuing",
       segment,
       max: MAX_AUTO_CONTINUES,
     });
-    window.dispatchEvent(
-      new CustomEvent("aether:notice", {
-        detail: `Server time limit hit — continuing automatically (${segment}/${MAX_AUTO_CONTINUES})…`,
-      }),
-    );
     console.info("[chat] auto-continue scheduled", { reason, segment });
 
     window.setTimeout(() => {
@@ -299,18 +295,14 @@ function useChatThreadRuntime() {
           : { phase: "idle" },
       );
       clearChatContext();
+      // Timeouts surface Continue in-thread — skip toast pile for those.
+      if (timeoutish || isServerTimeoutError(error)) return;
       void import("@/lib/chat-errors").then(({ friendlyChatError }) => {
         const detail = friendlyChatError(error);
         if (!detail) return;
         window.dispatchEvent(
           new CustomEvent("aether:notice", {
-            detail:
-              continueCountRef.current >= MAX_AUTO_CONTINUES
-                ? "This reply hit the server time limit again. Click Continue to resume, or pick another model."
-                : detail.replace(
-                    /Continuing automatically from where it left off…/i,
-                    "Click Continue to resume from where it left off.",
-                  ),
+            detail,
           }),
         );
       });
@@ -487,61 +479,93 @@ function useChatThreadRuntime() {
     };
   }, [aui]);
 
-  // Retry on a cut-off turn → continue segment (keep partial work).
-  // Otherwise regenerate from the last user message.
+  // Distinct actions: Continue keeps partial work; Retry regenerates.
   useEffect(() => {
-    const onContinueOrRetry = () => {
+    const runContinue = () => {
       if (statusRef.current === "submitted" || statusRef.current === "streaming") {
         return;
       }
       const api = chatApiRef.current;
       if (!api) return;
+      if (!hasContinuableAssistant(messagesRef.current)) {
+        // Nothing to resume — fall back to regenerate.
+        void api.regenerate?.().catch((err) => {
+          console.error("[chat] regenerate fallback failed", err);
+        });
+        return;
+      }
 
+      continueSegmentRef.current = true;
+      if (continueCountRef.current < MAX_AUTO_CONTINUES) {
+        continueCountRef.current += 1;
+      }
+      const segment = Math.max(1, continueCountRef.current);
+      emitContinueStatus({
+        phase: "continuing",
+        segment,
+        max: MAX_AUTO_CONTINUES,
+      });
+      if (lastHarnessRef.current) {
+        armHarnessRef.current(lastHarnessRef.current);
+      }
+      try {
+        api.clearError?.();
+      } catch {
+        // ignore
+      }
+      void api.sendMessage({ text: CONTINUE_USER_TEXT }).catch((err) => {
+        console.error("[chat] manual continue failed", err);
+        continueSegmentRef.current = false;
+        emitContinueStatus({ phase: "idle" });
+        window.dispatchEvent(
+          new CustomEvent("aether:notice", {
+            detail: "Could not continue. Try sending a short “continue” message.",
+          }),
+        );
+      });
+    };
+
+    const runRetry = () => {
+      if (statusRef.current === "submitted" || statusRef.current === "streaming") {
+        return;
+      }
+      const api = chatApiRef.current;
+      if (!api) return;
+      needsContinueRef.current = false;
+      emitContinueStatus({ phase: "idle" });
+      try {
+        api.clearError?.();
+      } catch {
+        // ignore
+      }
+      void api.regenerate?.().catch((err) => {
+        console.error("[chat] regenerate failed", err);
+      });
+    };
+
+    const onContinue = () => runContinue();
+    const onRetry = () => runRetry();
+    // Legacy dual event: prefer continue when partial work exists.
+    const onContinueOrRetry = () => {
       const preferContinue =
         needsContinueRef.current ||
         !!errorRef.current ||
         statusRef.current === "error" ||
         (hasContinuableAssistant(messagesRef.current) &&
           continueCountRef.current > 0);
-
       if (preferContinue && hasContinuableAssistant(messagesRef.current)) {
-        continueSegmentRef.current = true;
-        if (continueCountRef.current < MAX_AUTO_CONTINUES) {
-          continueCountRef.current += 1;
-        }
-        const segment = Math.max(1, continueCountRef.current);
-        emitContinueStatus({
-          phase: "continuing",
-          segment,
-          max: MAX_AUTO_CONTINUES,
-        });
-        if (lastHarnessRef.current) {
-          armHarnessRef.current(lastHarnessRef.current);
-        }
-        try {
-          api.clearError?.();
-        } catch {
-          // ignore
-        }
-        void api.sendMessage({ text: CONTINUE_USER_TEXT }).catch((err) => {
-          console.error("[chat] manual continue failed", err);
-          continueSegmentRef.current = false;
-          emitContinueStatus({ phase: "idle" });
-          window.dispatchEvent(
-            new CustomEvent("aether:notice", {
-              detail: "Could not continue. Try sending a short “continue” message.",
-            }),
-          );
-        });
-        return;
+        runContinue();
+      } else {
+        runRetry();
       }
-
-      void api.regenerate?.().catch((err) => {
-        console.error("[chat] regenerate failed", err);
-      });
     };
+
+    window.addEventListener("aether:continue", onContinue);
+    window.addEventListener("aether:retry", onRetry);
     window.addEventListener("aether:continue-or-retry", onContinueOrRetry);
     return () => {
+      window.removeEventListener("aether:continue", onContinue);
+      window.removeEventListener("aether:retry", onRetry);
       window.removeEventListener("aether:continue-or-retry", onContinueOrRetry);
     };
   }, [emitContinueStatus]);

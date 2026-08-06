@@ -207,14 +207,15 @@ function AttachmentChips() {
             key={a.id}
             title={
               readable
-                ? a.name
-                : `${a.name} — attached by name only; model cannot read the content`
+                ? `${a.name} — readable by the model`
+                : `${a.name} — name only; content is not sent to the model`
             }
             className={cn(
-              "group flex max-w-[14rem] items-center gap-1.5 rounded-lg border px-2 py-1 text-xs",
+              "group flex max-w-[15rem] items-center gap-1.5 rounded-lg border px-2 py-1 text-xs",
               readable
                 ? "border-[var(--border)] bg-[var(--elevated)] text-[var(--text-secondary)]"
-                : "border-[var(--error-border)] bg-[var(--error-bg)] text-[var(--error-text)]",
+                : // Soft limited state — calm amber, not error red.
+                  "border-[color-mix(in_oklab,var(--accent)_28%,var(--border))] bg-[color-mix(in_oklab,var(--accent)_8%,var(--elevated))] text-[var(--text-secondary)]",
             )}
           >
             {a.kind === "image" ? (
@@ -223,8 +224,14 @@ function AttachmentChips() {
               <FileIcon className="size-3.5 shrink-0 opacity-70" />
             )}
             <span className="truncate">{a.name}</span>
-            {!readable && (
-              <span className="shrink-0 text-[10px] opacity-80">name only</span>
+            {readable ? (
+              <span className="shrink-0 text-[10px] text-[var(--muted-soft)]">
+                readable
+              </span>
+            ) : (
+              <span className="shrink-0 text-[10px] text-[var(--muted)]">
+                name only
+              </span>
             )}
             <button
               type="button"
@@ -306,24 +313,35 @@ const ContinuePausedBar: FC = () => {
     >
       <div className="min-w-0">
         <div className="text-[13px] font-medium text-[var(--text)]">
-          {timedOut ? "Timed out" : "Response paused"}
+          {timedOut ? "Reply paused" : "Response paused"}
         </div>
         <div className="text-[12px] leading-snug text-[var(--muted)]">
           {timedOut
-            ? "Pick up from the partial reply — tools and context stay intact."
+            ? "Continue keeps partial work. Retry starts this turn over."
             : "The model stopped mid-thought. Continue to keep going."}
         </div>
       </div>
-      <Button
-        type="button"
-        size="sm"
-        className="shrink-0"
-        onClick={() => {
-          window.dispatchEvent(new CustomEvent("aether:continue-or-retry"));
-        }}
-      >
-        Continue
-      </Button>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <Button
+          type="button"
+          size="sm"
+          className="shrink-0"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent("aether:continue"));
+          }}
+        >
+          Continue
+        </Button>
+        <button
+          type="button"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent("aether:retry"));
+          }}
+          className="rounded-lg px-2 py-1.5 text-[12px] text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+        >
+          Retry
+        </button>
+      </div>
     </div>
   );
 };
@@ -936,30 +954,51 @@ const MessageError: FC = () => {
 
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="mt-2 rounded-xl border border-[var(--error-border)] bg-[var(--error-bg)] p-3 text-sm text-[var(--error-text)]">
-        <ErrorPrimitive.Message className="whitespace-pre-wrap" />
+      <ErrorPrimitive.Root
+        className={cn(
+          "mt-2 rounded-xl border p-3 text-sm",
+          isTimeout
+            ? "border-[var(--border)] bg-[var(--elevated)] text-[var(--text-secondary)]"
+            : "border-[var(--error-border)] bg-[var(--error-bg)] text-[var(--error-text)]",
+        )}
+      >
         {isTimeout ? (
-          <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => {
-                window.dispatchEvent(
-                  new CustomEvent("aether:continue-or-retry"),
-                );
-              }}
-            >
-              Continue
-            </Button>
-            <span className="text-[12px] text-[var(--muted)]">
-              Resumes from the partial reply with tools intact.
-            </span>
-          </div>
+          <>
+            <p className="text-[13px] font-medium text-[var(--text)]">
+              This reply hit a time limit
+            </p>
+            <p className="mt-1 text-[12px] leading-snug text-[var(--muted)]">
+              Partial work is kept. Continue to resume, or Retry to regenerate.
+            </p>
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent("aether:continue"));
+                }}
+              >
+                Continue
+              </Button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent("aether:retry"));
+                }}
+                className="rounded-lg px-2 py-1.5 text-[12px] text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+              >
+                Retry
+              </button>
+            </div>
+          </>
         ) : (
-          <p className="mt-1.5 text-[12px] text-[var(--muted)]">
-            Retry regenerates from the last user message, or pick another
-            model. If this was a time limit, use Continue below.
-          </p>
+          <>
+            <ErrorPrimitive.Message className="whitespace-pre-wrap" />
+            <p className="mt-1.5 text-[12px] text-[var(--muted)]">
+              Retry regenerates from the last user message, or pick another
+              model.
+            </p>
+          </>
         )}
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
@@ -1060,21 +1099,32 @@ const AssistantActionBar: FC = () => {
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
       {showContinue ? (
-        <button
-          type="button"
-          onClick={() => {
-            window.dispatchEvent(new CustomEvent("aether:continue-or-retry"));
-          }}
-          className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface)]"
-        >
-          <RefreshCwIcon className="size-3.5" />
-          Continue
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent("aether:continue"));
+            }}
+            className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface)]"
+            title="Keep partial work and resume"
+          >
+            <RefreshCwIcon className="size-3.5" />
+            Continue
+          </button>
+          <TooltipIconButton
+            tooltip="Retry — regenerate from last user message"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent("aether:retry"));
+            }}
+          >
+            <RotateCcwIcon className="size-3.5" />
+          </TooltipIconButton>
+        </>
       ) : (
         <TooltipIconButton
           tooltip="Retry"
           onClick={() => {
-            window.dispatchEvent(new CustomEvent("aether:continue-or-retry"));
+            window.dispatchEvent(new CustomEvent("aether:retry"));
           }}
         >
           <RefreshCwIcon className="size-3.5" />

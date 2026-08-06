@@ -8,6 +8,7 @@ import {
   XIcon,
 } from "lucide-react";
 import type { VaultNote } from "@/lib/vault";
+import { SoftConfirm } from "@/components/ui/soft-dialog";
 import { cn } from "@/lib/utils";
 
 type VaultSidebarProps = {
@@ -47,6 +48,8 @@ export const VaultSidebar: FC<VaultSidebarProps> = ({
   onDetach,
   className,
 }) => {
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const pendingDelete = notes.find((n) => n.id === pendingDeleteId) ?? null;
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -117,15 +120,7 @@ export const VaultSidebar: FC<VaultSidebarProps> = ({
                   {onDelete ? (
                     <button
                       type="button"
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Delete “${note.title || "Untitled note"}”?`,
-                          )
-                        ) {
-                          onDelete(note.id);
-                        }
-                      }}
+                      onClick={() => setPendingDeleteId(note.id)}
                       className="mt-1.5 me-1 flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--muted)] opacity-0 transition-opacity hover:text-[var(--text)] group-hover:opacity-100 max-md:opacity-100"
                       aria-label={`Delete ${note.title}`}
                       title="Delete"
@@ -212,6 +207,22 @@ export const VaultSidebar: FC<VaultSidebarProps> = ({
           }
         }}
         onPointerUp={() => setResizeStart(null)}
+      />
+
+      <SoftConfirm
+        open={!!pendingDelete}
+        title="Delete note?"
+        description={
+          pendingDelete
+            ? `“${pendingDelete.title || "Untitled note"}” will be removed from Vault.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        destructive
+        onClose={() => setPendingDeleteId(null)}
+        onConfirm={() => {
+          if (pendingDelete && onDelete) onDelete(pendingDelete.id);
+        }}
       />
     </aside>
   );
