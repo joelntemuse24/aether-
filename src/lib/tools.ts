@@ -119,6 +119,8 @@ export type CreateArtifactOutput = {
   title: string;
   id?: string;
   persisted?: boolean;
+  /** Echo of body for client open when tool args were incomplete. */
+  content?: string;
 };
 
 export const memorySearchInput = z.object({

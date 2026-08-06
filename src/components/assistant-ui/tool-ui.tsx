@@ -389,26 +389,44 @@ function toArtifact(id: string, input: CreateArtifactInput): Artifact {
 }
 
 const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const { openArtifact, refreshSaved, artifact: openPanelArtifact, open } =
-    useArtifact();
+  const {
+    openArtifact,
+    refreshSaved,
+    rememberSessionArtifact,
+    artifact: openPanelArtifact,
+    open,
+  } = useArtifact();
   const running = usePartRunning(part);
+  const threadRunning = useAuiState((s) => s.thread.isRunning);
   const input = part.args as Partial<CreateArtifactInput> | undefined;
-  const result = part.result as CreateArtifactOutput | undefined;
-  const complete =
-    part.result !== undefined && !!input?.content && !!input?.title;
+  const result = part.result as
+    | (CreateArtifactOutput & { content?: string })
+    | undefined;
+  const bodyContent =
+    (typeof input?.content === "string" && input.content) ||
+    (typeof result?.content === "string" ? result.content : undefined) ||
+    extractPartialJsonString(part.argsText, "content");
+  const bodyTitle =
+    input?.title ||
+    result?.title ||
+    extractPartialJsonString(part.argsText, "title");
+  const complete = part.result !== undefined && !!bodyContent && !!bodyTitle;
   const openedRef = useRef(false);
   const lastSyncedLen = useRef(0);
+  /** True if this mount saw a live generation — used to open on complete without rehydrate pop. */
+  const sawLiveRef = useRef(false);
 
-  const streamingTitle =
-    input?.title || extractPartialJsonString(part.argsText, "title");
+  useEffect(() => {
+    if (running || threadRunning) sawLiveRef.current = true;
+  }, [running, threadRunning]);
+
+  const streamingTitle = bodyTitle;
   const kindHint =
     (input?.kind as string | undefined) ||
+    (result?.kind as string | undefined) ||
     extractPartialJsonString(part.argsText, "kind") ||
     part.argsText?.match(/"kind"\s*:\s*"(\w+)"/)?.[1];
-  const streamingContent =
-    typeof input?.content === "string"
-      ? input.content
-      : extractPartialJsonString(part.argsText, "content");
+  const streamingContent = bodyContent;
   const streamingLanguage =
     input?.language || extractPartialJsonString(part.argsText, "language");
 
@@ -424,29 +442,42 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       : null;
 
   const completeArtifact =
-    complete && input?.content && input?.title
-      ? toArtifact(artifactId, input as CreateArtifactInput)
+    complete && bodyContent && bodyTitle
+      ? toArtifact(artifactId, {
+          kind: (kindHint as ArtifactKind) || "document",
+          title: bodyTitle,
+          language: streamingLanguage,
+          content: bodyContent,
+        })
       : null;
   const artifact = completeArtifact ?? draft;
 
-  // Open early while *this session* is writing. Never auto-open on rehydrate —
-  // historical completed tools used to pop the inspector on every refresh.
+  // Open while writing; also open once on live complete (batch tools often skip
+  // streaming args). Never auto-open historical tools after refresh.
   useEffect(() => {
     if (!artifact) return;
 
     if (complete) {
-      // Final sync only if we already opened during streaming, or panel is this id.
-      if (
+      const payload = {
+        ...artifact,
+        persisted: !!result?.persisted,
+      };
+      if (sawLiveRef.current && !openedRef.current) {
+        openedRef.current = true;
+        openArtifact(payload);
+        rememberSessionArtifact(payload);
+        if (result?.persisted) void refreshSaved();
+      } else if (
         openedRef.current &&
         open &&
         openPanelArtifact?.id === artifact.id
       ) {
-        openArtifact({
-          ...artifact,
-          persisted: !!result?.persisted,
-        });
+        openArtifact(payload);
+        rememberSessionArtifact(payload);
+      } else if (sawLiveRef.current && result?.persisted) {
+        rememberSessionArtifact(payload);
+        void refreshSaved();
       }
-      if (openedRef.current && result?.persisted) void refreshSaved();
       lastSyncedLen.current = artifact.code.length;
       return;
     }
