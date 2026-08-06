@@ -13,6 +13,9 @@ import {
   githubReadFileInput,
   fetchUrlInput,
   toolSearchInput,
+  requestConfirmationInput,
+  browserNavigateInput,
+  browserActInput,
   type CreateArtifactOutput,
   type WebSearchOutput,
 } from "@/lib/tools";
@@ -30,6 +33,12 @@ import {
   githubListContentsForUser,
   githubReadFileForUser,
 } from "@/lib/connectors/github";
+import { browserAct, browserNavigate } from "@/lib/connectors/browser";
+import { createConfirmationRequest } from "@/lib/harness/confirmation";
+import {
+  runVerifyChecklist,
+  verifyChecklistInput,
+} from "@/lib/harness/verify";
 import type { AgentLoopController } from "@/lib/harness/loop-efficiency";
 
 export type ToolRegistryContext = {
@@ -53,6 +62,10 @@ export function resolveAvailableToolNames(ctx: {
     TOOL_NAMES.webSearch,
     TOOL_NAMES.fetchUrl,
     TOOL_NAMES.createArtifact,
+    TOOL_NAMES.verifyChecklist,
+    TOOL_NAMES.requestConfirmation,
+    TOOL_NAMES.browserNavigate,
+    TOOL_NAMES.browserAct,
   ];
   const hasMemory = !!(ctx.userId && isCloudDbConfigured());
   const hasDrive = !!(ctx.userId && ctx.hasDrive);
@@ -124,9 +137,50 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     }),
     [TOOL_NAMES.fetchUrl]: tool({
       description:
-        "Fetch a public http(s) URL and return extracted text (HTML stripped). Use to read a specific page after search. Do not use for github.com repositories — use github_get_repo / github_list_contents / github_read_file.",
+        "Fetch a public http(s) URL and return extracted text (HTML stripped). Soft-fails paywalls; PDF text is best-effort. Do not use for github.com repositories — use github_* tools.",
       inputSchema: fetchUrlInput,
       execute: async ({ url }) => fetchUrlText(url),
+    }),
+    [TOOL_NAMES.verifyChecklist]: tool({
+      description:
+        "Run a structured verify pass before handing back substantial work (deep research, essays, multi-step jobs). Call after drafting; fix failed checks or state limits clearly.",
+      inputSchema: verifyChecklistInput,
+      execute: async (input) => runVerifyChecklist(input),
+    }),
+    [TOOL_NAMES.requestConfirmation]: tool({
+      description:
+        "Request user approval before any side effect (submit form, send message, upload, irreversible action). Returns needs_confirmation — do not claim the action completed until the user approves.",
+      inputSchema: requestConfirmationInput,
+      execute: async (input) =>
+        createConfirmationRequest(
+          {
+            action: input.action,
+            title: input.title,
+            preview: input.preview,
+            target: input.target,
+          },
+          ctx.userId,
+        ),
+    }),
+    [TOOL_NAMES.browserNavigate]: tool({
+      description:
+        "Open a public URL and extract readable text (fetch mode, or Browserless when configured). Prefer for portal-like pages after the user shares a link. Not for github.com repos.",
+      inputSchema: browserNavigateInput,
+      execute: async ({ url }) => browserNavigate(url, ctx.userId),
+    }),
+    [TOOL_NAMES.browserAct]: tool({
+      description:
+        "Browser action: extract, fill_preview (no apply), click, or submit. submit and submit-like clicks always return needs_confirmation — never auto-submit.",
+      inputSchema: browserActInput,
+      execute: async (input) =>
+        browserAct({
+          url: input.url,
+          action: input.action,
+          selector: input.selector,
+          value: input.value,
+          description: input.description,
+          userId: ctx.userId,
+        }),
     }),
   };
 

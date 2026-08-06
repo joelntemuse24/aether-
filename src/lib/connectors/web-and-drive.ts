@@ -113,6 +113,9 @@ export async function fetchUrlText(url: string): Promise<{
   title?: string;
   text?: string;
   url: string;
+  warning?: string;
+  paywalled?: boolean;
+  contentType?: string;
 }> {
   // github.com HTML is mostly chrome; authenticated repo tools are the path.
   try {
@@ -142,21 +145,61 @@ export async function fetchUrlText(url: string): Promise<{
       headers: {
         "User-Agent":
           "Mozilla/5.0 (compatible; AetherChat/1.0; +https://github.com/joelntemuse24/aether-)",
-        Accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.1",
+        Accept:
+          "text/html,text/plain,application/json,application/pdf;q=0.9,*/*;q=0.1",
       },
       maxRedirects: 5,
     });
     if (!res.ok) {
+      const soft =
+        res.status === 401 || res.status === 403 || res.status === 402;
       return {
         ok: false,
-        error: `Fetch failed (${res.status})`,
+        error: soft
+          ? `Page blocked access (${res.status}) — may be paywalled or login-gated. Summarize from search snippets or ask the user to attach the file.`
+          : `Fetch failed (${res.status})`,
         url: gate.url.toString(),
+        paywalled: soft,
       };
     }
     const ctype = res.headers.get("content-type") || "";
-    const raw = (await res.text()).slice(0, 200_000);
+    const buf = await res.arrayBuffer();
+    const rawBytes = new Uint8Array(buf.slice(0, 200_000));
+    const raw = new TextDecoder("utf-8", { fatal: false }).decode(rawBytes);
+
+    // PDF: soft message (full extract needs a dedicated parser later).
+    if (
+      ctype.includes("pdf") ||
+      raw.startsWith("%PDF") ||
+      gate.url.pathname.toLowerCase().endsWith(".pdf")
+    ) {
+      const textGuess = extractPdfTextish(rawBytes);
+      if (textGuess && textGuess.length > 80) {
+        return {
+          ok: true,
+          url: gate.url.toString(),
+          title: "PDF document",
+          text: textGuess.slice(0, 80_000),
+          contentType: "application/pdf",
+          warning:
+            "PDF text is best-effort. For clean extract, attach the PDF in the composer.",
+        };
+      }
+      return {
+        ok: false,
+        url: gate.url.toString(),
+        title: "PDF document",
+        contentType: "application/pdf",
+        error:
+          "Could not extract text from this PDF. Attach it in the composer so Aether can read it, or paste key excerpts.",
+      };
+    }
+
     let text = raw;
     let title: string | undefined;
+    let paywalled = false;
+    let warning: string | undefined;
+
     if (ctype.includes("html") || /<html[\s>]/i.test(raw.slice(0, 500))) {
       title = raw.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim();
       title = title
@@ -179,16 +222,38 @@ export async function fetchUrlText(url: string): Promise<{
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 80_000);
+
+      const wall = detectPaywall(title, text, raw);
+      if (wall) {
+        paywalled = true;
+        warning = wall;
+      }
+    } else if (ctype.includes("json")) {
+      text = raw.slice(0, 80_000);
+      title = title || "JSON";
     }
+
     if (!text) {
       return {
         ok: false,
-        error: "Page returned no readable text.",
+        error: paywalled
+          ? "Page looks paywalled and returned no readable body."
+          : "Page returned no readable text.",
         url: gate.url.toString(),
         title,
+        paywalled,
+        warning,
       };
     }
-    return { ok: true, url: gate.url.toString(), title, text };
+    return {
+      ok: true,
+      url: gate.url.toString(),
+      title,
+      text,
+      warning,
+      paywalled: paywalled || undefined,
+      contentType: ctype || undefined,
+    };
   } catch (err) {
     const message =
       err instanceof Error && err.name === "AbortError"
@@ -204,4 +269,41 @@ export async function fetchUrlText(url: string): Promise<{
   } finally {
     clearTimeout(timer);
   }
+}
+
+function detectPaywall(
+  title: string | undefined,
+  text: string,
+  rawHtml: string,
+): string | undefined {
+  const blob = `${title || ""} ${text.slice(0, 2000)} ${rawHtml.slice(0, 4000)}`;
+  if (
+    /\b(subscribe to (continue|read)|sign in to continue|create a free account to|members only|paywall|metered paywall)\b/i.test(
+      blob,
+    )
+  ) {
+    return "Possible paywall — treat extracted text as partial; prefer other sources or user attachment.";
+  }
+  if (text.length < 400 && /\b(log in|sign in|subscribe)\b/i.test(blob)) {
+    return "Short body with login/subscribe cues — content may be gated.";
+  }
+  return undefined;
+}
+
+/** Very rough PDF text extraction without a full parser (uncompressed streams). */
+function extractPdfTextish(bytes: Uint8Array): string {
+  const asLatin = Array.from(bytes, (b) => String.fromCharCode(b)).join("");
+  const chunks: string[] = [];
+  const re = /\((?:\\.|[^\\)]){3,}\)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(asLatin)) && chunks.length < 400) {
+    const inner = m[0]
+      .slice(1, -1)
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "")
+      .replace(/\\t/g, " ")
+      .replace(/\\(.)/g, "$1");
+    if (/[A-Za-z]{3,}/.test(inner)) chunks.push(inner);
+  }
+  return chunks.join(" ").replace(/\s+/g, " ").trim();
 }

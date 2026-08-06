@@ -11,7 +11,10 @@ import {
 } from "ai";
 import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
 import { repairToolCallInputJson } from "@/lib/repair-tool-json";
-import { budgetForDepth, harnessSystemAddendum } from "@/lib/harness/budgets";
+import {
+  budgetForDepthWithTime,
+  harnessSystemAddendum,
+} from "@/lib/harness/budgets";
 import {
   collectMessageText,
   collectSeedUnlockedToolNames,
@@ -29,6 +32,17 @@ import {
   type HarnessDepth,
   type HarnessIntent,
 } from "@/lib/harness/types";
+import {
+  depthUnderTimePressure,
+  parseTimeBudgetFromText,
+  timeBudgetForMinutes,
+  timeBudgetSystemAddendum,
+} from "@/lib/harness/time-budget";
+import { verifySystemAddendum } from "@/lib/harness/verify";
+import {
+  resolveSessionSkills,
+  sessionSkillsSystemAddendum,
+} from "@/lib/harness/session-skills";
 import { auth } from "@/auth";
 import { relevantMemoryPrompt } from "@/lib/memory/store";
 import {
@@ -230,7 +244,7 @@ export async function POST(req: Request) {
         : undefined;
 
     const rawHarness = body.harness as HarnessChatContext | undefined;
-    const harnessDepth: HarnessDepth =
+    let harnessDepth: HarnessDepth =
       rawHarness &&
       typeof rawHarness.depth === "string" &&
       (HARNESS_DEPTHS as readonly string[]).includes(rawHarness.depth)
@@ -255,16 +269,28 @@ export async function POST(req: Request) {
       : undefined;
     const harnessRunId =
       typeof rawHarness?.runId === "string" ? rawHarness.runId : undefined;
-    const budget = budgetForDepth(harnessDepth);
+
+    const session = await auth();
+    const userId = session?.user?.id || session?.user?.email || null;
+
+    // Time budget from harness body or latest user text ("in 5 minutes").
+    const userText = lastUserText(messages);
+    const timeBudget =
+      typeof rawHarness?.timeBudgetMinutes === "number" &&
+      rawHarness.timeBudgetMinutes > 0
+        ? timeBudgetForMinutes(rawHarness.timeBudgetMinutes)
+        : parseTimeBudgetFromText(userText);
+    harnessDepth = depthUnderTimePressure(harnessDepth, timeBudget);
+    const budget = budgetForDepthWithTime(
+      harnessDepth,
+      timeBudget?.minutes ?? null,
+    );
     const harnessAddendum = harnessSystemAddendum({
       depth: harnessDepth,
       intent: harnessIntent,
       clarifications: harnessClarifications,
       planSteps: harnessPlanSteps,
     });
-
-    const session = await auth();
-    const userId = session?.user?.id || session?.user?.email || null;
     const projectId =
       typeof body.projectId === "string" ? body.projectId : undefined;
     const conversationId =
@@ -291,11 +317,40 @@ export async function POST(req: Request) {
     const useClientMemory = !userId || !isCloudDbConfigured();
     const memoryForPrompt = memoryBlock || (useClientMemory ? clientMemory : "");
 
+    const hasDriveEarly = userId
+      ? !!(await getValidDriveAccessToken(userId))
+      : false;
+    const hasGitHubEarly = userId
+      ? !!(await getValidGitHubAccessToken(userId))
+      : false;
+    const hasBrowserless = !!(
+      process.env.BROWSERLESS_TOKEN?.trim() ||
+      process.env.BROWSERLESS_URL?.trim()
+    );
+    const skills = resolveSessionSkills({
+      hasDrive: hasDriveEarly,
+      hasGitHub: hasGitHubEarly,
+      hasBrowserless,
+      signedIn: !!userId,
+    });
+    const skillsBlock = sessionSkillsSystemAddendum(skills);
+    const verifyBlock = verifySystemAddendum({
+      depth: harnessDepth,
+      intent: harnessIntent,
+      timeBudget,
+    });
+    const timeBlock = timeBudget
+      ? timeBudgetSystemAddendum(timeBudget)
+      : null;
+
     // Stable prefix first (tools + harness), volatile memory/project last —
     // helps provider prompt caches across steps within a turn.
     const system = [
       toolsEnabled ? TOOLS_SYSTEM_PROMPT : null,
       harnessAddendum,
+      timeBlock,
+      verifyBlock,
+      toolsEnabled ? skillsBlock : null,
       continueSegment ? CONTINUE_SYSTEM_ADDENDUM : null,
       userSystem,
       memoryForPrompt,
@@ -358,23 +413,24 @@ export async function POST(req: Request) {
         void updateAgentRunStatus({
           id: harnessRunId,
           userId,
-          status: harnessDepth === "deep" ? "verifying" : "acting",
-          eventType: "chat_started",
+          status:
+            harnessDepth === "deep" || timeBudget?.forceEarlyDraft
+              ? "verifying"
+              : "acting",
+          eventType: continueSegment ? "chat_continued" : "chat_started",
           eventPayload: {
             depth: harnessDepth,
             intent: harnessIntent,
             maxSteps: budget.maxSteps,
+            timeBudgetMinutes: timeBudget?.minutes ?? null,
+            surface: rawHarness?.surface ?? "chat",
           },
         });
       }
     }
 
-    const hasDrive = userId
-      ? !!(await getValidDriveAccessToken(userId))
-      : false;
-    const hasGitHub = userId
-      ? !!(await getValidGitHubAccessToken(userId))
-      : false;
+    const hasDrive = hasDriveEarly;
+    const hasGitHub = hasGitHubEarly;
 
     const availableToolNames = toolsEnabled
       ? resolveAvailableToolNames({ userId, hasDrive, hasGitHub })
@@ -399,6 +455,7 @@ export async function POST(req: Request) {
           depth: harnessDepth,
           availableToolNames,
           seedUnlocked: seedUnlocked.length ? seedUnlocked : undefined,
+          maxWebSearches: timeBudget?.maxSearches ?? null,
         })
       : null;
 

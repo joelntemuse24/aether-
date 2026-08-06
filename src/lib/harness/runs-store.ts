@@ -111,3 +111,74 @@ export async function getRecentRunsForUser(
     return [];
   }
 }
+
+/** Load a single run for Agent panel / resume (same harness, richer UI later). */
+export async function getAgentRunForUser(
+  userId: string,
+  runId: string,
+): Promise<{
+  id: string;
+  conversationId: string | null;
+  intent: HarnessIntent;
+  depth: HarnessDepth;
+  status: string;
+  plan: unknown;
+  classification: unknown;
+  events: Array<{ type: string; payload: unknown; createdAt: Date }>;
+  updatedAt: Date;
+} | null> {
+  if (!isCloudDbConfigured()) return null;
+  try {
+    const db = await getDb();
+    const rows = await db
+      .select()
+      .from(agentRuns)
+      .where(and(eq(agentRuns.id, runId), eq(agentRuns.userId, userId)))
+      .limit(1);
+    const row = rows[0];
+    if (!row) return null;
+    const events = await db
+      .select({
+        type: agentRunEvents.type,
+        payloadJson: agentRunEvents.payloadJson,
+        createdAt: agentRunEvents.createdAt,
+      })
+      .from(agentRunEvents)
+      .where(eq(agentRunEvents.runId, runId))
+      .orderBy(desc(agentRunEvents.createdAt))
+      .limit(40);
+    return {
+      id: row.id,
+      conversationId: row.conversationId,
+      intent: row.intent as HarnessIntent,
+      depth: row.depth as HarnessDepth,
+      status: row.status,
+      plan: row.planJson,
+      classification: row.classificationJson,
+      events: events.map((e) => ({
+        type: e.type,
+        payload: e.payloadJson,
+        createdAt: e.createdAt,
+      })),
+      updatedAt: row.updatedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Mark a run resumable (blocked_on_user or re-acting after continue). */
+export async function markAgentRunResumable(input: {
+  id: string;
+  userId: string;
+  status?: HarnessRunStatus;
+  note?: string;
+}): Promise<void> {
+  await updateAgentRunStatus({
+    id: input.id,
+    userId: input.userId,
+    status: input.status ?? "acting",
+    eventType: "resume",
+    eventPayload: { note: input.note ?? "Resumed harness run" },
+  });
+}

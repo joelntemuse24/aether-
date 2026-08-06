@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FC } from "react";
+import { useAuiState } from "@assistant-ui/react";
 import {
   AlertTriangleIcon,
   BrainIcon,
@@ -42,10 +43,23 @@ export type ToolPartLike = {
   status?: { type?: string };
 };
 
-function partIsRunning(part: ToolPartLike): boolean {
+/**
+ * Running only while the thread is live. Rehydrated history often has
+ * `status: undefined` without a result — treating that as running made refresh
+ * spin, expand, and thrash the artifact panel.
+ */
+function partIsRunning(part: ToolPartLike, threadIsRunning: boolean): boolean {
   if (part.result !== undefined) return false;
   const t = part.status?.type;
-  return t === "running" || t === "requires-action" || t === undefined;
+  if (t === "complete" || t === "incomplete" || t === "cancelled") return false;
+  if (t === "running" || t === "requires-action") return true;
+  // No explicit status: only animate if the conversation is actively generating.
+  return threadIsRunning;
+}
+
+function usePartRunning(part: ToolPartLike): boolean {
+  const threadIsRunning = useAuiState((s) => s.thread.isRunning);
+  return partIsRunning(part, threadIsRunning);
 }
 
 /**
@@ -102,6 +116,10 @@ const ICONS: Record<string, FC<{ className?: string }>> = {
   [TOOL_NAMES.githubReadFile]: FolderGit2Icon,
   [TOOL_NAMES.fetchUrl]: GlobeIcon,
   [TOOL_NAMES.toolSearch]: WrenchIcon,
+  [TOOL_NAMES.verifyChecklist]: CheckIcon,
+  [TOOL_NAMES.requestConfirmation]: AlertTriangleIcon,
+  [TOOL_NAMES.browserNavigate]: GlobeIcon,
+  [TOOL_NAMES.browserAct]: GlobeIcon,
 };
 
 const ToolShell: FC<{
@@ -144,57 +162,63 @@ const ToolShell: FC<{
   return (
     <div
       className={cn(
-        "my-1.5 overflow-hidden rounded-lg bg-[var(--elevated)] font-[family-name:var(--font-sans)] text-[13px]",
-        "transition-[opacity,transform] duration-200 ease-out",
-        running ? "opacity-100" : "opacity-95",
+        // Thin chip — not a heavy engineering card.
+        "my-0.5 overflow-hidden rounded-md font-[family-name:var(--font-sans)] text-[12px]",
+        "transition-opacity duration-150 ease-out",
+        running
+          ? "bg-[color-mix(in_oklab,var(--elevated)_70%,transparent)]"
+          : "bg-transparent",
       )}
     >
-      <div className="flex items-center gap-2 px-3 py-2">
+      <div className="flex items-center gap-1.5 px-1.5 py-0.5">
         <button
           type="button"
           onClick={() => {
             userToggled.current = true;
             setOpen((v) => !v);
           }}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
           aria-expanded={open}
         >
           <span
             className={cn(
-              "flex size-6 shrink-0 items-center justify-center rounded-md",
+              "flex size-4 shrink-0 items-center justify-center",
               error
-                ? "bg-[var(--error-bg)] text-[var(--error-text)]"
-                : "bg-[var(--elevated)] text-[var(--accent)]",
+                ? "text-[var(--error-text)]"
+                : running
+                  ? "text-[var(--accent)]"
+                  : "text-[var(--muted-soft)]",
             )}
           >
             {running ? (
-              <Loader2Icon className="size-3.5 animate-spin" />
+              <Loader2Icon className="size-3 animate-spin" />
             ) : error ? (
-              <AlertTriangleIcon className="size-3.5" />
+              <AlertTriangleIcon className="size-3" />
             ) : (
-              <Icon className="size-3.5" />
+              <Icon className="size-3 opacity-80" />
             )}
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="font-medium text-[var(--text)]">
+          <span className="min-w-0 flex-1 truncate">
+            <span
+              className={cn(
+                running ? "text-[var(--text-secondary)]" : "text-[var(--muted)]",
+              )}
+            >
               {running ? display.runningLabel : display.label}
             </span>
             {subtitle && (
-              <span className="ml-2 truncate text-[var(--muted)]">
+              <span className="ml-1.5 text-[var(--muted-soft)]">
                 {subtitle}
               </span>
             )}
           </span>
-          {!running &&
-            (error ? (
-              <AlertTriangleIcon className="size-3.5 shrink-0 text-[var(--error-text)]" />
-            ) : (
-              <CheckIcon className="size-3.5 shrink-0 text-emerald-600" />
-            ))}
+          {!running && !error && (
+            <CheckIcon className="size-3 shrink-0 text-[var(--muted-soft)] opacity-60" />
+          )}
           {!!children && (
             <ChevronDownIcon
               className={cn(
-                "size-4 shrink-0 text-[var(--muted)] transition-transform duration-200",
+                "size-3 shrink-0 text-[var(--muted-soft)] transition-transform duration-150",
                 open && "rotate-180",
               )}
             />
@@ -203,7 +227,7 @@ const ToolShell: FC<{
         {headerAction}
       </div>
       {open && children && (
-        <div className="border-t border-[var(--border)] px-3 py-2.5 animate-[fadeIn_150ms_ease-out]">
+        <div className="border-t border-[var(--border-subtle)] px-2 py-1.5">
           {children}
         </div>
       )}
@@ -212,13 +236,13 @@ const ToolShell: FC<{
 };
 
 const CodeSnippet: FC<{ code: string; label?: string }> = ({ code, label }) => (
-  <div className="mt-1">
+  <div className="mt-0.5">
     {label && (
-      <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--muted-soft)]">
+      <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--muted-soft)]">
         {label}
       </div>
     )}
-    <pre className="max-h-64 overflow-auto rounded-lg bg-[var(--code-bg)] p-2.5 font-[family-name:var(--font-mono)] text-[12px] leading-relaxed text-[var(--text)]">
+    <pre className="max-h-40 overflow-auto rounded-md bg-[var(--code-bg)] p-2 font-[family-name:var(--font-mono)] text-[11px] leading-relaxed text-[var(--text)]">
       <code>{code}</code>
     </pre>
   </div>
@@ -227,7 +251,7 @@ const CodeSnippet: FC<{ code: string; label?: string }> = ({ code, label }) => (
 /* ─── Python ─── */
 
 const PythonToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const running = partIsRunning(part);
+  const running = usePartRunning(part);
   const input = part.args as Partial<ExecutePythonInput> | undefined;
   const output = part.result as ExecutePythonOutput | undefined;
   const error = output ? !output.ok : part.isError;
@@ -276,7 +300,7 @@ const PythonToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 /* ─── Web search ─── */
 
 const WebSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const running = partIsRunning(part);
+  const running = usePartRunning(part);
   const input = part.args as { query?: string } | undefined;
   const output = part.result as WebSearchOutput | undefined;
   const error = output ? !output.ok : part.isError;
@@ -367,7 +391,7 @@ function toArtifact(id: string, input: CreateArtifactInput): Artifact {
 const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const { openArtifact, refreshSaved, artifact: openPanelArtifact, open } =
     useArtifact();
-  const running = partIsRunning(part);
+  const running = usePartRunning(part);
   const input = part.args as Partial<CreateArtifactInput> | undefined;
   const result = part.result as CreateArtifactOutput | undefined;
   const complete =
@@ -405,19 +429,24 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       : null;
   const artifact = completeArtifact ?? draft;
 
-  // Open early while writing; keep the panel in sync if the user left it open.
+  // Open early while *this session* is writing. Never auto-open on rehydrate —
+  // historical completed tools used to pop the inspector on every refresh.
   useEffect(() => {
     if (!artifact) return;
 
     if (complete) {
-      if (!openedRef.current || (open && openPanelArtifact?.id === artifact.id)) {
-        openedRef.current = true;
+      // Final sync only if we already opened during streaming, or panel is this id.
+      if (
+        openedRef.current &&
+        open &&
+        openPanelArtifact?.id === artifact.id
+      ) {
         openArtifact({
           ...artifact,
           persisted: !!result?.persisted,
         });
       }
-      if (result?.persisted) void refreshSaved();
+      if (openedRef.current && result?.persisted) void refreshSaved();
       lastSyncedLen.current = artifact.code.length;
       return;
     }
@@ -457,8 +486,9 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       : undefined;
 
   const hasConstructingBody =
-    (streamingContent !== undefined && streamingContent.length > 0) ||
-    (!!running && !!part.argsText);
+    running &&
+    ((streamingContent !== undefined && streamingContent.length > 0) ||
+      !!part.argsText);
 
   return (
     <ToolShell
@@ -483,16 +513,16 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
           <button
             type="button"
             onClick={() => openArtifact(artifact)}
-            className="flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--elevated)] px-2 py-1 text-[12px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--hover-overlay)]"
+            className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
           >
-            <PanelRightOpenIcon className="size-3.5" />
+            <PanelRightOpenIcon className="size-3" />
             Open
           </button>
         ) : undefined
       }
     >
       {(kindHint || streamingLanguage || running) && (
-        <div className="text-[12px] text-[var(--muted)]">
+        <div className="text-[11px] text-[var(--muted)]">
           {kindHint ? `${kindHint} artifact` : "artifact"}
           {streamingLanguage ? ` · ${streamingLanguage}` : ""}
           {running && streamingContent !== undefined
@@ -536,7 +566,7 @@ type MemoryRow = {
 };
 
 const MemorySearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const running = partIsRunning(part);
+  const running = usePartRunning(part);
   const input = part.args as { query?: string } | undefined;
   const output = part.result as {
     ok?: boolean;
@@ -585,7 +615,7 @@ const MemorySearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 };
 
 const MemoryWriteToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const running = partIsRunning(part);
+  const running = usePartRunning(part);
   const input = part.args as {
     title?: string;
     type?: string;
@@ -638,7 +668,7 @@ type DriveFileRow = {
 };
 
 const DriveSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const running = partIsRunning(part);
+  const running = usePartRunning(part);
   const input = part.args as { query?: string } | undefined;
   const output = part.result as {
     ok?: boolean;
@@ -686,7 +716,7 @@ const DriveSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 };
 
 const DriveReadToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const running = partIsRunning(part);
+  const running = usePartRunning(part);
   const input = part.args as { fileId?: string } | undefined;
   const output = part.result as {
     ok?: boolean;
@@ -727,7 +757,7 @@ const DriveReadToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 /* ─── GitHub ─── */
 
 const GitHubGetRepoToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const running = partIsRunning(part);
+  const running = usePartRunning(part);
   const input = part.args as { repo?: string } | undefined;
   const output = part.result as {
     ok?: boolean;
@@ -788,7 +818,7 @@ const GitHubGetRepoToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 };
 
 const GitHubListContentsToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const running = partIsRunning(part);
+  const running = usePartRunning(part);
   const input = part.args as { repo?: string; path?: string } | undefined;
   const output = part.result as {
     ok?: boolean;
@@ -837,7 +867,7 @@ const GitHubListContentsToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 };
 
 const GitHubReadFileToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const running = partIsRunning(part);
+  const running = usePartRunning(part);
   const input = part.args as { repo?: string; path?: string } | undefined;
   const output = part.result as {
     ok?: boolean;
@@ -894,7 +924,7 @@ const GitHubReadFileToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 };
 
 const FetchUrlToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const running = partIsRunning(part);
+  const running = usePartRunning(part);
   const input = part.args as { url?: string } | undefined;
   const output = part.result as {
     ok?: boolean;
@@ -943,7 +973,7 @@ const FetchUrlToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 /* ─── Tool search (deferred discovery) ─── */
 
 const ToolSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const running = partIsRunning(part);
+  const running = usePartRunning(part);
   const input = part.args as { query?: string } | undefined;
   const output = part.result as {
     ok?: boolean;
@@ -986,10 +1016,330 @@ const ToolSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   );
 };
 
+/* ─── Verify ─── */
+
+const VerifyChecklistToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = usePartRunning(part);
+  const input = part.args as {
+    summary?: string;
+    checks?: Array<{ item?: string; ok?: boolean; note?: string }>;
+    ready_for_user?: boolean;
+  } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    verified?: boolean;
+    failed?: string[];
+    instruction?: string;
+  } | undefined;
+  const checks = input?.checks ?? [];
+  const error = part.isError || (output ? output.ok === false : false);
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.verifyChecklist}
+      running={running}
+      error={error}
+      subtitle={
+        output?.verified
+          ? "Passed"
+          : output
+            ? "Needs attention"
+            : input?.summary?.slice(0, 48)
+      }
+      expandWhileRunning={running && checks.length > 0}
+    >
+      {input?.summary && (
+        <p className="text-[11px] text-[var(--muted)]">{input.summary}</p>
+      )}
+      {checks.length > 0 && (
+        <ul className="mt-1 space-y-0.5">
+          {checks.map((c, i) => (
+            <li key={i} className="text-[11px] text-[var(--text-secondary)]">
+              {c.ok ? "✓" : "·"} {c.item}
+              {c.note ? ` — ${c.note}` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+      {output?.instruction && (
+        <p className="mt-1 text-[11px] text-[var(--muted-soft)]">
+          {output.instruction}
+        </p>
+      )}
+    </ToolShell>
+  );
+};
+
+/* ─── Confirmation (side effects) ─── */
+
+const ConfirmationToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = usePartRunning(part);
+  const [busy, setBusy] = useState(false);
+  const [resolved, setResolved] = useState<"approved" | "declined" | null>(
+    null,
+  );
+  const input = part.args as {
+    title?: string;
+    preview?: string;
+    target?: string;
+    action?: string;
+  } | undefined;
+  const output = part.result as {
+    needs_confirmation?: boolean;
+    confirmation_id?: string;
+    title?: string;
+    preview?: string;
+    instruction?: string;
+    ok?: boolean;
+  } | undefined;
+
+  const title = output?.title || input?.title || "Needs approval";
+  const preview = output?.preview || input?.preview;
+  const confirmationId = output?.confirmation_id;
+  const pending =
+    !resolved &&
+    !!output?.needs_confirmation &&
+    !!confirmationId &&
+    !running;
+
+  const resolve = async (approved: boolean) => {
+    if (!confirmationId || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/harness/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmationId, approved }),
+      });
+      if (!res.ok) {
+        window.dispatchEvent(
+          new CustomEvent("aether:notice", {
+            detail: "Could not record approval. Try again.",
+          }),
+        );
+        return;
+      }
+      setResolved(approved ? "approved" : "declined");
+      window.dispatchEvent(
+        new CustomEvent("aether:notice", {
+          detail: approved
+            ? "Approved — tell Aether to continue."
+            : "Declined — Aether will not take that action.",
+        }),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.requestConfirmation}
+      running={running}
+      subtitle={
+        resolved === "approved"
+          ? "Approved"
+          : resolved === "declined"
+            ? "Declined"
+            : title
+      }
+      expandWhileRunning={pending || running}
+    >
+      {preview && (
+        <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--muted)]">
+          {preview}
+        </p>
+      )}
+      {input?.target && (
+        <p className="mt-1 truncate text-[10px] text-[var(--muted-soft)]">
+          {input.target}
+        </p>
+      )}
+      {pending && (
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void resolve(true)}
+            className="rounded-md bg-[var(--accent)] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[var(--accent-hover)] disabled:opacity-50"
+          >
+            Approve
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void resolve(false)}
+            className="rounded-md px-2.5 py-1 text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)] disabled:opacity-50"
+          >
+            Decline
+          </button>
+        </div>
+      )}
+      {resolved && (
+        <p className="mt-1 text-[11px] text-[var(--muted-soft)]">
+          {resolved === "approved"
+            ? "You approved. Ask Aether to continue."
+            : "You declined this action."}
+        </p>
+      )}
+    </ToolShell>
+  );
+};
+
+/* ─── Browser ─── */
+
+const BrowserNavigateToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = usePartRunning(part);
+  const input = part.args as { url?: string } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    error?: string;
+    title?: string;
+    url?: string;
+    text?: string;
+    warning?: string;
+    mode?: string;
+  } | undefined;
+  const error = part.isError || (output ? output.ok === false : false);
+  const href = output?.url || input?.url;
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.browserNavigate}
+      running={running}
+      error={error}
+      subtitle={output?.title || href}
+      expandWhileRunning={running && !!(output?.text || part.argsText)}
+    >
+      {href && (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="mb-1 inline-flex items-center gap-1 text-[11px] text-[var(--accent)] hover:underline"
+        >
+          {href}
+          <ExternalLinkIcon className="size-3" />
+        </a>
+      )}
+      {output?.error && (
+        <p className="text-[11px] text-[var(--error-text)]">{output.error}</p>
+      )}
+      {output?.warning && (
+        <p className="text-[11px] text-[var(--muted)]">{output.warning}</p>
+      )}
+      {output?.text && (
+        <p className="max-h-36 overflow-auto whitespace-pre-wrap text-[11px] text-[var(--muted)]">
+          {output.text.length > 2000
+            ? `${output.text.slice(0, 2000)}…`
+            : output.text}
+        </p>
+      )}
+    </ToolShell>
+  );
+};
+
+const BrowserActToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = usePartRunning(part);
+  const [busy, setBusy] = useState(false);
+  const [resolved, setResolved] = useState<"approved" | "declined" | null>(
+    null,
+  );
+  const input = part.args as {
+    action?: string;
+    url?: string;
+    description?: string;
+  } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    error?: string;
+    needs_confirmation?: boolean;
+    confirmation_id?: string;
+    title?: string;
+    preview?: string;
+    text?: string;
+    note?: string;
+  } | undefined;
+  const error = part.isError || (output ? output.ok === false : false);
+  const confirmationId = output?.confirmation_id;
+  const pending =
+    !resolved && !!output?.needs_confirmation && !!confirmationId && !running;
+
+  const resolve = async (approved: boolean) => {
+    if (!confirmationId || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/harness/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmationId, approved }),
+      });
+      if (res.ok) setResolved(approved ? "approved" : "declined");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.browserAct}
+      running={running}
+      error={error}
+      subtitle={
+        resolved
+          ? resolved
+          : output?.needs_confirmation
+            ? "Needs approval"
+            : input?.action || input?.description
+      }
+      expandWhileRunning={pending || running}
+    >
+      {(output?.preview || input?.description) && (
+        <p className="whitespace-pre-wrap text-[11px] text-[var(--muted)]">
+          {output?.preview || input?.description}
+        </p>
+      )}
+      {output?.error && (
+        <p className="text-[11px] text-[var(--error-text)]">{output.error}</p>
+      )}
+      {output?.text && (
+        <p className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap text-[11px] text-[var(--muted)]">
+          {output.text.length > 1500
+            ? `${output.text.slice(0, 1500)}…`
+            : output.text}
+        </p>
+      )}
+      {output?.note && (
+        <p className="mt-1 text-[11px] text-[var(--muted-soft)]">{output.note}</p>
+      )}
+      {pending && (
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void resolve(true)}
+            className="rounded-md bg-[var(--accent)] px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-50"
+          >
+            Approve
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void resolve(false)}
+            className="rounded-md px-2.5 py-1 text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)]"
+          >
+            Decline
+          </button>
+        </div>
+      )}
+    </ToolShell>
+  );
+};
+
 /* ─── Generic fallback ─── */
 
 const GenericToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
-  const running = partIsRunning(part);
+  const running = usePartRunning(part);
   return (
     <ToolShell
       name={part.toolName}
@@ -1038,6 +1388,14 @@ export const ToolCallPart: FC<{ part: ToolPartLike }> = ({ part }) => {
       return <FetchUrlToolCall part={part} />;
     case TOOL_NAMES.toolSearch:
       return <ToolSearchToolCall part={part} />;
+    case TOOL_NAMES.verifyChecklist:
+      return <VerifyChecklistToolCall part={part} />;
+    case TOOL_NAMES.requestConfirmation:
+      return <ConfirmationToolCall part={part} />;
+    case TOOL_NAMES.browserNavigate:
+      return <BrowserNavigateToolCall part={part} />;
+    case TOOL_NAMES.browserAct:
+      return <BrowserActToolCall part={part} />;
     default:
       return <GenericToolCall part={part} />;
   }

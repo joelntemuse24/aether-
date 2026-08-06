@@ -16,6 +16,10 @@ export const CORE_TOOL_ORDER = [
   TOOL_NAMES.webSearch,
   TOOL_NAMES.fetchUrl,
   TOOL_NAMES.createArtifact,
+  TOOL_NAMES.verifyChecklist,
+  TOOL_NAMES.requestConfirmation,
+  TOOL_NAMES.browserNavigate,
+  TOOL_NAMES.browserAct,
   TOOL_NAMES.toolSearch,
 ] as const;
 
@@ -225,6 +229,16 @@ export function webSearchBudgetForDepth(depth: HarnessDepth): number {
   if (depth === "shallow") return 1;
   if (depth === "deep") return 3;
   return 2;
+}
+
+/** Optional tighter cap from time pressure ("5 minutes"). */
+export function webSearchBudgetWithTimeCap(
+  depth: HarnessDepth,
+  timeMaxSearches?: number | null,
+): number {
+  const base = webSearchBudgetForDepth(depth);
+  if (timeMaxSearches == null || timeMaxSearches <= 0) return base;
+  return Math.max(1, Math.min(base, timeMaxSearches));
 }
 
 export function normalizeSearchQuery(query: string): string {
@@ -496,6 +510,8 @@ export function createAgentLoopController(input: {
    * pasted a github.com link — skip tool_search discovery).
    */
   seedUnlocked?: readonly string[];
+  /** Optional tighter web_search cap from time-pressure budget. */
+  maxWebSearches?: number | null;
 }): AgentLoopController {
   const available = [...input.availableToolNames];
   const availableSet = new Set(available);
@@ -509,7 +525,10 @@ export function createAgentLoopController(input: {
     if (deferredSet.has(name)) unlocked.add(name);
   }
   const priorQueries: string[] = [];
-  const webSearchBudget = webSearchBudgetForDepth(input.depth);
+  const webSearchBudget = webSearchBudgetWithTimeCap(
+    input.depth,
+    input.maxWebSearches,
+  );
 
   const toolOrder = [...CORE_TOOL_ORDER, ...DEFERRED_TOOL_ORDER].filter((n) => {
     if (n === TOOL_NAMES.toolSearch) return hasDeferred;
