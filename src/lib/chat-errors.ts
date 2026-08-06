@@ -1,4 +1,8 @@
-import { isAbortError, isServerTimeoutError } from "@/lib/chat-continue";
+import {
+  isAbortError,
+  isLikelyStreamCutOffError,
+  isServerTimeoutError,
+} from "@/lib/chat-continue";
 
 /** User-facing chat error copy (safe for client + server). */
 
@@ -7,8 +11,8 @@ export function friendlyChatError(error: unknown): string {
     return "";
   }
   const raw = error instanceof Error ? error.message : String(error ?? "");
-  if (isServerTimeoutError(error)) {
-    return "This reply hit the server time limit. Continuing automatically from where it left off…";
+  if (isServerTimeoutError(error) || isLikelyStreamCutOffError(error)) {
+    return "This reply was cut off (time limit or connection). Tap Continue to pick up where it left off.";
   }
   if (/saturat|overloaded|All providers are saturated|429|rate limit/i.test(raw)) {
     return "That model route is busy. We try backups automatically — click Retry, or pick another model.";

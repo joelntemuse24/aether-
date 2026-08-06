@@ -3,8 +3,11 @@ import type { UIMessage } from "ai";
 /** Cap auto-continues so a stuck loop can't burn unbounded segments. */
 export const MAX_AUTO_CONTINUES = 5;
 
-/** Ignore short disconnects (flaky network); long runs are likely platform kills. */
-export const MIN_DISCONNECT_RUN_MS = 45_000;
+/**
+ * Ignore very short disconnects (flaky network). Platform kills are usually
+ * much longer — but Vercel/hobby/proxy cuts can land earlier than 45s.
+ */
+export const MIN_DISCONNECT_RUN_MS = 20_000;
 
 /**
  * User-visible continue turn. Kept explicit so the model (and history) know
@@ -30,14 +33,49 @@ export function isAbortError(error: unknown): boolean {
   }
   if (error instanceof Error && error.name === "AbortError") return true;
   const raw = error instanceof Error ? error.message : String(error);
-  return /^(AbortError|The operation was aborted|aborted)$/i.test(raw.trim());
+  // Exact-ish abort messages only — don't treat "aborted by server timeout" as user stop.
+  return /^(AbortError|The operation was aborted\.?|aborted|signal is aborted without reason)$/i.test(
+    raw.trim(),
+  );
+}
+
+function errorText(error: unknown): string {
+  if (!error) return "";
+  if (error instanceof Error) {
+    return `${error.name} ${error.message} ${error.cause ?? ""}`;
+  }
+  if (typeof error === "object") {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
 }
 
 /** True when the platform (e.g. Vercel maxDuration) likely killed the run. */
 export function isServerTimeoutError(error: unknown): boolean {
   if (isAbortError(error)) return false;
-  const raw = error instanceof Error ? error.message : String(error ?? "");
-  return /timed out after|Task timed out|Runtime Timeout|FUNCTION_INVOCATION_TIMEOUT|deadline exceeded|WS_TIMEOUT|function.*timeout|timeout of \d+ms exceeded|server time limit/i.test(
+  const raw = errorText(error);
+  return /timed out after|Task timed out|Runtime Timeout|FUNCTION_INVOCATION_TIMEOUT|deadline exceeded|WS_TIMEOUT|function.*timeout|timeout of \d+ms exceeded|server time limit|Gateway Timeout|504|524|ERR_SOCKET_TIMEOUT|network.?timeout|body.?timeout|stream.?timeout/i.test(
+    raw,
+  );
+}
+
+/**
+ * Stream died mid-turn without a clean user stop — proxy kill, network drop,
+ * empty provider error, etc. Broader than pure "timeout" strings.
+ */
+export function isLikelyStreamCutOffError(error: unknown): boolean {
+  if (error == null || error === false) return false;
+  if (isAbortError(error)) return false;
+  if (isServerTimeoutError(error)) return true;
+  const raw = errorText(error);
+  // Present error with no useful message (common after stream drops).
+  if (error instanceof Error && !error.message.trim()) return true;
+  if (typeof error === "string" && !error.trim()) return true;
+  return /Failed to fetch|NetworkError|network error|Load failed|ECONNRESET|ECONNREFUSED|socket hang up|other side closed|connection (?:closed|reset|lost)|ERR_CONNECTION|BodyStreamBuffer|Unexpected end of JSON|undici|fetch failed|stream (?:ended|closed|aborted)|incomplete response|HTTP 50[234]|502|503|504|524/i.test(
     raw,
   );
 }
@@ -45,24 +83,70 @@ export function isServerTimeoutError(error: unknown): boolean {
 /** True when copy or status suggests the user should hit Continue. */
 export function looksLikeTimeoutCopy(text: string | undefined | null): boolean {
   if (!text) return false;
-  return /time limit|timed out|timeout|cut off|interrupted by a platform/i.test(
+  return /time limit|timed out|timeout|cut off|interrupted by a platform|server (?:time )?limit|paused|continue from/i.test(
     text,
   );
 }
 
+function partHasContinuableWork(part: {
+  type?: string;
+  text?: string;
+  toolName?: string;
+  state?: string;
+}): boolean {
+  if (!part || typeof part.type !== "string") return false;
+  if (part.type === "text") {
+    return typeof part.text === "string" && part.text.trim().length > 0;
+  }
+  // AI SDK UI: `tool-call`, `tool-<name>`, dynamic tools
+  if (part.type === "tool-call" || part.type === "dynamic-tool") return true;
+  if (part.type.startsWith("tool-")) return true;
+  // Reasoning / step markers still mean partial work exists
+  if (part.type === "reasoning" || part.type === "step-start") return true;
+  return false;
+}
+
 export function hasContinuableAssistant(messages: UIMessage[]): boolean {
-  const last = messages[messages.length - 1];
-  if (!last || last.role !== "assistant") return false;
-  const parts = Array.isArray(last.parts) ? last.parts : [];
-  return parts.some((part) => {
-    if (part.type === "text") {
-      return typeof part.text === "string" && part.text.trim().length > 0;
-    }
-    if (typeof part.type === "string" && part.type.startsWith("tool-")) {
+  // Prefer last assistant; also scan back a few messages if stream ordered oddly.
+  for (let i = messages.length - 1; i >= 0 && i >= messages.length - 4; i--) {
+    const msg = messages[i];
+    if (!msg || msg.role !== "assistant") continue;
+    const parts = Array.isArray(msg.parts) ? msg.parts : [];
+    if (parts.some((p) => partHasContinuableWork(p as { type?: string }))) {
       return true;
     }
-    return false;
-  });
+    // Some stores keep text on the message itself
+    const anyMsg = msg as { content?: string };
+    if (typeof anyMsg.content === "string" && anyMsg.content.trim()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether the UI should show Continue (even if we don't auto-fire).
+ * Broader than shouldAutoContinue — invite resume when the turn looks cut off.
+ * Does NOT use duration alone (that false-triggers on successful long replies).
+ */
+export function shouldOfferContinue(input: {
+  isAbort: boolean;
+  isDisconnect: boolean;
+  isError: boolean;
+  error?: unknown;
+  messages: UIMessage[];
+  runDurationMs: number;
+}): boolean {
+  if (input.isAbort) return false;
+  if (!hasContinuableAssistant(input.messages)) return false;
+
+  if (isServerTimeoutError(input.error) || isLikelyStreamCutOffError(input.error)) {
+    return true;
+  }
+  // Any error / disconnect with partial work → offer Continue.
+  if (input.isDisconnect || input.isError) return true;
+
+  return false;
 }
 
 export function shouldAutoContinue(input: {
@@ -79,8 +163,9 @@ export function shouldAutoContinue(input: {
   if (!hasContinuableAssistant(input.messages)) return false;
 
   if (isServerTimeoutError(input.error)) return true;
+  if (isLikelyStreamCutOffError(input.error) && input.isError) return true;
 
-  // Abrupt stream drop after a long run ≈ serverless wall clock.
+  // Abrupt stream drop after a meaningful run ≈ serverless / proxy wall clock.
   if (
     (input.isDisconnect || input.isError) &&
     input.runDurationMs >= MIN_DISCONNECT_RUN_MS

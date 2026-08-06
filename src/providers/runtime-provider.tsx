@@ -34,9 +34,12 @@ import { localMemoryContextForChat } from "@/lib/memory/local";
 import {
   CONTINUE_USER_TEXT,
   MAX_AUTO_CONTINUES,
+  MIN_DISCONNECT_RUN_MS,
   hasContinuableAssistant,
+  isLikelyStreamCutOffError,
   isServerTimeoutError,
   shouldAutoContinue,
+  shouldOfferContinue,
 } from "@/lib/chat-continue";
 import type { HarnessChatContext } from "@/lib/harness/types";
 
@@ -183,56 +186,76 @@ function useChatThreadRuntime() {
     [],
   );
 
-  const scheduleAutoContinue = useCallback((reason: string) => {
-    if (continueScheduledRef.current) return false;
-    if (continueCountRef.current >= MAX_AUTO_CONTINUES) return false;
+  const offerNeedsContinue = useCallback(
+    (reason: string) => {
+      emitContinueStatus({
+        phase: "needs-continue",
+        reason,
+        segment: continueCountRef.current,
+        max: MAX_AUTO_CONTINUES,
+      });
+    },
+    [emitContinueStatus],
+  );
 
-    continueScheduledRef.current = true;
-    continueCountRef.current += 1;
-    const segment = continueCountRef.current;
+  const scheduleAutoContinue = useCallback(
+    (reason: string) => {
+      if (continueScheduledRef.current) return false;
+      if (continueCountRef.current >= MAX_AUTO_CONTINUES) {
+        // Budget spent — still show Continue so the user can resume manually.
+        offerNeedsContinue("max-auto");
+        return false;
+      }
 
-    // Quiet status lives in AgentStatusStrip ("Continuing… n/max") — no toast pile.
-    emitContinueStatus({
-      phase: "continuing",
-      segment,
-      max: MAX_AUTO_CONTINUES,
-    });
-    console.info("[chat] auto-continue scheduled", { reason, segment });
+      continueScheduledRef.current = true;
+      continueCountRef.current += 1;
+      const segment = continueCountRef.current;
 
-    window.setTimeout(() => {
-      const api = chatApiRef.current;
-      if (!api) {
-        continueScheduledRef.current = false;
-        emitContinueStatus({ phase: "idle" });
-        return;
-      }
-      continueSegmentRef.current = true;
-      if (lastHarnessRef.current) {
-        armHarnessRef.current(lastHarnessRef.current);
-      }
-      try {
-        api.clearError?.();
-      } catch {
-        // ignore
-      }
-      void api
-        .sendMessage({ text: CONTINUE_USER_TEXT })
-        .catch((err) => {
-          console.error("[chat] auto-continue failed", err);
-          continueSegmentRef.current = false;
+      // Quiet status lives in AgentStatusStrip ("Continuing… n/max").
+      emitContinueStatus({
+        phase: "continuing",
+        segment,
+        max: MAX_AUTO_CONTINUES,
+      });
+      console.info("[chat] auto-continue scheduled", { reason, segment });
+
+      window.setTimeout(() => {
+        const api = chatApiRef.current;
+        if (!api) {
           continueScheduledRef.current = false;
-          emitContinueStatus({ phase: "idle" });
-          window.dispatchEvent(
-            new CustomEvent("aether:notice", {
-              detail:
-                "Could not auto-continue. Click Continue on the message to resume.",
-            }),
-          );
-        });
-    }, 280);
+          offerNeedsContinue("no-api");
+          return;
+        }
+        continueSegmentRef.current = true;
+        if (lastHarnessRef.current) {
+          armHarnessRef.current(lastHarnessRef.current);
+        }
+        try {
+          api.clearError?.();
+        } catch {
+          // ignore
+        }
+        void api
+          .sendMessage({ text: CONTINUE_USER_TEXT })
+          .catch((err) => {
+            console.error("[chat] auto-continue failed", err);
+            continueSegmentRef.current = false;
+            continueScheduledRef.current = false;
+            // Never leave the user with silent idle after a cut-off.
+            offerNeedsContinue("auto-failed");
+            window.dispatchEvent(
+              new CustomEvent("aether:notice", {
+                detail:
+                  "Couldn’t auto-continue. Tap Continue under the reply to resume.",
+              }),
+            );
+          });
+      }, 280);
 
-    return true;
-  }, [emitContinueStatus]);
+      return true;
+    },
+    [emitContinueStatus, offerNeedsContinue],
+  );
 
   const chat = useChat({
     messages: seedMessages,
@@ -276,29 +299,39 @@ function useChatThreadRuntime() {
           scheduleAutoContinue("onError"));
       if (continuing) return;
 
-      const timeoutish = shouldAutoContinue({
+      const offer = shouldOfferContinue({
         isAbort: false,
         isDisconnect: false,
         isError: true,
         error,
         messages: messagesRef.current,
         runDurationMs,
-        // Probe as if we still had budget — surfaces the Continue CTA.
-        continueCount: 0,
       });
-      emitContinueStatus(
-        timeoutish || isServerTimeoutError(error)
-          ? {
-              phase: "needs-continue",
-              reason: "timeout",
-              segment: continueCountRef.current,
-              max: MAX_AUTO_CONTINUES,
-            }
-          : { phase: "idle" },
-      );
+      const cutOff =
+        offer ||
+        isServerTimeoutError(error) ||
+        isLikelyStreamCutOffError(error) ||
+        hasContinuableAssistant(messagesRef.current);
+
+      if (cutOff && hasContinuableAssistant(messagesRef.current)) {
+        offerNeedsContinue(
+          isServerTimeoutError(error) ? "timeout" : "error-cutoff",
+        );
+      } else {
+        emitContinueStatus({ phase: "idle" });
+      }
       clearChatContext();
-      // Timeouts surface Continue in-thread — skip toast pile for those.
-      if (timeoutish || isServerTimeoutError(error)) return;
+
+      // Always surface a calm notice on cut-offs so Continue isn't easy to miss.
+      if (cutOff && hasContinuableAssistant(messagesRef.current)) {
+        window.dispatchEvent(
+          new CustomEvent("aether:notice", {
+            detail:
+              "Reply paused before it finished. Tap Continue to keep going from here.",
+          }),
+        );
+        return;
+      }
       void import("@/lib/chat-errors").then(({ friendlyChatError }) => {
         const detail = friendlyChatError(error);
         if (!detail) return;
@@ -339,16 +372,26 @@ function useChatThreadRuntime() {
           ));
       if (continuing) return;
 
-      // Only offer Continue when the run actually failed/cut off — not after
-      // a successful long reply (runDuration alone is not a signal).
-      const offerContinue =
+      const offerContinue = shouldOfferContinue({
+        isAbort,
+        isDisconnect,
+        isError,
+        error: errorRef.current,
+        messages: messagesRef.current,
+        runDurationMs,
+      });
+      // Long disconnect without explicit error flag still often = platform kill.
+      const longSilentDrop =
         !isAbort &&
+        !isError &&
+        isDisconnect &&
         hasContinuableAssistant(messagesRef.current) &&
-        (isDisconnect ||
-          isError ||
-          isServerTimeoutError(errorRef.current));
+        runDurationMs >= MIN_DISCONNECT_RUN_MS;
+
+      const showContinue = offerContinue || longSilentDrop;
+
       emitContinueStatus(
-        offerContinue
+        showContinue
           ? {
               phase: "needs-continue",
               reason: isDisconnect ? "disconnect" : "timeout",
@@ -357,6 +400,15 @@ function useChatThreadRuntime() {
             }
           : { phase: "idle" },
       );
+
+      if (showContinue) {
+        window.dispatchEvent(
+          new CustomEvent("aether:notice", {
+            detail:
+              "Reply paused before it finished. Tap Continue to keep going from here.",
+          }),
+        );
+      }
 
       if (!isAbort && !isDisconnect && !isError) {
         continueCountRef.current = 0;

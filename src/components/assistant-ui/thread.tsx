@@ -297,6 +297,7 @@ function AttachmentChips() {
 
 function isContinuableStatus(type: string | undefined, reason?: string) {
   if (type === "incomplete") {
+    // length / other incomplete reasons are still resumable.
     return reason !== "content-filter";
   }
   return false;
@@ -315,9 +316,10 @@ const ContinuePausedBar: FC = () => {
     const status = last.status as
       | { type?: string; reason?: string; error?: unknown }
       | undefined;
+    // Any incomplete assistant turn (except content filter) invites Continue.
     if (isContinuableStatus(status?.type, status?.reason)) return true;
     if (status?.type === "incomplete" && status.reason === "error") {
-      return looksLikeTimeoutCopy(String(status.error ?? ""));
+      return true; // always offer Continue on incomplete errors — not only timeout copy
     }
     return false;
   });
@@ -337,10 +339,15 @@ const ContinuePausedBar: FC = () => {
     return () => window.removeEventListener("aether:continue-status", onStatus);
   }, []);
 
-  // Fresh successful runs clear the bar; starting a run also hides it.
+  // Starting a run hides the bar; do not clear needs-continue on brief isRunning
+  // flicker unless we actually transition into a live generation after continue.
   useEffect(() => {
-    if (isRunning) setPhase("idle");
-  }, [isRunning]);
+    if (isRunning && phase === "needs-continue") {
+      // Keep needs-continue until continuing is emitted or run ends successfully.
+      return;
+    }
+    if (isRunning) setPhase((p) => (p === "continuing" ? p : "idle"));
+  }, [isRunning, phase]);
 
   const show =
     !isRunning &&
@@ -349,8 +356,6 @@ const ContinuePausedBar: FC = () => {
 
   if (!show) return null;
 
-  const timedOut = phase === "needs-continue" || pausedFromMessage;
-
   return (
     <div
       className="mb-1.5 flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--elevated)] px-3 py-2.5 animate-[fadeIn_160ms_ease-out]"
@@ -358,12 +363,13 @@ const ContinuePausedBar: FC = () => {
     >
       <div className="min-w-0">
         <div className="text-[13px] font-medium text-[var(--text)]">
-          {timedOut ? "Reply paused" : "Response paused"}
+          Reply paused
         </div>
         <div className="text-[12px] leading-snug text-[var(--muted)]">
-          {timedOut
-            ? "Continue keeps partial work. Retry starts this turn over."
-            : "The model stopped mid-thought. Continue to keep going."}
+          Hit a time limit or disconnect before finishing.{" "}
+          <span className="text-[var(--text-secondary)]">
+            Continue keeps partial work.
+          </span>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
@@ -998,26 +1004,39 @@ const MessageError: FC = () => {
     if (status?.type !== "incomplete" || status.reason !== "error") return "";
     return String(status.error ?? "");
   });
-  const isTimeout = looksLikeTimeoutCopy(errorText);
+  // Treat most incomplete errors as resumable — timeouts, disconnects, opaque
+  // stream failures. Hard content-filter cases rarely use reason=error.
+  const isResumable =
+    !errorText ||
+    looksLikeTimeoutCopy(errorText) ||
+    /fail|network|fetch|timeout|limit|disconnect|closed|abort|stream/i.test(
+      errorText,
+    );
 
   return (
     <MessagePrimitive.Error>
       <ErrorPrimitive.Root
         className={cn(
           "mt-2 rounded-xl border p-3 text-sm",
-          isTimeout
+          isResumable
             ? "border-[var(--border)] bg-[var(--elevated)] text-[var(--text-secondary)]"
             : "border-[var(--error-border)] bg-[var(--error-bg)] text-[var(--error-text)]",
         )}
       >
-        {isTimeout ? (
+        {isResumable ? (
           <>
             <p className="text-[13px] font-medium text-[var(--text)]">
-              This reply hit a time limit
+              Reply paused before it finished
             </p>
             <p className="mt-1 text-[12px] leading-snug text-[var(--muted)]">
-              Partial work is kept. Continue to resume, or Retry to regenerate.
+              Partial work is kept. Continue picks up from here — Retry starts
+              the last turn over.
             </p>
+            {errorText && !looksLikeTimeoutCopy(errorText) ? (
+              <p className="mt-1 text-[11px] text-[var(--muted-soft)]">
+                {errorText.slice(0, 180)}
+              </p>
+            ) : null}
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <Button
                 type="button"
@@ -1113,8 +1132,10 @@ const AssistantActionBar: FC = () => {
       | { type?: string; reason?: string; error?: unknown }
       | undefined;
     if (isContinuableStatus(status?.type, status?.reason)) return true;
+    // Any incomplete error on the last assistant message → Continue, not only
+    // when the error string mentions "timeout".
     if (status?.type === "incomplete" && status.reason === "error") {
-      return looksLikeTimeoutCopy(String(status.error ?? ""));
+      return true;
     }
     return false;
   });

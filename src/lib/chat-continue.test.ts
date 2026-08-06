@@ -4,10 +4,13 @@ import type { UIMessage } from "ai";
 import {
   hasContinuableAssistant,
   isAbortError,
+  isLikelyStreamCutOffError,
   isServerTimeoutError,
   looksLikeTimeoutCopy,
   shouldAutoContinue,
+  shouldOfferContinue,
   MAX_AUTO_CONTINUES,
+  MIN_DISCONNECT_RUN_MS,
 } from "./chat-continue";
 
 function assistant(text: string): UIMessage {
@@ -15,6 +18,14 @@ function assistant(text: string): UIMessage {
     id: "a1",
     role: "assistant",
     parts: [{ type: "text", text }],
+  };
+}
+
+function assistantToolCall(): UIMessage {
+  return {
+    id: "a2",
+    role: "assistant",
+    parts: [{ type: "tool-call", toolCallId: "t1", toolName: "web_search" } as never],
   };
 }
 
@@ -30,6 +41,15 @@ describe("chat-continue", () => {
     assert.equal(isServerTimeoutError(abort), false);
   });
 
+  it("detects network / opaque cut-offs", () => {
+    assert.equal(isLikelyStreamCutOffError(new Error("Failed to fetch")), true);
+    assert.equal(isLikelyStreamCutOffError(new Error("")), true);
+    assert.equal(isLikelyStreamCutOffError(new Error("504 Gateway Timeout")), true);
+    assert.equal(isLikelyStreamCutOffError(new Error("rate limited 429")), false);
+    assert.equal(isLikelyStreamCutOffError(undefined), false);
+    assert.equal(isLikelyStreamCutOffError(null), false);
+  });
+
   it("recognizes timeout copy for Continue CTAs", () => {
     assert.equal(looksLikeTimeoutCopy("Server time limit hit"), true);
     assert.equal(looksLikeTimeoutCopy("Task timed out after 300s"), true);
@@ -40,6 +60,7 @@ describe("chat-continue", () => {
     assert.equal(hasContinuableAssistant([]), false);
     assert.equal(hasContinuableAssistant([assistant("")]), false);
     assert.equal(hasContinuableAssistant([assistant("partial…")]), true);
+    assert.equal(hasContinuableAssistant([assistantToolCall()]), true);
   });
 
   it("auto-continues on timeout and long disconnects", () => {
@@ -62,7 +83,7 @@ describe("chat-continue", () => {
         isDisconnect: true,
         isError: false,
         messages,
-        runDurationMs: 60_000,
+        runDurationMs: MIN_DISCONNECT_RUN_MS + 1,
         continueCount: 0,
       }),
       true,
@@ -86,6 +107,32 @@ describe("chat-continue", () => {
         messages,
         runDurationMs: 60_000,
         continueCount: MAX_AUTO_CONTINUES,
+      }),
+      false,
+    );
+  });
+
+  it("offers Continue on any error with partial work", () => {
+    const messages = [assistant("Halfway…")];
+    assert.equal(
+      shouldOfferContinue({
+        isAbort: false,
+        isDisconnect: false,
+        isError: true,
+        error: new Error("something vague"),
+        messages,
+        runDurationMs: 5000,
+      }),
+      true,
+    );
+    // Successful finish must not offer solely because the run was long.
+    assert.equal(
+      shouldOfferContinue({
+        isAbort: false,
+        isDisconnect: false,
+        isError: false,
+        messages,
+        runDurationMs: 120_000,
       }),
       false,
     );
