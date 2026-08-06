@@ -97,8 +97,10 @@ function useChatThreadRuntime() {
   // Each remote-thread runtime instance mounts for one thread. Seed that
   // thread's useChat from localStorage so refresh/switch don't depend on
   // assistant-ui's one-shot useExternalHistory (which often skips load).
+  // Prefer URL id when the list item isn't bound yet — cuts empty-frame flash.
   const [seedMessages] = useState<UIMessage[]>(() => {
-    const key = readThreadStorageKey(aui);
+    const key =
+      readThreadStorageKey(aui) ?? readThreadIdFromLocation() ?? undefined;
     return key ? loadThreadUIMessages(key) : [];
   });
 
@@ -386,7 +388,9 @@ function useChatThreadRuntime() {
   errorRef.current = error;
 
   const loadedKeyRef = useRef<string | null>(
-    seedMessages.length > 0 ? (readThreadStorageKey(aui) ?? null) : null,
+    seedMessages.length > 0
+      ? (readThreadStorageKey(aui) ?? readThreadIdFromLocation() ?? null)
+      : null,
   );
 
   // Late remoteId (after initialize): pull history once.
@@ -593,7 +597,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
   });
 
   // Constructor always switchToNewThread(); initialThreadId races it and can lose.
-  // Re-apply the URL thread after the list is ready (and once more on a tick).
+  // Re-apply the URL thread once after the list is ready (avoid double-switch thrash).
   useEffect(() => {
     if (restoredRef.current) return;
     const saved = initialThreadId;
@@ -607,9 +611,6 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
     void (async () => {
       try {
         await runtime.threads.getLoadThreadsPromise();
-        if (cancelled) return;
-        await runtime.threads.switchToThread(saved);
-        await new Promise((r) => setTimeout(r, 0));
         if (cancelled) return;
         await runtime.threads.switchToThread(saved);
       } catch {

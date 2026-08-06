@@ -23,7 +23,6 @@ import { useDrive } from "@/providers/drive-provider";
 import {
   ActionBarPrimitive,
   AuiIf,
-  type AssistantState,
   BranchPickerPrimitive,
   ComposerPrimitive,
   ErrorPrimitive,
@@ -68,13 +67,46 @@ import {
   type SpeechSession,
 } from "@/lib/speech";
 import { looksLikeTimeoutCopy } from "@/lib/chat-continue";
+import { readThreadIdFromLocation } from "@/lib/thread-url";
 
-const isNewChatView = (s: AssistantState) =>
-  s.thread.messages.length === 0 &&
-  (!s.thread.isLoading || s.threads.isLoading);
+/**
+ * True only for a settled empty chat. Avoid welcome flash while history is
+ * loading or while a `/c/<id>` route is still hydrating messages.
+ */
+function useThreadEmptyState() {
+  const hasMessages = useAuiState((s) => s.thread.messages.length > 0);
+  const isLoading = useAuiState(
+    (s) => s.thread.isLoading || s.threads.isLoading,
+  );
+  // URL id is stable across the first paints; don't flash Welcome on refresh.
+  const [urlThreadId] = useState(() => readThreadIdFromLocation());
+  const [holdRoute, setHoldRoute] = useState(() => !!urlThreadId);
+
+  useEffect(() => {
+    if (hasMessages || !urlThreadId) {
+      setHoldRoute(false);
+      return;
+    }
+    if (isLoading) {
+      setHoldRoute(true);
+      return;
+    }
+    // Load settled with no messages — brief hold so late setMessages can land.
+    const t = window.setTimeout(() => setHoldRoute(false), 450);
+    return () => window.clearTimeout(t);
+  }, [hasMessages, isLoading, urlThreadId]);
+
+  const isHydrating = !hasMessages && (isLoading || holdRoute);
+  return {
+    isEmpty: !hasMessages && !isHydrating,
+    isHydrating,
+    hasMessages,
+  };
+}
 
 export const Thread: FC = () => {
-  const isEmpty = useAuiState(isNewChatView);
+  const { isEmpty, isHydrating, hasMessages } = useThreadEmptyState();
+  const showThread = hasMessages || isHydrating;
 
   // Empty layout mirrors Figma Make ThreadViewport:
   // one column with justify-center so Welcome + Composer sit together mid-screen.
@@ -89,7 +121,7 @@ export const Thread: FC = () => {
         turnAnchor="top"
         className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth"
       >
-        {!isEmpty && <ThreadHeader />}
+        {showThread && <ThreadHeader />}
         <div
           className={cn(
             "mx-auto flex w-full max-w-[var(--thread-max-width)] flex-1 flex-col px-4 sm:px-6",
@@ -98,8 +130,21 @@ export const Thread: FC = () => {
         >
           {isEmpty ? <ThreadWelcome /> : null}
 
-          {!isEmpty && (
-            <div className="mb-16 flex flex-col gap-y-8 empty:hidden">
+          {isHydrating && (
+            <div
+              className="mb-16 flex min-h-[8rem] items-start pt-2"
+              aria-busy="true"
+              aria-label="Loading conversation"
+            >
+              <span className="inline-flex items-center gap-2 text-[13px] text-[var(--muted-soft)]">
+                <span className="size-1.5 animate-pulse rounded-full bg-[var(--muted-soft)]" />
+                Loading…
+              </span>
+            </div>
+          )}
+
+          {hasMessages && (
+            <div className="mb-16 flex flex-col gap-y-6 empty:hidden">
               <ThreadPrimitive.Messages>
                 {() => <ThreadMessage />}
               </ThreadPrimitive.Messages>
@@ -109,16 +154,16 @@ export const Thread: FC = () => {
           <div
             className={cn(
               "flex flex-col gap-2 pb-4 md:pb-6",
-              !isEmpty && "sticky bottom-0 mt-auto",
+              showThread && "sticky bottom-0 mt-auto",
             )}
           >
-            {!isEmpty && (
+            {showThread && (
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-x-0 -top-12 h-12 bg-gradient-to-b from-transparent to-[var(--canvas)]"
               />
             )}
-            {!isEmpty && <ThreadScrollToBottom />}
+            {showThread && <ThreadScrollToBottom />}
             <Composer />
           </div>
         </div>
@@ -1006,10 +1051,15 @@ const MessageError: FC = () => {
 };
 
 const AssistantMessage: FC = () => {
+  // Animate only while this message is actively generating — not on rehydrate.
+  const isLive = useAuiState((s) => s.message.status?.type === "running");
   return (
     <MessagePrimitive.Root
       data-role="assistant"
-      className="group/message relative animate-[fadeIn_150ms_ease-out]"
+      className={cn(
+        "group/message relative",
+        isLive && "animate-[fadeIn_120ms_ease-out]",
+      )}
     >
       <div
         className={cn(
@@ -1199,7 +1249,7 @@ const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
       data-role="user"
-      className="group/message flex animate-[fadeIn_150ms_ease-out] flex-col items-end gap-1"
+      className="group/message flex flex-col items-end gap-1"
     >
       <div className="relative max-w-[85%] sm:max-w-[80%]">
         <div className="rounded-2xl rounded-br-md bg-[var(--elevated-deep)] px-4 py-2.5 text-[15px] leading-relaxed text-[var(--text)] wrap-break-word">

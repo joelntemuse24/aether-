@@ -40,6 +40,8 @@ function toolNameFromPart(part: ToolishPart): string | null {
 function partLooksRunning(part: ToolishPart): boolean {
   if (part.result !== undefined) return false;
   const t = part.status?.type;
+  if (t === "complete" || t === "incomplete" || t === "cancelled") return false;
+  // Caller only invokes this while thread.isRunning — undefined status is ok then.
   return t === "running" || t === "requires-action" || t === undefined;
 }
 
