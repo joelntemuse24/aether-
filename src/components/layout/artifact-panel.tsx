@@ -458,8 +458,13 @@ const BarChart: FC<{ series: { label: string; value: number }[] }> = ({
 /* ─── Panel ─── */
 
 export function ArtifactPanel() {
-  const { artifact, open, closeArtifact, persistArtifactContent } =
-    useArtifact();
+  const {
+    artifact,
+    open,
+    closeArtifact,
+    persistArtifactContent,
+    saveCurrentArtifact,
+  } = useArtifact();
   const previewTheme = usePreviewTheme();
   const [copied, setCopied] = useState(false);
   const [content, setContent] = useState("");
@@ -509,9 +514,9 @@ export function ArtifactPanel() {
     return () => clearTimeout(t);
   }, [content]);
 
-  // Debounced write-back for cloud-persisted artifacts.
+  // Debounced write-back for any open artifact (local always; cloud when linked).
   useEffect(() => {
-    if (!artifact?.persisted) return;
+    if (!artifact?.id) return;
     if (content === lastPersisted.current) return;
     setSaveState("saving");
     const t = setTimeout(() => {
@@ -526,7 +531,7 @@ export function ArtifactPanel() {
       })();
     }, 900);
     return () => clearTimeout(t);
-  }, [content, artifact?.persisted, artifact?.id, persistArtifactContent]);
+  }, [content, artifact?.id, artifact?.persisted, persistArtifactContent]);
 
   if (!open || !artifact) return null;
 
@@ -650,19 +655,38 @@ export function ArtifactPanel() {
             <div className="text-[11px] lowercase text-[var(--muted-soft)]">
               {kind}
               {kind === "code" && lang ? ` · ${lang}` : ""}
-              {artifact.persisted
-                ? saveState === "saving"
-                  ? " · saving…"
-                  : saveState === "saved"
+              {saveState === "saving"
+                ? " · saving…"
+                : saveState === "saved"
+                  ? artifact.persisted
                     ? " · saved"
-                    : saveState === "error"
-                      ? " · save failed"
-                      : " · cloud"
-                : " · session only"}
+                    : " · saved locally"
+                  : saveState === "error"
+                    ? " · save failed"
+                    : artifact.persisted
+                      ? " · cloud"
+                      : artifact.local
+                        ? " · this device"
+                        : " · draft"}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              void saveCurrentArtifact().then((ok) => {
+                if (ok) {
+                  lastPersisted.current = content;
+                  setSaveState("saved");
+                } else setSaveState("error");
+              });
+            }}
+            className="flex h-8 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-[var(--accent)] hover:bg-[var(--elevated)]"
+            title="Save artifact"
+          >
+            Save
+          </button>
           {kind === "document" && (
             <button
               type="button"

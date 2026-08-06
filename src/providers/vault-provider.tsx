@@ -26,6 +26,8 @@ type VaultContextValue = {
   loading: boolean;
   vaultOpen: boolean;
   vaultFloating: boolean;
+  /** list = note index; edit = editor (including new blank drafts). */
+  view: "list" | "edit";
   activeNoteId: string | null;
   title: string;
   content: string;
@@ -37,6 +39,7 @@ type VaultContextValue = {
   setContent: (content: string) => void;
   setWidth: (width: number) => void;
   setDetachPoint: (point: { x: number; y: number } | null) => void;
+  setView: (view: "list" | "edit") => void;
   beginNote: (note?: VaultNote) => void;
   openVault: (opts?: { expandSidebar?: () => void }) => void;
   saveNote: () => Promise<void>;
@@ -53,6 +56,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [vaultFloating, setVaultFloating] = useState(false);
+  const [view, setView] = useState<"list" | "edit">("list");
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [title, setTitle] = useState("Untitled note");
   const [content, setContent] = useState("");
@@ -64,9 +68,12 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const migrating = useRef(false);
 
   const beginNote = useCallback((note?: VaultNote) => {
+    // Always enter editor — previously "New note" stayed on the list because
+    // empty Untitled had the same shape as list mode.
     setActiveNoteId(note?.id ?? null);
     setTitle(note?.title ?? "Untitled note");
     setContent(note?.content ?? "");
+    setView("edit");
   }, []);
 
   const migrateLocalIfNeeded = useCallback(async () => {
@@ -217,19 +224,28 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         if (!cloud) saveVaultNotes(next);
         return next;
       });
-      if (activeNoteId === id) beginNote();
+      if (activeNoteId === id) {
+        setActiveNoteId(null);
+        setTitle("Untitled note");
+        setContent("");
+        setView("list");
+      }
     },
-    [activeNoteId, beginNote, cloud],
+    [activeNoteId, cloud],
   );
 
   const openVault = useCallback(
     (opts?: { expandSidebar?: () => void }) => {
       opts?.expandSidebar?.();
       setVaultFloating(false);
-      beginNote();
+      // Open to the notes list (not a blank editor that looked "broken").
+      setActiveNoteId(null);
+      setTitle("Untitled note");
+      setContent("");
+      setView("list");
       setVaultOpen(true);
     },
-    [beginNote],
+    [],
   );
 
   const value = useMemo<VaultContextValue>(
@@ -239,6 +255,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       loading,
       vaultOpen,
       vaultFloating,
+      view,
       activeNoteId,
       title,
       content,
@@ -250,6 +267,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       setContent,
       setWidth,
       setDetachPoint,
+      setView,
       beginNote,
       openVault,
       saveNote,
@@ -262,6 +280,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       loading,
       vaultOpen,
       vaultFloating,
+      view,
       activeNoteId,
       title,
       content,
