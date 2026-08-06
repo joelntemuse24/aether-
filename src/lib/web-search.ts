@@ -1,10 +1,10 @@
 /**
- * Keyless web search for the chat tool.
+ * Web search for the chat tool.
  *
  * Priority:
- * 1. Brave Search API when BRAVE_SEARCH_API_KEY is set (real web results)
- * 2. DuckDuckGo HTML results page (keyless; works for current/financial queries)
- * 3. Wikipedia (entity summaries) — reliable but weak for “FY2024 / latest”
+ * 1. API providers via search/providers (Exa → Tavily → Brave when keyed)
+ * 2. DuckDuckGo HTML results page (keyless)
+ * 3. Wikipedia (entity summaries)
  * 4. DuckDuckGo Instant Answer (sparse; often empty on cloud IPs)
  *
  * Never lets one source's empty/invalid JSON abort the whole search —
@@ -13,6 +13,7 @@
 
 import type { WebSearchOutput, WebSearchResult } from "@/lib/tools";
 import { fetchUrlText } from "@/lib/connectors/web-and-drive";
+import { runApiSearchProviders } from "@/lib/search/providers";
 
 const SEARCH_TIMEOUT_MS = 28_000;
 
@@ -747,10 +748,21 @@ export async function runWebSearch(query: string): Promise<WebSearchOutput> {
   };
 
   try {
-    const brave = await trySource("brave", () =>
-      searchBrave(trimmed, controller.signal),
-    );
-    if (brave) return withCurrencyWarning(trimmed, brave.name, brave.results);
+    // API providers (Exa / Tavily / Brave) — first non-empty wins.
+    try {
+      const apiHit = await runApiSearchProviders(trimmed, controller.signal);
+      if (apiHit && apiHit.results.length > 0) {
+        return withCurrencyWarning(
+          trimmed,
+          apiHit.provider,
+          apiHit.results,
+        );
+      }
+    } catch (err) {
+      errors.push(
+        `api: ${err instanceof Error ? err.message : "provider failed"}`,
+      );
+    }
 
     const ddgHtml = await trySource("duckduckgo", () =>
       searchDuckDuckGoHtml(trimmed, controller.signal),

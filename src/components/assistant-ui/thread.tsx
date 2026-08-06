@@ -67,6 +67,7 @@ import {
   type SpeechSession,
 } from "@/lib/speech";
 import { looksLikeTimeoutCopy } from "@/lib/chat-continue";
+import { parseTimeBudgetFromText } from "@/lib/harness/time-budget";
 
 /**
  * True only for a settled empty chat. Avoid welcome flash while history is
@@ -520,12 +521,15 @@ const Composer: FC = () => {
       return;
     }
 
+    const timeBudget = parseTimeBudgetFromText(text);
     armChatContext({
       intent: classification?.intent ?? "chat",
       depth: classification?.depth ?? "standard",
       runId,
       clarifications: opts?.clarifications,
       planSteps: classification?.planSteps,
+      timeBudgetMinutes: timeBudget?.minutes,
+      surface: "chat",
     });
     setLastPlanSteps(classification?.planSteps);
     setPending(null);

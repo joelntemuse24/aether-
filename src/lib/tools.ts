@@ -21,6 +21,14 @@ export const TOOL_NAMES = {
   fetchUrl: "fetch_url",
   /** Deferred discovery — unlocks memory/Drive/GitHub tools into later steps. */
   toolSearch: "tool_search",
+  /** Structured verify pass for deep / substantial work. */
+  verifyChecklist: "verify_checklist",
+  /** Gate side effects until the user approves. */
+  requestConfirmation: "request_confirmation",
+  /** Open / extract a public page (fetch or Browserless). */
+  browserNavigate: "browser_navigate",
+  /** Extract, preview fill, or request confirm for click/submit. */
+  browserAct: "browser_act",
 } as const;
 
 export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -197,6 +205,47 @@ export const toolSearchInput = z.object({
 });
 export type ToolSearchInput = z.infer<typeof toolSearchInput>;
 
+export const requestConfirmationInput = z.object({
+  action: z
+    .enum([
+      "submit_form",
+      "send_message",
+      "upload_file",
+      "browser_click_submit",
+      "browser_fill_and_submit",
+      "delete_resource",
+      "other_side_effect",
+    ])
+    .describe("Kind of side effect that needs approval."),
+  title: z.string().describe("Short title for the confirmation card."),
+  preview: z
+    .string()
+    .describe("What will happen if the user approves (plain language)."),
+  target: z
+    .string()
+    .optional()
+    .describe("URL or resource label the action targets."),
+});
+
+export const browserNavigateInput = z.object({
+  url: z.string().url().describe("Public http(s) URL to open and extract."),
+});
+
+export const browserActInput = z.object({
+  url: z.string().url().describe("Page URL for the action."),
+  action: z
+    .enum(["extract", "fill_preview", "click", "submit"])
+    .describe(
+      "extract=read page; fill_preview=describe fill without applying; click/submit=side effects (submit always needs confirmation).",
+    ),
+  selector: z.string().optional().describe("CSS selector or field name hint."),
+  value: z.string().optional().describe("Value for fill_preview."),
+  description: z
+    .string()
+    .optional()
+    .describe("Human description of the intended action."),
+});
+
 // ─── Display metadata (client rendering) ───
 
 export type ToolDisplay = {
@@ -253,6 +302,22 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Looking up",
     runningLabel: "Finding what you need…",
   },
+  [TOOL_NAMES.verifyChecklist]: {
+    label: "Verify",
+    runningLabel: "Checking work…",
+  },
+  [TOOL_NAMES.requestConfirmation]: {
+    label: "Needs approval",
+    runningLabel: "Waiting for approval…",
+  },
+  [TOOL_NAMES.browserNavigate]: {
+    label: "Browser",
+    runningLabel: "Opening page…",
+  },
+  [TOOL_NAMES.browserAct]: {
+    label: "Browser",
+    runningLabel: "Working on page…",
+  },
 };
 
 export function getToolDisplay(name: string): ToolDisplay {
@@ -274,32 +339,36 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 
 ## Core tools (always available when tools are on)
 - "execute_python": sandboxed in-browser Python for math, data, or verifying code.
-- "web_search": current or factual lookups you are unsure about. Few focused queries only.
-- "fetch_url": read a specific public page as text after you have a URL (IR pages, press, docs). Never use fetch_url or web_search to inspect github.com repositories — HTML scrapes miss code and waste budget.
-- "create_artifact": substantial reusable content. kind "document" for write-ups/briefs (markdown); "code" / "data" / "svg" / "image" when those fit. No PowerPoint exporter — slide-like content → structured markdown document.
-- "tool_search": unlock optional tools (memory, Google Drive, GitHub) by keyword. Call once with clear capability keywords before assuming those tools exist. After unlock, use them in later steps of the same turn.
+- "web_search": current or factual lookups. Few focused queries only.
+- "fetch_url": read a public page as text (IR, press, docs). Soft-fails paywalls; PDFs best-effort. Never use for github.com repos.
+- "create_artifact": substantial reusable content. kind "document" for essays/briefs; "code" / "data" / "svg" / "image" when those fit.
+- "verify_checklist": structured verify pass before handing back substantial work (deep / research / write / timed drafts).
+- "request_confirmation": gate any side effect (submit, send, upload) until the user approves. Never claim a side effect completed without approval.
+- "browser_navigate": open a public URL and extract text (fetch or full browser when configured).
+- "browser_act": extract / fill_preview / click / submit on a page. submit always returns needs_confirmation.
+- "tool_search": unlock optional tools (memory, Drive, GitHub) by keyword when needed.
 
 ## Optional tools (via tool_search when the session supports them; GitHub may already be unlocked if the user pasted a repo link)
-- "memory_search" / "memory_write": lasting facts about the user. Search before inventing preferences; write only durable facts they would want across chats.
-- "drive_search" / "drive_read": the user's Google Drive when connected (not GitHub).
-- "github_get_repo" / "github_list_contents" / "github_read_file": repository metadata, directory listing, and one text file per call.
+- "memory_search" / "memory_write": lasting facts about the user.
+- "drive_search" / "drive_read": the user's Google Drive when connected.
+- "github_get_repo" / "github_list_contents" / "github_read_file": repo tools (one path per read_file call; parallelize multiple files).
 
 ## GitHub rule (hard)
-- Any github.com link or owner/repo discussion → prefer github_* tools exclusively. Never fall back to Drive, fetch_url, or web_search for repo contents.
-- Flow: github_get_repo → github_list_contents as needed → github_read_file for files you need.
-- Parallelism: when you need multiple files, issue multiple github_read_file calls in the same step (one path per call). Never concatenate two JSON objects into one tool input.
+- github.com / owner-repo → github_* only. Never Drive/fetch_url/web_search for repo contents.
+
+## Side effects & portals (hard)
+- Never submit forms, send messages, or complete enrollments without request_confirmation or browser_act(submit) approval.
+- If the user is logged into a portal, guide them and use extract/preview tools — never ask for passwords.
+- Essay / deadline flows: draft artifact first → verify lightly → then portal steps with confirmation.
 
 ## Web research discipline (enforced by the harness)
-- Prefer 1–2 focused web_search calls, then draft. Near-duplicate queries are blocked.
-- Depth budgets cap searches: Quick 1 / Standard 2 / Deep 3. When blocked or budget exhausted → fetch_url on known good links, or answer with the evidence you have.
-- If results include IR / press / filing URLs, fetch_url the best 1–2 before writing numbers.
-- If a warning says encyclopedia-only or budget exhausted, deliver the answer with clear uncertainty — do not re-query the same way.
+- Prefer 1–2 focused web_search calls, then draft. Near-duplicates and depth budgets apply (time budgets may tighten further).
+- When blocked or budget exhausted → fetch_url / browser_navigate on known links, or answer.
+- Paywall / thin results → say so and finish with a usable answer.
 
 ## Artifacts & narration
-- Short inline snippets stay in chat; create_artifact when content is large, iterative, or meant to be reused.
-- Briefly narrate multi-step work so the user can follow (one calm sentence, not a play-by-play).
-- After tools return, weave results into your answer — do not dump raw JSON.
-- Prefer living document artifacts for essays and projects the user will revise across turns.
+- Short snippets in chat; create_artifact for long or reusable work (essays, briefs).
+- Weave tool results into the answer; no raw JSON dumps.
 
 ## If tools are unavailable
 Answer normally as a text-only assistant.`;

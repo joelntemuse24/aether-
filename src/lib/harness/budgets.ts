@@ -17,6 +17,30 @@ export function budgetForDepth(depth: HarnessDepth | undefined): DepthBudget {
   return BUDGETS.standard;
 }
 
+/** Under extreme time pressure, slightly reduce max tool steps so we draft sooner. */
+export function budgetForDepthWithTime(
+  depth: HarnessDepth | undefined,
+  timeMinutes?: number | null,
+): DepthBudget {
+  const base = budgetForDepth(depth);
+  if (timeMinutes == null) return base;
+  if (timeMinutes <= 5) {
+    return {
+      ...base,
+      maxSteps: Math.min(base.maxSteps, depth === "shallow" ? 2 : 6),
+      label: `${base.label} · timed`,
+    };
+  }
+  if (timeMinutes <= 15) {
+    return {
+      ...base,
+      maxSteps: Math.min(base.maxSteps, base.maxSteps <= 2 ? 2 : base.maxSteps - 2),
+      label: `${base.label} · timed`,
+    };
+  }
+  return base;
+}
+
 /**
  * Extra system contract injected for the chosen depth/intent.
  * Deep paths require a verify pass — "extra mile" as policy, not hope.

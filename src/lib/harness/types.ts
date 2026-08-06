@@ -48,6 +48,10 @@ export type HarnessChatContext = {
   clarifications?: Record<string, string>;
   /** Deep-path plan from classify — injected into the chat system prompt. */
   planSteps?: string[];
+  /** Soft wall-clock minutes when the user stated a deadline ("5 minutes"). */
+  timeBudgetMinutes?: number;
+  /** Surface mode — same harness, different default posture later for Agent UI. */
+  surface?: "chat" | "agent";
 };
 
 export type HarnessRunStatus =

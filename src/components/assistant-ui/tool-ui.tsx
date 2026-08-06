@@ -116,6 +116,10 @@ const ICONS: Record<string, FC<{ className?: string }>> = {
   [TOOL_NAMES.githubReadFile]: FolderGit2Icon,
   [TOOL_NAMES.fetchUrl]: GlobeIcon,
   [TOOL_NAMES.toolSearch]: WrenchIcon,
+  [TOOL_NAMES.verifyChecklist]: CheckIcon,
+  [TOOL_NAMES.requestConfirmation]: AlertTriangleIcon,
+  [TOOL_NAMES.browserNavigate]: GlobeIcon,
+  [TOOL_NAMES.browserAct]: GlobeIcon,
 };
 
 const ToolShell: FC<{
@@ -1012,6 +1016,326 @@ const ToolSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   );
 };
 
+/* ─── Verify ─── */
+
+const VerifyChecklistToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = usePartRunning(part);
+  const input = part.args as {
+    summary?: string;
+    checks?: Array<{ item?: string; ok?: boolean; note?: string }>;
+    ready_for_user?: boolean;
+  } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    verified?: boolean;
+    failed?: string[];
+    instruction?: string;
+  } | undefined;
+  const checks = input?.checks ?? [];
+  const error = part.isError || (output ? output.ok === false : false);
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.verifyChecklist}
+      running={running}
+      error={error}
+      subtitle={
+        output?.verified
+          ? "Passed"
+          : output
+            ? "Needs attention"
+            : input?.summary?.slice(0, 48)
+      }
+      expandWhileRunning={running && checks.length > 0}
+    >
+      {input?.summary && (
+        <p className="text-[11px] text-[var(--muted)]">{input.summary}</p>
+      )}
+      {checks.length > 0 && (
+        <ul className="mt-1 space-y-0.5">
+          {checks.map((c, i) => (
+            <li key={i} className="text-[11px] text-[var(--text-secondary)]">
+              {c.ok ? "✓" : "·"} {c.item}
+              {c.note ? ` — ${c.note}` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+      {output?.instruction && (
+        <p className="mt-1 text-[11px] text-[var(--muted-soft)]">
+          {output.instruction}
+        </p>
+      )}
+    </ToolShell>
+  );
+};
+
+/* ─── Confirmation (side effects) ─── */
+
+const ConfirmationToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = usePartRunning(part);
+  const [busy, setBusy] = useState(false);
+  const [resolved, setResolved] = useState<"approved" | "declined" | null>(
+    null,
+  );
+  const input = part.args as {
+    title?: string;
+    preview?: string;
+    target?: string;
+    action?: string;
+  } | undefined;
+  const output = part.result as {
+    needs_confirmation?: boolean;
+    confirmation_id?: string;
+    title?: string;
+    preview?: string;
+    instruction?: string;
+    ok?: boolean;
+  } | undefined;
+
+  const title = output?.title || input?.title || "Needs approval";
+  const preview = output?.preview || input?.preview;
+  const confirmationId = output?.confirmation_id;
+  const pending =
+    !resolved &&
+    !!output?.needs_confirmation &&
+    !!confirmationId &&
+    !running;
+
+  const resolve = async (approved: boolean) => {
+    if (!confirmationId || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/harness/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmationId, approved }),
+      });
+      if (!res.ok) {
+        window.dispatchEvent(
+          new CustomEvent("aether:notice", {
+            detail: "Could not record approval. Try again.",
+          }),
+        );
+        return;
+      }
+      setResolved(approved ? "approved" : "declined");
+      window.dispatchEvent(
+        new CustomEvent("aether:notice", {
+          detail: approved
+            ? "Approved — tell Aether to continue."
+            : "Declined — Aether will not take that action.",
+        }),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.requestConfirmation}
+      running={running}
+      subtitle={
+        resolved === "approved"
+          ? "Approved"
+          : resolved === "declined"
+            ? "Declined"
+            : title
+      }
+      expandWhileRunning={pending || running}
+    >
+      {preview && (
+        <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--muted)]">
+          {preview}
+        </p>
+      )}
+      {input?.target && (
+        <p className="mt-1 truncate text-[10px] text-[var(--muted-soft)]">
+          {input.target}
+        </p>
+      )}
+      {pending && (
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void resolve(true)}
+            className="rounded-md bg-[var(--accent)] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[var(--accent-hover)] disabled:opacity-50"
+          >
+            Approve
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void resolve(false)}
+            className="rounded-md px-2.5 py-1 text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)] disabled:opacity-50"
+          >
+            Decline
+          </button>
+        </div>
+      )}
+      {resolved && (
+        <p className="mt-1 text-[11px] text-[var(--muted-soft)]">
+          {resolved === "approved"
+            ? "You approved. Ask Aether to continue."
+            : "You declined this action."}
+        </p>
+      )}
+    </ToolShell>
+  );
+};
+
+/* ─── Browser ─── */
+
+const BrowserNavigateToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = usePartRunning(part);
+  const input = part.args as { url?: string } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    error?: string;
+    title?: string;
+    url?: string;
+    text?: string;
+    warning?: string;
+    mode?: string;
+  } | undefined;
+  const error = part.isError || (output ? output.ok === false : false);
+  const href = output?.url || input?.url;
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.browserNavigate}
+      running={running}
+      error={error}
+      subtitle={output?.title || href}
+      expandWhileRunning={running && !!(output?.text || part.argsText)}
+    >
+      {href && (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="mb-1 inline-flex items-center gap-1 text-[11px] text-[var(--accent)] hover:underline"
+        >
+          {href}
+          <ExternalLinkIcon className="size-3" />
+        </a>
+      )}
+      {output?.error && (
+        <p className="text-[11px] text-[var(--error-text)]">{output.error}</p>
+      )}
+      {output?.warning && (
+        <p className="text-[11px] text-[var(--muted)]">{output.warning}</p>
+      )}
+      {output?.text && (
+        <p className="max-h-36 overflow-auto whitespace-pre-wrap text-[11px] text-[var(--muted)]">
+          {output.text.length > 2000
+            ? `${output.text.slice(0, 2000)}…`
+            : output.text}
+        </p>
+      )}
+    </ToolShell>
+  );
+};
+
+const BrowserActToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = usePartRunning(part);
+  const [busy, setBusy] = useState(false);
+  const [resolved, setResolved] = useState<"approved" | "declined" | null>(
+    null,
+  );
+  const input = part.args as {
+    action?: string;
+    url?: string;
+    description?: string;
+  } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    error?: string;
+    needs_confirmation?: boolean;
+    confirmation_id?: string;
+    title?: string;
+    preview?: string;
+    text?: string;
+    note?: string;
+  } | undefined;
+  const error = part.isError || (output ? output.ok === false : false);
+  const confirmationId = output?.confirmation_id;
+  const pending =
+    !resolved && !!output?.needs_confirmation && !!confirmationId && !running;
+
+  const resolve = async (approved: boolean) => {
+    if (!confirmationId || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/harness/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmationId, approved }),
+      });
+      if (res.ok) setResolved(approved ? "approved" : "declined");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.browserAct}
+      running={running}
+      error={error}
+      subtitle={
+        resolved
+          ? resolved
+          : output?.needs_confirmation
+            ? "Needs approval"
+            : input?.action || input?.description
+      }
+      expandWhileRunning={pending || running}
+    >
+      {(output?.preview || input?.description) && (
+        <p className="whitespace-pre-wrap text-[11px] text-[var(--muted)]">
+          {output?.preview || input?.description}
+        </p>
+      )}
+      {output?.error && (
+        <p className="text-[11px] text-[var(--error-text)]">{output.error}</p>
+      )}
+      {output?.text && (
+        <p className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap text-[11px] text-[var(--muted)]">
+          {output.text.length > 1500
+            ? `${output.text.slice(0, 1500)}…`
+            : output.text}
+        </p>
+      )}
+      {output?.note && (
+        <p className="mt-1 text-[11px] text-[var(--muted-soft)]">{output.note}</p>
+      )}
+      {pending && (
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void resolve(true)}
+            className="rounded-md bg-[var(--accent)] px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-50"
+          >
+            Approve
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void resolve(false)}
+            className="rounded-md px-2.5 py-1 text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)]"
+          >
+            Decline
+          </button>
+        </div>
+      )}
+    </ToolShell>
+  );
+};
+
 /* ─── Generic fallback ─── */
 
 const GenericToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
@@ -1064,6 +1388,14 @@ export const ToolCallPart: FC<{ part: ToolPartLike }> = ({ part }) => {
       return <FetchUrlToolCall part={part} />;
     case TOOL_NAMES.toolSearch:
       return <ToolSearchToolCall part={part} />;
+    case TOOL_NAMES.verifyChecklist:
+      return <VerifyChecklistToolCall part={part} />;
+    case TOOL_NAMES.requestConfirmation:
+      return <ConfirmationToolCall part={part} />;
+    case TOOL_NAMES.browserNavigate:
+      return <BrowserNavigateToolCall part={part} />;
+    case TOOL_NAMES.browserAct:
+      return <BrowserActToolCall part={part} />;
     default:
       return <GenericToolCall part={part} />;
   }
