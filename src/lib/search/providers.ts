@@ -4,14 +4,15 @@
  *
  * Priority (first success wins):
  * 1. Explicit AETHER_SEARCH_PROVIDER if set
- * 2. Exa / Tavily when keyed (research-quality)
- * 3. Brave when keyed
- * 4. Keyless fallbacks (handled in web-search.ts)
+ * 2. Firecrawl (default recommended — search + rich snippets)
+ * 3. Exa / Tavily when keyed
+ * 4. Brave when keyed
+ * 5. Keyless fallbacks (handled in web-search.ts)
  */
 
 import type { WebSearchResult } from "@/lib/tools";
 
-export type SearchProviderId = "brave" | "exa" | "tavily";
+export type SearchProviderId = "firecrawl" | "brave" | "exa" | "tavily";
 
 export type SearchProviderHit = {
   provider: SearchProviderId;
@@ -32,24 +33,172 @@ async function readJson(
   }
 }
 
+function firecrawlKey(): string | undefined {
+  return (
+    process.env.FIRECRAWL_API_KEY?.trim() ||
+    process.env.FIRECRAWLER_API_KEY?.trim() // common typo alias
+  );
+}
+
 export function configuredSearchProviders(): SearchProviderId[] {
   const preferred = process.env.AETHER_SEARCH_PROVIDER?.trim().toLowerCase();
   const available: SearchProviderId[] = [];
+  if (firecrawlKey()) available.push("firecrawl");
   if (process.env.EXA_API_KEY?.trim()) available.push("exa");
   if (process.env.TAVILY_API_KEY?.trim()) available.push("tavily");
   if (process.env.BRAVE_SEARCH_API_KEY?.trim()) available.push("brave");
 
-  if (
-    preferred === "exa" ||
-    preferred === "tavily" ||
-    preferred === "brave"
-  ) {
-    const rest = available.filter((p) => p !== preferred);
-    if (available.includes(preferred)) return [preferred, ...rest];
+  const valid = new Set<SearchProviderId>([
+    "firecrawl",
+    "exa",
+    "tavily",
+    "brave",
+  ]);
+  if (preferred && valid.has(preferred as SearchProviderId)) {
+    const id = preferred as SearchProviderId;
+    const rest = available.filter((p) => p !== id);
+    if (available.includes(id)) return [id, ...rest];
   }
-  // Prefer research providers when present, then Brave.
-  const order: SearchProviderId[] = ["exa", "tavily", "brave"];
+  // Default: Firecrawl first when present (user preference over Brave).
+  const order: SearchProviderId[] = ["firecrawl", "exa", "tavily", "brave"];
   return order.filter((p) => available.includes(p));
+}
+
+/**
+ * Firecrawl search — SERP + optional page content.
+ * @see https://docs.firecrawl.dev/api-reference/endpoint/search
+ */
+export async function searchFirecrawl(
+  query: string,
+  signal?: AbortSignal,
+): Promise<WebSearchResult[]> {
+  const key = firecrawlKey();
+  if (!key) return [];
+
+  // v1 is widely supported; v2 uses the same auth shape.
+  const res = await fetch("https://api.firecrawl.dev/v1/search", {
+    method: "POST",
+    signal,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+      "User-Agent": SEARCH_UA,
+    },
+    body: JSON.stringify({
+      query,
+      limit: 8,
+      // Keep payload light for the model; full scrape is fetch_url's job.
+      scrapeOptions: {
+        formats: ["markdown"],
+        onlyMainContent: true,
+      },
+    }),
+  });
+  if (!res.ok) return [];
+  const parsed = await readJson(res);
+  if (!parsed.ok) return [];
+
+  const root = parsed.data as {
+    success?: boolean;
+    data?: unknown;
+  };
+
+  const rows = normalizeFirecrawlSearchData(root.data);
+  return rows
+    .map((r) => ({
+      title: r.title || r.url || "Result",
+      snippet: (r.snippet || r.description || r.markdown || "").slice(0, 900),
+      url: r.url,
+    }))
+    .filter((r) => r.title || r.url)
+    .slice(0, 8);
+}
+
+function normalizeFirecrawlSearchData(data: unknown): Array<{
+  title?: string;
+  url?: string;
+  description?: string;
+  snippet?: string;
+  markdown?: string;
+}> {
+  if (!data) return [];
+  if (Array.isArray(data)) {
+    return data as Array<{
+      title?: string;
+      url?: string;
+      description?: string;
+      snippet?: string;
+      markdown?: string;
+    }>;
+  }
+  if (typeof data === "object") {
+    const obj = data as {
+      web?: unknown[];
+      news?: unknown[];
+      results?: unknown[];
+    };
+    const combined = [
+      ...(Array.isArray(obj.web) ? obj.web : []),
+      ...(Array.isArray(obj.news) ? obj.news : []),
+      ...(Array.isArray(obj.results) ? obj.results : []),
+    ];
+    return combined as Array<{
+      title?: string;
+      url?: string;
+      description?: string;
+      snippet?: string;
+      markdown?: string;
+    }>;
+  }
+  return [];
+}
+
+/** Scrape a single URL to markdown/text via Firecrawl (JS-aware). */
+export async function scrapeFirecrawl(
+  url: string,
+  signal?: AbortSignal,
+): Promise<{ ok: true; title?: string; text: string } | { ok: false }> {
+  const key = firecrawlKey();
+  if (!key) return { ok: false };
+
+  try {
+    const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+        "User-Agent": SEARCH_UA,
+      },
+      body: JSON.stringify({
+        url,
+        formats: ["markdown"],
+        onlyMainContent: true,
+      }),
+    });
+    if (!res.ok) return { ok: false };
+    const parsed = await readJson(res);
+    if (!parsed.ok) return { ok: false };
+    const body = parsed.data as {
+      success?: boolean;
+      data?: {
+        title?: string;
+        markdown?: string;
+        content?: string;
+        metadata?: { title?: string };
+      };
+    };
+    const data = body.data;
+    const text = (data?.markdown || data?.content || "").trim();
+    if (!text) return { ok: false };
+    return {
+      ok: true,
+      title: data?.title || data?.metadata?.title,
+      text: text.slice(0, 80_000),
+    };
+  } catch {
+    return { ok: false };
+  }
 }
 
 export async function searchBrave(
@@ -172,12 +321,11 @@ export async function runApiSearchProviders(
   const providers = configuredSearchProviders();
   for (const id of providers) {
     try {
-      const results =
-        id === "brave"
-          ? await searchBrave(query, signal)
-          : id === "exa"
-            ? await searchExa(query, signal)
-            : await searchTavily(query, signal);
+      let results: WebSearchResult[] = [];
+      if (id === "firecrawl") results = await searchFirecrawl(query, signal);
+      else if (id === "brave") results = await searchBrave(query, signal);
+      else if (id === "exa") results = await searchExa(query, signal);
+      else if (id === "tavily") results = await searchTavily(query, signal);
       if (results.length > 0) return { provider: id, results };
     } catch {
       // try next provider

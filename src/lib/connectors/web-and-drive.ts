@@ -3,6 +3,7 @@ import {
   assertPublicHttpUrl,
   fetchWithPublicRedirects,
 } from "@/lib/connectors/url-safety";
+import { scrapeFirecrawl } from "@/lib/search/providers";
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
@@ -138,8 +139,23 @@ export async function fetchUrlText(url: string): Promise<{
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20_000);
+  const timer = setTimeout(() => controller.abort(), 28_000);
   try {
+    // Prefer Firecrawl scrape when configured (JS pages, cleaner main content).
+    const scraped = await scrapeFirecrawl(
+      gate.url.toString(),
+      controller.signal,
+    );
+    if (scraped.ok && scraped.text.length > 40) {
+      return {
+        ok: true,
+        url: gate.url.toString(),
+        title: scraped.title,
+        text: scraped.text,
+        contentType: "text/markdown",
+      };
+    }
+
     const res = await fetchWithPublicRedirects(gate.url, {
       signal: controller.signal,
       headers: {
