@@ -318,6 +318,16 @@ export async function POST(req: Request) {
     const useClientMemory = !userId || !isCloudDbConfigured();
     const memoryForPrompt = memoryBlock || (useClientMemory ? clientMemory : "");
 
+    // Local/offline projects send instructions via projectContext.
+    const clientProject =
+      typeof body.projectContext === "string" &&
+      body.projectContext.length <= 4000
+        ? body.projectContext
+        : undefined;
+    if (!projectBlock && clientProject) {
+      projectBlock = clientProject;
+    }
+
     const hasDriveEarly = userId
       ? !!(await getValidDriveAccessToken(userId))
       : false;

@@ -31,6 +31,7 @@ import { TOOL_NAMES, type ExecutePythonInput } from "@/lib/tools";
 import { useHarness } from "./harness-provider";
 import { useProjects } from "./projects-provider";
 import { localMemoryContextForChat } from "@/lib/memory/local";
+import { formatProjectForPrompt } from "@/lib/projects/types";
 import {
   CONTINUE_USER_TEXT,
   MAX_AUTO_CONTINUES,
@@ -82,7 +83,7 @@ function useChatThreadRuntime() {
   const { chatHeaders, activeModel, hasKey, settings } = useSettings();
   const { attachments, clearAttachments } = useAttachments();
   const { peekChatContext, clearChatContext, armChatContext } = useHarness();
-  const { activeProjectId } = useProjects();
+  const { activeProjectId, activeProject } = useProjects();
   const aui = useAui();
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
@@ -94,6 +95,8 @@ function useChatThreadRuntime() {
   armHarnessRef.current = armChatContext;
   const projectIdRef = useRef(activeProjectId);
   projectIdRef.current = activeProjectId;
+  const activeProjectRef = useRef(activeProject);
+  activeProjectRef.current = activeProject;
   const threadIdRef = useRef<string | undefined>(undefined);
   threadIdRef.current = readThreadStorageKey(aui) ?? readThreadIdFromLocation();
 
@@ -153,6 +156,9 @@ function useChatThreadRuntime() {
             harness: harness ?? lastHarnessRef.current ?? undefined,
             memoryContext: memoryContext || undefined,
             projectId: projectIdRef.current ?? undefined,
+            // Client-side project block (works for local projects without cloud).
+            projectContext:
+              formatProjectForPrompt(activeProjectRef.current) || undefined,
             conversationId: threadIdRef.current ?? undefined,
             continueSegment: continueSegment || undefined,
           };
