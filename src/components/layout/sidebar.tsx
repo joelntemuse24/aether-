@@ -311,14 +311,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <SidebarNavItem
             icon={<WrenchIcon className="size-3.5" />}
             label="Projects"
-            meta={
-              isAuthenticated && projects.length > 0
-                ? String(projects.length)
-                : undefined
-            }
+            meta={projects.length > 0 ? String(projects.length) : undefined}
             onClick={() => setProjectsExpanded((v) => !v)}
           />
-          {projectsExpanded && <ProjectsSection />}
+          {projectsExpanded ? <ProjectsSection /> : null}
           <SidebarNavItem
             icon={<FileTextIcon className="size-3.5" />}
             label="Artifacts"
@@ -479,7 +475,7 @@ function SidebarNavItem({
   );
 }
 
-/** Compact project picker for cloud users — appears above Recent chats. */
+/** Project picker — always opens when expanded (local and/or cloud). */
 function ProjectsSection() {
   const {
     projects,
@@ -490,16 +486,15 @@ function ProjectsSection() {
     update,
     remove,
     cloud,
+    loading,
   } = useProjects();
   const { status } = useSession();
   const [dialog, setDialog] = useState<
     null | "create" | "instructions" | "delete"
   >(null);
 
-  if (status !== "authenticated" || !cloud) return null;
-
   return (
-    <div className="px-3 pb-2">
+    <div className="px-2 pb-2">
       <div className="mb-1.5 flex items-center justify-between px-0.5">
         <Label>Projects</Label>
         <button
@@ -512,7 +507,16 @@ function ProjectsSection() {
           <PlusIcon className="size-3.5" />
         </button>
       </div>
-      <div className="flex max-h-36 flex-col gap-0.5 overflow-y-auto">
+
+      <p className="mb-1.5 px-0.5 text-[10px] leading-snug text-[var(--muted-soft)]">
+        {loading
+          ? "Loading…"
+          : cloud
+            ? "Synced to your account · binds instructions to this chat"
+            : "On this device · binds instructions to this chat"}
+      </p>
+
+      <div className="flex max-h-40 flex-col gap-0.5 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1">
         <button
           type="button"
           onClick={() => setActiveProjectId(null)}
@@ -546,7 +550,13 @@ function ProjectsSection() {
             <span className="truncate">{p.title}</span>
           </button>
         ))}
+        {!loading && projects.length === 0 && (
+          <p className="px-2.5 py-2 text-[11px] text-[var(--muted-soft)]">
+            No projects yet. Tap + to create one.
+          </p>
+        )}
       </div>
+
       {activeProject && (
         <div className="mt-1.5 space-y-1">
           <p className="px-0.5 text-[10px] leading-snug text-[var(--muted-soft)]">
@@ -575,10 +585,16 @@ function ProjectsSection() {
         </div>
       )}
 
+      {status !== "authenticated" && (
+        <p className="mt-1.5 px-0.5 text-[10px] leading-snug text-[var(--muted-soft)]">
+          Sign in + cloud storage syncs projects across devices.
+        </p>
+      )}
+
       <SoftPrompt
         open={dialog === "create"}
         title="New project"
-        description="Projects bind optional instructions to this chat."
+        description="Optional instructions are injected into chats bound to this project."
         label="Name"
         placeholder="Project name"
         confirmLabel="Create"

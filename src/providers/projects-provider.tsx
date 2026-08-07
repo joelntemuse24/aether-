@@ -13,6 +13,12 @@ import {
 import { useSession } from "@/providers/session-provider";
 import type { ProjectDTO } from "@/lib/projects/types";
 import {
+  createLocalProject,
+  deleteLocalProject,
+  loadLocalProjects,
+  updateLocalProject,
+} from "@/lib/projects/local";
+import {
   bindProjectToConversation,
   readConversationProjectId,
 } from "@/lib/conversation-project";
@@ -34,6 +40,8 @@ type ProjectsContextValue = {
   ) => Promise<ProjectDTO | null>;
   remove: (id: string) => Promise<void>;
   cloud: boolean;
+  /** True while cloud status is still resolving after sign-in. */
+  loading: boolean;
 };
 
 const ProjectsContext = createContext<ProjectsContextValue | null>(null);
@@ -46,6 +54,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
     null,
   );
   const [cloud, setCloud] = useState(false);
+  const [loading, setLoading] = useState(true);
   const syncingFromThread = useRef(false);
   const activeProjectIdRef = useRef<string | null>(null);
   const syncGeneration = useRef(0);
@@ -87,34 +96,46 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
   );
 
   const refresh = useCallback(async () => {
-    if (status !== "authenticated") {
-      setProjects([]);
-      setCloud(false);
-      return;
-    }
+    setLoading(true);
     try {
-      const st = await fetch("/api/conversations/status", { cache: "no-store" });
-      const data = (await st.json()) as { cloud?: boolean };
-      setCloud(!!data.cloud);
-      if (!data.cloud) {
-        setProjects([]);
+      if (status !== "authenticated") {
+        setCloud(false);
+        setProjects(loadLocalProjects());
         return;
       }
-      const res = await fetch("/api/projects", { cache: "no-store" });
-      if (!res.ok) return;
-      const body = (await res.json()) as { projects?: ProjectDTO[] };
-      setProjects(body.projects ?? []);
-    } catch {
-      // ignore
+      try {
+        const st = await fetch("/api/conversations/status", {
+          cache: "no-store",
+        });
+        const data = (await st.json()) as { cloud?: boolean };
+        setCloud(!!data.cloud);
+        if (!data.cloud) {
+          setProjects(loadLocalProjects());
+          return;
+        }
+        const res = await fetch("/api/projects", { cache: "no-store" });
+        if (!res.ok) {
+          setProjects(loadLocalProjects());
+          setCloud(false);
+          return;
+        }
+        const body = (await res.json()) as { projects?: ProjectDTO[] };
+        setProjects(body.projects ?? []);
+      } catch {
+        setCloud(false);
+        setProjects(loadLocalProjects());
+      }
+    } finally {
+      setLoading(false);
     }
   }, [status]);
 
   useEffect(() => {
+    if (status === "loading") return;
     void refresh();
-  }, [refresh]);
+  }, [refresh, status]);
 
   // Restore project from the active conversation when the thread URL changes.
-  // New chats with no binding inherit the session-active project.
   useEffect(() => {
     const syncFromThread = () => {
       const conversationId = readThreadIdFromLocation();
@@ -122,7 +143,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       const generation = ++syncGeneration.current;
       void (async () => {
         const bound = await readConversationProjectId(conversationId);
-        if (generation !== syncGeneration.current) return; // stale switch
+        if (generation !== syncGeneration.current) return;
         syncingFromThread.current = true;
         if (bound) {
           setActiveProjectId(bound, { bindConversation: false });
@@ -148,18 +169,36 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
 
   const create = useCallback(
     async (title: string) => {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
-      if (!res.ok) return null;
-      const body = (await res.json()) as { project: ProjectDTO };
-      await refresh();
-      setActiveProjectId(body.project.id);
-      return body.project;
+      if (cloud) {
+        const res = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title }),
+        });
+        if (!res.ok) {
+          window.dispatchEvent(
+            new CustomEvent("aether:notice", {
+              detail: "Couldn’t create project. Try again.",
+            }),
+          );
+          return null;
+        }
+        const body = (await res.json()) as { project: ProjectDTO };
+        await refresh();
+        setActiveProjectId(body.project.id);
+        return body.project;
+      }
+      const project = createLocalProject(title);
+      setProjects(loadLocalProjects());
+      setActiveProjectId(project.id);
+      window.dispatchEvent(
+        new CustomEvent("aether:notice", {
+          detail: "Project saved on this device.",
+        }),
+      );
+      return project;
     },
-    [refresh, setActiveProjectId],
+    [cloud, refresh, setActiveProjectId],
   );
 
   const update = useCallback(
@@ -167,28 +206,37 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       id: string,
       patch: { title?: string; instructions?: string | null },
     ) => {
-      const res = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      if (!res.ok) return null;
-      const body = (await res.json()) as { project: ProjectDTO };
-      await refresh();
-      return body.project;
+      if (cloud) {
+        const res = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        if (!res.ok) return null;
+        const body = (await res.json()) as { project: ProjectDTO };
+        await refresh();
+        return body.project;
+      }
+      const project = updateLocalProject(id, patch);
+      setProjects(loadLocalProjects());
+      return project;
     },
-    [refresh],
+    [cloud, refresh],
   );
 
   const remove = useCallback(
     async (id: string) => {
-      await fetch(`/api/projects/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      });
+      if (cloud) {
+        await fetch(`/api/projects/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        });
+      } else {
+        deleteLocalProject(id);
+      }
       if (activeProjectId === id) setActiveProjectId(null);
       await refresh();
     },
-    [activeProjectId, refresh, setActiveProjectId],
+    [activeProjectId, cloud, refresh, setActiveProjectId],
   );
 
   const activeProject =
@@ -205,6 +253,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       update,
       remove,
       cloud,
+      loading,
     }),
     [
       projects,
@@ -216,6 +265,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       update,
       remove,
       cloud,
+      loading,
     ],
   );
 
