@@ -58,6 +58,8 @@ import { isHostedConfigured } from "@/lib/hosted/config";
 import { createFailoverLanguageModel } from "@/lib/hosted/failover";
 import { friendlyChatError } from "@/lib/chat-errors";
 import { CONTINUE_SYSTEM_ADDENDUM } from "@/lib/chat-continue";
+import { isHermesConfigured } from "@/lib/hermes/config";
+import { proxyChatToHermes } from "@/lib/hermes/proxy-chat";
 
 /**
  * Vercel enforces a plan-specific function wall clock.
@@ -200,11 +202,12 @@ export async function POST(req: Request) {
     const hosted = accessMode === "hosted";
 
     if (hosted) {
-      if (!isHostedConfigured()) {
+      // Hosted works via Vercel-side provider keys OR a remote Hermes gateway.
+      if (!isHostedConfigured() && !isHermesConfigured()) {
         return new Response(
           JSON.stringify({
             error:
-              "Aether Cloud is not configured on this server. Switch to Bring your own key in Settings, or ask the operator to set OPENROUTER_API_KEY.",
+              "Aether Cloud is not configured on this server. Switch to Bring your own key in Settings, or ask the operator to set OPENROUTER_API_KEY (or HERMES_BASE_URL + HERMES_API_KEY).",
           }),
           { status: 503, headers: { "Content-Type": "application/json" } },
         );
@@ -374,6 +377,84 @@ export async function POST(req: Request) {
       );
     }
 
+    const enrichedMessages = enrichMessagesWithAttachments(
+      messages,
+      attachments,
+      textPrefix,
+    );
+
+    if (harnessRunId) {
+      if (userId) {
+        void updateAgentRunStatus({
+          id: harnessRunId,
+          userId,
+          status:
+            harnessDepth === "deep" || timeBudget?.forceEarlyDraft
+              ? "verifying"
+              : "acting",
+          eventType: continueSegment ? "chat_continued" : "chat_started",
+          eventPayload: {
+            depth: harnessDepth,
+            intent: harnessIntent,
+            maxSteps: budget.maxSteps,
+            timeBudgetMinutes: timeBudget?.minutes ?? null,
+            surface: rawHarness?.surface ?? "chat",
+            engine: hosted && isHermesConfigured() ? "hermes" : "local",
+          },
+        });
+      }
+    }
+
+    // Hosted + Hermes: remote agent owns the tool loop. Browser never calls Hermes.
+    // BYOK keeps the in-process streamText path (user keys stay off Hermes).
+    if (hosted && isHermesConfigured()) {
+      console.info("[api/chat] hermes proxy", {
+        conversationId,
+        model: requestedModel,
+        runId: harnessRunId ?? null,
+        userId: userId ? "yes" : "no",
+      });
+      return proxyChatToHermes({
+        messages: enrichedMessages,
+        system,
+        model: requestedModel,
+        userId,
+        conversationId,
+        runId: harnessRunId,
+        abortSignal: req.signal,
+        onFinish: () => {
+          if (harnessRunId && userId) {
+            void updateAgentRunStatus({
+              id: harnessRunId,
+              userId,
+              status: "done",
+              eventType: "chat_finished",
+              eventPayload: {
+                depth: harnessDepth,
+                intent: harnessIntent,
+                engine: "hermes",
+              },
+            });
+          }
+        },
+        onError: (error) => {
+          console.error("[api/chat] hermes", error);
+          if (harnessRunId && userId) {
+            void updateAgentRunStatus({
+              id: harnessRunId,
+              userId,
+              status: "done",
+              eventType: "chat_error",
+              eventPayload: {
+                error: error instanceof Error ? error.message : "error",
+                engine: "hermes",
+              },
+            });
+          }
+        },
+      });
+    }
+
     let model: LanguageModel;
     if (hosted) {
       const candidates = listHostedCandidates(
@@ -400,33 +481,6 @@ export async function POST(req: Request) {
         modelId,
         origin: req.headers.get("origin"),
       });
-    }
-
-    const enrichedMessages = enrichMessagesWithAttachments(
-      messages,
-      attachments,
-      textPrefix,
-    );
-
-    if (harnessRunId) {
-      if (userId) {
-        void updateAgentRunStatus({
-          id: harnessRunId,
-          userId,
-          status:
-            harnessDepth === "deep" || timeBudget?.forceEarlyDraft
-              ? "verifying"
-              : "acting",
-          eventType: continueSegment ? "chat_continued" : "chat_started",
-          eventPayload: {
-            depth: harnessDepth,
-            intent: harnessIntent,
-            maxSteps: budget.maxSteps,
-            timeBudgetMinutes: timeBudget?.minutes ?? null,
-            surface: rawHarness?.surface ?? "chat",
-          },
-        });
-      }
     }
 
     const hasDrive = hasDriveEarly;

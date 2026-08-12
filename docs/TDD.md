@@ -153,7 +153,7 @@ Before a hard turn, Aether may **classify** the message: intent (chat / research
 | `src/app/layout.tsx` | Root layout: fonts, Session + Theme |
 | `src/app/(chat)/` | Chat routes (`/` and `/c/[threadId]`); pages return `null`, UI from shell |
 | `src/app/auth/` | Sign-in and magic-link verify pages |
-| `src/app/api/chat/route.ts` | Streaming chat proxy + tools |
+| `src/app/api/chat/route.ts` | Streaming chat proxy + tools (or Hermes when configured) |
 | `src/app/api/hosted/status/route.ts` | Hosted availability + ranked model catalog |
 | `src/app/api/harness/classify/route.ts` | Intent/depth classification |
 | `src/app/api/conversations/*` | Cloud thread list + message repos |
@@ -171,11 +171,13 @@ Before a hard turn, Aether may **classify** the message: intent (chat / research
 | `src/providers/` | React context: settings, runtime, harness, drive, github, vault, … |
 | `src/lib/hosted/` | Hosted config, router, catalog, ranking |
 | `src/lib/harness/` | Classify, budgets, tool registry, run store |
+| `src/lib/hermes/` | Optional remote Hermes proxy (config, message map, SSE→UIMessage bridge) |
 | `src/lib/db/` | Drizzle schema + Neon/PGlite bootstrap |
 | `src/lib/vault.ts` + `src/lib/vault/` | Local fallback + cloud store |
 | `src/auth.ts` | NextAuth configuration |
 | `src/app/globals.css` | Design tokens (parchment light / candlelight dark) |
 | `.env.example` | Documented optional env vars |
+| `deploy/hermes/` | Operator example for always-on Hermes gateway |
 | `docs/TDD.md` | This document |
 | `AGENTS.md` | Notes for Cursor Cloud agents |
 | `Match website layout/` | **Not Aether** — ignore |
@@ -282,14 +284,15 @@ Persisted client settings (`aether:settings:v1`) include:
 2. Optional **classify** (`POST /api/harness/classify`) unless heuristics say the turn is shallow.
 3. If classify asks for clarify → inline choices in the composer stack (not a heavy card).
 4. Client arms harness context and sends via assistant-ui transport → `POST /api/chat` with headers from `buildChatHeaders()` (`src/lib/settings.ts`).
-5. Server resolves the model (hosted router or BYOK), injects voice + memory + project instructions + harness addendum, builds tools, streams with a depth-based step budget.
-6. UI shows quiet status phrases while `thread.isRunning`; **Stop** cancels the stream.
+5. Server resolves the model (hosted router or BYOK), injects voice + memory + project instructions + harness addendum. **If `HERMES_BASE_URL` + `HERMES_API_KEY` are set and the turn is hosted**, the route proxies to remote Hermes (`src/lib/hermes/*`) and bridges OpenAI SSE → UIMessage stream — Hermes owns the tool loop. Otherwise it builds local tools and streams with a depth-based step budget (`prepareStep` / progressive unlock).
+6. UI shows quiet status phrases while `thread.isRunning`; **Stop** cancels the stream (aborts the Hermes fetch when that path is active).
 7. History adapter persists the turn to `localStorage` or cloud `PUT /api/conversations/[id]/messages`.
 
 Primary modules:
 
 - Client runtime: `src/providers/runtime-provider.tsx`
 - Chat route: `src/app/api/chat/route.ts`
+- Hermes adapter: `src/lib/hermes/` (optional remote agent)
 - Thread UI: `src/components/assistant-ui/thread.tsx`
 
 ---
