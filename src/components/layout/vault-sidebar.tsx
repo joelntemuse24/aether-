@@ -35,7 +35,6 @@ type VaultSidebarProps = {
 
 export const VaultSidebar: FC<VaultSidebarProps> = ({
   notes,
-  activeNoteId,
   view,
   title,
   content,
