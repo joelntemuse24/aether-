@@ -11,6 +11,12 @@ import {
 } from "react";
 
 import type { ArtifactKind } from "@/lib/tools";
+import {
+  getLocalArtifact,
+  loadLocalArtifacts,
+  upsertLocalArtifact,
+  type LocalArtifact,
+} from "@/lib/artifacts/local";
 import { useSession } from "@/providers/session-provider";
 
 export type Artifact = {
@@ -27,8 +33,10 @@ export type Artifact = {
   code: string;
   /** MIME type for image artifacts. */
   mime?: string;
-  /** True when loaded from /api/artifacts. */
+  /** True when loaded from /api/artifacts (cloud). */
   persisted?: boolean;
+  /** True when saved in browser localStorage. */
+  local?: boolean;
 };
 
 export type SavedArtifactSummary = {
@@ -37,6 +45,7 @@ export type SavedArtifactSummary = {
   title: string;
   language?: string;
   updatedAt?: string;
+  source: "cloud" | "local";
 };
 
 type ArtifactContextValue = {
@@ -49,11 +58,26 @@ type ArtifactContextValue = {
   savedCloud: boolean;
   refreshSaved: () => Promise<void>;
   openSavedById: (id: string) => Promise<boolean>;
-  /** Persist current artifact content when it was saved to the cloud. */
+  /** Persist current artifact content (cloud and/or local). */
   persistArtifactContent: (content: string) => Promise<boolean>;
+  /** Explicit Save — works offline; uses cloud when signed in + DB. */
+  saveCurrentArtifact: () => Promise<boolean>;
+  /** Keep session/local list in sync when a tool creates an artifact. */
+  rememberSessionArtifact: (artifact: Artifact) => void;
 };
 
 const ArtifactContext = createContext<ArtifactContextValue | null>(null);
+
+function localToSummary(a: LocalArtifact): SavedArtifactSummary {
+  return {
+    id: a.id,
+    kind: a.kind,
+    title: a.title,
+    language: a.language,
+    updatedAt: a.updatedAt,
+    source: "local",
+  };
+}
 
 export function ArtifactProvider({ children }: { children: ReactNode }) {
   const { status } = useSession();
@@ -75,10 +99,24 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
     setOpen((v) => !v);
   }, []);
 
+  const mergeLocalIntoSaved = useCallback(
+    (cloudList: SavedArtifactSummary[]) => {
+      const local = loadLocalArtifacts().map(localToSummary);
+      const cloudIds = new Set(cloudList.map((a) => a.id));
+      // Prefer cloud copy when same id; append local-only.
+      const localsOnly = local.filter((a) => !cloudIds.has(a.id));
+      setSaved([...cloudList, ...localsOnly]);
+    },
+    [],
+  );
+
   const refreshSaved = useCallback(async () => {
+    // Always show local artifacts.
+    const local = loadLocalArtifacts().map(localToSummary);
+
     if (status !== "authenticated") {
-      setSaved([]);
       setSavedCloud(false);
+      setSaved(local);
       return;
     }
     try {
@@ -86,11 +124,14 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
       const data = (await st.json()) as { cloud?: boolean };
       setSavedCloud(!!data.cloud);
       if (!data.cloud) {
-        setSaved([]);
+        setSaved(local);
         return;
       }
       const res = await fetch("/api/artifacts", { cache: "no-store" });
-      if (!res.ok) return;
+      if (!res.ok) {
+        setSaved(local);
+        return;
+      }
       const body = (await res.json()) as {
         artifacts?: Array<{
           id: string;
@@ -100,26 +141,57 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
           updatedAt?: string;
         }>;
       };
-      setSaved(
-        (body.artifacts ?? []).map((a) => ({
+      const cloudList: SavedArtifactSummary[] = (body.artifacts ?? []).map(
+        (a) => ({
           id: a.id,
           kind: a.kind,
           title: a.title,
           language: a.language,
           updatedAt: a.updatedAt,
-        })),
+          source: "cloud" as const,
+        }),
       );
+      mergeLocalIntoSaved(cloudList);
     } catch {
-      // ignore
+      setSaved(local);
     }
-  }, [status]);
+  }, [status, mergeLocalIntoSaved]);
 
   useEffect(() => {
     void refreshSaved();
   }, [refreshSaved]);
 
+  const rememberSessionArtifact = useCallback(
+    (a: Artifact) => {
+      if (!a.code?.trim()) return;
+      upsertLocalArtifact({
+        id: a.id,
+        kind: a.kind || "document",
+        title: a.title || "Artifact",
+        language: a.language,
+        content: a.code,
+      });
+      void refreshSaved();
+    },
+    [refreshSaved],
+  );
+
   const openSavedById = useCallback(
     async (id: string) => {
+      // Local first (works offline / no cloud).
+      const local = getLocalArtifact(id);
+      if (local) {
+        openArtifact({
+          id: local.id,
+          title: local.title,
+          kind: (local.kind as ArtifactKind) || "document",
+          language: local.language,
+          code: local.content,
+          local: true,
+          persisted: false,
+        });
+        return true;
+      }
       try {
         const res = await fetch(
           `/api/artifacts?id=${encodeURIComponent(id)}`,
@@ -145,6 +217,14 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
           code: a.content,
           persisted: true,
         });
+        // Mirror to local for offline reopen.
+        upsertLocalArtifact({
+          id: a.id,
+          kind: a.kind,
+          title: a.title,
+          language: a.language,
+          content: a.content,
+        });
         return true;
       } catch {
         return false;
@@ -156,7 +236,81 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
   const persistArtifactContent = useCallback(
     async (content: string) => {
       const current = artifact;
-      if (!current?.persisted || !current.id) return false;
+      if (!current?.id) return false;
+
+      // Always keep a local copy so sidebar/reopen work without cloud.
+      upsertLocalArtifact({
+        id: current.id,
+        kind: current.kind || "document",
+        title: current.title,
+        language: current.language,
+        content,
+      });
+
+      if (current.persisted) {
+        try {
+          const res = await fetch("/api/artifacts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: current.id,
+              kind: current.kind || "document",
+              title: current.title,
+              language: current.language,
+              content,
+            }),
+          });
+          if (!res.ok) {
+            setArtifact((prev) =>
+              prev && prev.id === current.id
+                ? { ...prev, code: content, local: true }
+                : prev,
+            );
+            void refreshSaved();
+            return true; // local saved even if cloud failed
+          }
+          setArtifact((prev) =>
+            prev && prev.id === current.id
+              ? { ...prev, code: content, persisted: true, local: true }
+              : prev,
+          );
+          void refreshSaved();
+          return true;
+        } catch {
+          setArtifact((prev) =>
+            prev && prev.id === current.id
+              ? { ...prev, code: content, local: true }
+              : prev,
+          );
+          void refreshSaved();
+          return true;
+        }
+      }
+
+      setArtifact((prev) =>
+        prev && prev.id === current.id
+          ? { ...prev, code: content, local: true }
+          : prev,
+      );
+      void refreshSaved();
+      return true;
+    },
+    [artifact, refreshSaved],
+  );
+
+  const saveCurrentArtifact = useCallback(async () => {
+    const current = artifact;
+    if (!current?.id || !current.code) return false;
+
+    upsertLocalArtifact({
+      id: current.id,
+      kind: current.kind || "document",
+      title: current.title,
+      language: current.language,
+      content: current.code,
+    });
+
+    if (status === "authenticated" && savedCloud) {
       try {
         const res = await fetch("/api/artifacts", {
           method: "POST",
@@ -166,21 +320,43 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
             kind: current.kind || "document",
             title: current.title,
             language: current.language,
-            content,
+            content: current.code,
           }),
         });
-        if (!res.ok) return false;
-        setArtifact((prev) =>
-          prev && prev.id === current.id ? { ...prev, code: content } : prev,
-        );
-        void refreshSaved();
-        return true;
+        if (res.ok) {
+          const body = (await res.json()) as {
+            artifact?: { id: string };
+          };
+          const id = body.artifact?.id || current.id;
+          setArtifact((prev) =>
+            prev
+              ? { ...prev, id, persisted: true, local: true }
+              : prev,
+          );
+          void refreshSaved();
+          window.dispatchEvent(
+            new CustomEvent("aether:notice", {
+              detail: "Artifact saved to your account.",
+            }),
+          );
+          return true;
+        }
       } catch {
-        return false;
+        /* fall through to local notice */
       }
-    },
-    [artifact, refreshSaved],
-  );
+    }
+
+    setArtifact((prev) =>
+      prev ? { ...prev, local: true, persisted: false } : prev,
+    );
+    void refreshSaved();
+    window.dispatchEvent(
+      new CustomEvent("aether:notice", {
+        detail: "Artifact saved on this device.",
+      }),
+    );
+    return true;
+  }, [artifact, refreshSaved, savedCloud, status]);
 
   const value = useMemo(
     () => ({
@@ -194,6 +370,8 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
       refreshSaved,
       openSavedById,
       persistArtifactContent,
+      saveCurrentArtifact,
+      rememberSessionArtifact,
     }),
     [
       artifact,
@@ -206,6 +384,8 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
       refreshSaved,
       openSavedById,
       persistArtifactContent,
+      saveCurrentArtifact,
+      rememberSessionArtifact,
     ],
   );
 

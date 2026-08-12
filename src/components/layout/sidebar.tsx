@@ -64,7 +64,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { theme, toggleTheme } = useTheme();
   const { data: session, status } = useSession();
   const { projects } = useProjects();
-  const { saved, savedCloud, openSavedById, refreshSaved } = useArtifact();
+  const { saved, openSavedById, refreshSaved } = useArtifact();
   const vault = useVault();
   const router = useRouter();
   const user = session?.user;
@@ -75,8 +75,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const [artifactsExpanded, setArtifactsExpanded] = useState(false);
 
   useEffect(() => {
-    if (status === "authenticated" && savedCloud) void refreshSaved();
-  }, [status, savedCloud, refreshSaved]);
+    void refreshSaved();
+  }, [status, refreshSaved]);
 
   const goNewChat = () => {
     beginNewChatSession();
@@ -95,6 +95,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <VaultSidebar
           notes={vault.notes}
           activeNoteId={vault.activeNoteId}
+          view={vault.view}
           title={vault.title}
           content={vault.content}
           width={vault.width}
@@ -105,6 +106,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           onNew={() => vault.beginNote()}
           onSelect={(note) => vault.beginNote(note)}
           onSave={() => void vault.saveNote()}
+          onBackToList={() => vault.setView("list")}
           onDelete={(id) => void vault.deleteNote(id)}
           onClose={() => vault.setVaultOpen(false)}
           onDetach={(point) => {
@@ -320,11 +322,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <SidebarNavItem
             icon={<FileTextIcon className="size-3.5" />}
             label="Artifacts"
-            meta={
-              isAuthenticated && savedCloud && saved.length > 0
-                ? String(saved.length)
-                : undefined
-            }
+            meta={saved.length > 0 ? String(saved.length) : undefined}
             onClick={() => setArtifactsExpanded((v) => !v)}
           />
           {artifactsExpanded && <SavedArtifactsSection />}
@@ -627,17 +625,22 @@ function ProjectsSection() {
   );
 }
 
-/** Cloud-saved artifacts — open by id into the panel. */
+/** Saved artifacts (this device + cloud) — open by id into the panel. */
 function SavedArtifactsSection() {
-  const { saved, savedCloud, openSavedById, refreshSaved } = useArtifact();
-  const { status } = useSession();
+  const { saved, openSavedById, refreshSaved } = useArtifact();
 
   useEffect(() => {
-    if (status === "authenticated" && savedCloud) void refreshSaved();
-  }, [status, savedCloud, refreshSaved]);
+    void refreshSaved();
+  }, [refreshSaved]);
 
-  if (status !== "authenticated" || !savedCloud || saved.length === 0) {
-    return null;
+  if (saved.length === 0) {
+    return (
+      <div className="px-3 pb-2">
+        <p className="px-0.5 text-[11px] leading-snug text-[var(--muted-soft)]">
+          Artifacts you create or save appear here.
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -645,17 +648,24 @@ function SavedArtifactsSection() {
       <div className="mb-1.5 px-0.5">
         <Label>Saved artifacts</Label>
       </div>
-      <div className="flex max-h-28 flex-col gap-0.5 overflow-y-auto">
-        {saved.slice(0, 12).map((a) => (
+      <div className="flex max-h-36 flex-col gap-0.5 overflow-y-auto">
+        {saved.slice(0, 20).map((a) => (
           <button
-            key={a.id}
+            key={`${a.source}-${a.id}`}
             type="button"
             onClick={() => void openSavedById(a.id)}
             className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
-            title={a.title}
+            title={
+              a.source === "cloud"
+                ? `${a.title} · account`
+                : `${a.title} · this device`
+            }
           >
             <FileTextIcon className="size-3 shrink-0 opacity-70" />
-            <span className="truncate">{a.title}</span>
+            <span className="min-w-0 flex-1 truncate">{a.title}</span>
+            <span className="shrink-0 text-[10px] text-[var(--muted-soft)]">
+              {a.source === "cloud" ? "cloud" : "local"}
+            </span>
           </button>
         ))}
       </div>

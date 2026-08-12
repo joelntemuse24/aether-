@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 type VaultSidebarProps = {
   notes: VaultNote[];
   activeNoteId: string | null;
+  /** Explicit list vs editor — empty Untitled draft is still "edit". */
+  view: "list" | "edit";
   title: string;
   content: string;
   width: number;
@@ -24,6 +26,7 @@ type VaultSidebarProps = {
   onNew: () => void;
   onSelect: (note: VaultNote) => void;
   onSave: () => void;
+  onBackToList?: () => void;
   onDelete?: (id: string) => void;
   onClose: () => void;
   onDetach: (point: { x: number; y: number }) => void;
@@ -32,7 +35,7 @@ type VaultSidebarProps = {
 
 export const VaultSidebar: FC<VaultSidebarProps> = ({
   notes,
-  activeNoteId,
+  view,
   title,
   content,
   width,
@@ -43,6 +46,7 @@ export const VaultSidebar: FC<VaultSidebarProps> = ({
   onNew,
   onSelect,
   onSave,
+  onBackToList,
   onDelete,
   onClose,
   onDetach,
@@ -57,8 +61,7 @@ export const VaultSidebar: FC<VaultSidebarProps> = ({
     x: number;
     width: number;
   } | null>(null);
-  const editing =
-    activeNoteId !== null || title !== "Untitled note" || content !== "";
+  const editing = view === "edit";
 
   return (
     <aside
@@ -161,11 +164,20 @@ export const VaultSidebar: FC<VaultSidebarProps> = ({
             onPointerUp={() => setDragStart(null)}
           >
             <GripVerticalIcon className="size-3.5 text-[var(--muted-soft)]" />
+            {onBackToList ? (
+              <button
+                type="button"
+                onClick={onBackToList}
+                className="rounded-md px-1.5 py-1 text-[10px] font-medium text-[var(--muted)] hover:text-[var(--text)]"
+              >
+                Notes
+              </button>
+            ) : null}
             <input
               value={title}
               onChange={(e) => onTitleChange(e.target.value)}
               maxLength={42}
-              aria-label="Vault name"
+              aria-label="Note title"
               className="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[var(--text)] outline-none"
             />
             <button

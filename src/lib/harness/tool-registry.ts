@@ -116,7 +116,14 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
         title,
         language,
         content,
-      }): Promise<CreateArtifactOutput & { id?: string; persisted?: boolean }> => {
+      }): Promise<
+        CreateArtifactOutput & {
+          id?: string;
+          persisted?: boolean;
+          /** Echo content so the client can open even if args were truncated. */
+          content?: string;
+        }
+      > => {
         if (ctx.userId && isCloudDbConfigured()) {
           try {
             const saved = await saveArtifact(ctx.userId, {
@@ -127,12 +134,25 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
               projectId: ctx.projectId ?? undefined,
               conversationId: ctx.conversationId ?? undefined,
             });
-            return { ok: true, kind, title, id: saved.id, persisted: true };
+            return {
+              ok: true,
+              kind,
+              title,
+              id: saved.id,
+              persisted: true,
+              content,
+            };
           } catch (err) {
             console.warn("[create_artifact] persist failed", err);
           }
         }
-        return { ok: true, kind, title, persisted: false };
+        return {
+          ok: true,
+          kind,
+          title,
+          persisted: false,
+          content,
+        };
       },
     }),
     [TOOL_NAMES.fetchUrl]: tool({
