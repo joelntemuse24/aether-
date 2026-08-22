@@ -128,7 +128,7 @@ If `/health` never returns 200: check that `API_SERVER_ENABLED=true`, `API_SERVE
 | Topic | Source |
 |-------|--------|
 | Image `nousresearch/hermes-agent:latest`, volume `/opt/data`, command `gateway run` | [Docker user guide](https://hermes-agent.nousresearch.com/docs/user-guide/docker) |
-| `ENTRYPOINT` = `entrypoint-dispatch.sh` → s6 `/init` when the image owns PID 1; empty official `CMD` | [Official Dockerfile](https://github.com/NousResearch/hermes-agent/blob/main/Dockerfile) (checked 2026-08-22) |
+| `ENTRYPOINT` = `entrypoint-dispatch.sh` → s6 `/init` when the image owns PID 1; empty official `CMD` | [Official Dockerfile](https://github.com/NousResearch/hermes-agent/blob/main/Dockerfile) and live `nousresearch/hermes-agent:latest` amd64 config (2026-08-22 06:32 UTC): `Entrypoint=['/opt/hermes/docker/entrypoint-dispatch.sh']`, `Cmd=None`, `User=root`, volume `/opt/data`, `HERMES_HOME=/opt/data`. `HERMES_DASHBOARD` and `API_SERVER_ENABLED` are unset in the stock image. |
 | `API_SERVER_ENABLED` / `HOST` / `PORT` / `KEY` (min 8), default port **8642**, `GET /health` and `GET /v1/models` | [API server](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server) |
 | `direct_model_requests` under `gateway.platforms.api_server` | Same API server page |
 | OpenRouter via `OPENROUTER_API_KEY` + `model.provider: openrouter` | [Providers](https://hermes-agent.nousresearch.com/docs/integrations/providers) |
