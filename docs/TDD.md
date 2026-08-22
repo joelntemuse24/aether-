@@ -170,8 +170,8 @@ Before a hard turn, Aether may **classify** the message: intent (chat / research
 | `src/components/settings/` | Preferences dialog |
 | `src/providers/` | React context: settings, runtime, harness, drive, github, vault, … |
 | `src/lib/hosted/` | Hosted config, router, catalog, ranking |
-| `src/lib/harness/` | Classify, budgets, tool registry, run store |
-| `src/lib/hermes/` | Optional remote Hermes proxy (config, message map, SSE→UIMessage bridge) |
+| `src/lib/harness/` | Classify, budgets, tool registry, run store. `loop-efficiency.ts` + `legacy-local-stream.ts` are the isolated BYOK / no-Hermes fallback — not the hosted live path. |
+| `src/lib/hermes/` | **Hosted live path:** config, provider map, message convert, SSE→UIMessage bridge, stop, Aether tool-seam prompt |
 | `src/lib/db/` | Drizzle schema + Neon/PGlite bootstrap |
 | `src/lib/vault.ts` + `src/lib/vault/` | Local fallback + cloud store |
 | `src/auth.ts` | NextAuth configuration |
@@ -246,6 +246,16 @@ Cloud features activate only when DB is configured **and** the user is signed in
 |----------|---------|
 | `BRAVE_SEARCH_API_KEY` | Higher-quality `web_search` (else Wikipedia / DuckDuckGo fallbacks) |
 
+### 6.5 Remote Hermes (hosted live path)
+
+| Variable | Purpose |
+|----------|---------|
+| `HERMES_BASE_URL` | Operator Hermes origin (trailing `/v1` optional) |
+| `HERMES_API_KEY` | Server-only bearer key (never sent to the browser) |
+| `HERMES_MODEL_NAME` | Optional default / fallback picker id |
+| `HERMES_PROVIDER` | Provider slug sent with the picker model (default hosted: `openrouter`) |
+| `HERMES_ENABLED=0` | Force-disable even if URL+key are set |
+
 Full comments live in `.env.example`.
 
 ---
@@ -284,15 +294,16 @@ Persisted client settings (`aether:settings:v1`) include:
 2. Optional **classify** (`POST /api/harness/classify`) unless heuristics say the turn is shallow.
 3. If classify asks for clarify → inline choices in the composer stack (not a heavy card).
 4. Client arms harness context and sends via assistant-ui transport → `POST /api/chat` with headers from `buildChatHeaders()` (`src/lib/settings.ts`).
-5. Server resolves the model (hosted router or BYOK), injects voice + memory + project instructions + harness addendum. **If `HERMES_BASE_URL` + `HERMES_API_KEY` are set and the turn is hosted**, the route proxies to remote Hermes (`src/lib/hermes/*`) and bridges OpenAI SSE → UIMessage stream — Hermes owns the tool loop. Otherwise it builds local tools and streams with a depth-based step budget (`prepareStep` / progressive unlock).
-6. UI shows quiet status phrases while `thread.isRunning`; **Stop** cancels the stream (aborts the Hermes fetch when that path is active).
+5. Server authenticates (optional), injects voice + memory + project + harness notes. **If `HERMES_BASE_URL` + `HERMES_API_KEY` are set and the turn is hosted**, `/api/chat` is a thin orchestrator: it sends `model` + `provider` to Hermes `/v1/chat/completions` with session headers and bridges OpenAI SSE → UIMessage stream. Hermes owns the tool loop. Aether-specific tools (memory write, Drive, GitHub, artifacts, confirm cards) are prompt-documented this slice, not executed in-process. **Otherwise** (BYOK, or hosted without Hermes env) it uses the isolated `streamLegacyLocalChat` path (`prepareStep` / progressive unlock). Missing both Hermes and hosted keys → 503 / `hosted/status.available=false` (Preferences opens; chat does not hang).
+6. UI shows quiet status phrases while `thread.isRunning`; **Stop** aborts `/api/chat` (Hermes fetch) and, if a Hermes `run_id` is known, `POST /v1/runs/{id}/stop`.
 7. History adapter persists the turn to `localStorage` or cloud `PUT /api/conversations/[id]/messages`.
 
 Primary modules:
 
 - Client runtime: `src/providers/runtime-provider.tsx`
 - Chat route: `src/app/api/chat/route.ts`
-- Hermes adapter: `src/lib/hermes/` (optional remote agent)
+- Hermes adapter: `src/lib/hermes/` (hosted live path)
+- Legacy local loop: `src/lib/harness/legacy-local-stream.ts`
 - Thread UI: `src/components/assistant-ui/thread.tsx`
 
 ---

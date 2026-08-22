@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { DEFAULT_HOSTED_MODEL, filterCatalogForCapabilities } from "@/lib/hosted/catalog";
-import { getHostedCapabilities } from "@/lib/hosted/config";
+import { getHostedCapabilities, isHostedConfigured } from "@/lib/hosted/config";
+import {
+  hermesFallbackPickerModels,
+  isHostedChatAvailable,
+} from "@/lib/hosted/availability";
 import { fetchRankedHostedCatalog } from "@/lib/hosted/openrouter-catalog";
 
 export const runtime = "nodejs";
@@ -11,6 +15,7 @@ export const runtime = "nodejs";
  */
 export async function GET() {
   const capabilities = getHostedCapabilities();
+  const available = isHostedChatAvailable(process.env, isHostedConfigured());
 
   let models: Awaited<ReturnType<typeof fetchRankedHostedCatalog>>["models"] = [];
   let defaultModel: string = DEFAULT_HOSTED_MODEL;
@@ -25,11 +30,19 @@ export async function GET() {
       "";
   } catch (err) {
     console.error("[api/hosted/status] catalog", err);
-    // Hosted may still be available for chat; picker will show empty/error state.
+    // Hosted may still be available via Hermes; picker falls back below.
+  }
+
+  if (models.length === 0 && available) {
+    const fallback = hermesFallbackPickerModels();
+    if (fallback.length) {
+      models = fallback;
+      defaultModel = fallback[0].id;
+    }
   }
 
   return NextResponse.json({
-    available: capabilities.available,
+    available,
     capabilities: {
       claude: capabilities.claude,
       gpt: capabilities.gpt,

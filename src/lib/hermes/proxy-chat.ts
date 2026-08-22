@@ -7,6 +7,8 @@ import {
 } from "./config";
 import { streamHermesChatCompletions } from "./client";
 import { toOpenAIChatMessages } from "./messages";
+import { resolveHermesModelRequest } from "./provider";
+import { extractHermesRunId, stopHermesRun } from "./stop";
 import { bridgeHermesChatCompletionToUIMessageResponse } from "./stream-bridge";
 
 export type ProxyChatToHermesArgs = {
@@ -18,7 +20,10 @@ export type ProxyChatToHermesArgs = {
   conversationId: string | null;
   runId?: string;
   abortSignal?: AbortSignal;
-  /** Optional OpenRouter-style provider slug for Hermes direct routing */
+  accessMode?: "hosted" | "byok";
+  /** BYOK provider header — used only to pick a Hermes provider slug */
+  byokProvider?: string | null;
+  /** Optional explicit provider slug (wins over resolver) */
   provider?: string;
   config?: HermesConfig;
   onFinish?: (info: { completionId?: string }) => void;
@@ -26,7 +31,7 @@ export type ProxyChatToHermesArgs = {
 };
 
 /**
- * Forward a hosted chat turn to remote Hermes and return a UIMessage stream
+ * Forward a chat turn to remote Hermes and return a UIMessage stream
  * Response compatible with assistant-ui / useChat.
  */
 export async function proxyChatToHermes(
@@ -56,24 +61,47 @@ export async function proxyChatToHermes(
     conversationId: args.conversationId,
   });
 
+  const resolved = resolveHermesModelRequest({
+    requestedModel: args.model || config.modelName,
+    accessMode: args.accessMode ?? "hosted",
+    byokProvider: args.byokProvider,
+    defaultModelName: config.modelName,
+  });
+  const provider = args.provider || resolved.provider;
+
+  let seenRunId: string | undefined;
+  const noteRunId = (id: string | null | undefined) => {
+    if (!id || seenRunId) return;
+    seenRunId = id;
+  };
+
+  const abortSignal = args.abortSignal;
+  const onAbortStop = () => {
+    if (!seenRunId) return;
+    void stopHermesRun({ config, runId: seenRunId });
+  };
+  abortSignal?.addEventListener("abort", onAbortStop, { once: true });
+
   let upstream: Response;
   try {
     upstream = await streamHermesChatCompletions({
       config,
       body: {
-        model: args.model || config.modelName,
+        model: resolved.model,
         messages: openaiMessages,
         stream: true,
-        ...(args.provider ? { provider: args.provider } : {}),
+        ...(provider ? { provider } : {}),
       },
       sessionId: args.conversationId,
       sessionKey,
       idempotencyKey: args.runId,
-      abortSignal: args.abortSignal,
+      abortSignal,
     });
   } catch (error) {
+    abortSignal?.removeEventListener("abort", onAbortStop);
     args.onError?.(error);
-    if (args.abortSignal?.aborted) {
+    if (abortSignal?.aborted) {
+      onAbortStop();
       return new Response(null, { status: 499 });
     }
     console.error("[hermes] fetch failed", error);
@@ -85,7 +113,10 @@ export async function proxyChatToHermes(
     );
   }
 
+  noteRunId(extractHermesRunId({ headers: upstream.headers }));
+
   if (!upstream.ok || !upstream.body) {
+    abortSignal?.removeEventListener("abort", onAbortStop);
     const detail = await upstream.text().catch(() => "");
     console.error(
       "[hermes] upstream error",
@@ -110,15 +141,20 @@ export async function proxyChatToHermes(
 
   return bridgeHermesChatCompletionToUIMessageResponse({
     body: upstream.body,
-    abortSignal: args.abortSignal,
+    abortSignal,
+    onRunId: noteRunId,
     onError: (error) => {
       args.onError?.(error);
       return friendlyChatError(error);
     },
     onEnd: (info) => {
-      if (!info.aborted) {
-        args.onFinish?.({ completionId: info.completionId });
+      abortSignal?.removeEventListener("abort", onAbortStop);
+      if (info.aborted) {
+        noteRunId(info.runId);
+        onAbortStop();
+        return;
       }
+      args.onFinish?.({ completionId: info.completionId });
     },
   });
 }

@@ -14,6 +14,7 @@ import {
   toolNameFromProgress,
   type HermesToolProgress,
 } from "./sse";
+import { extractHermesRunId } from "./stop";
 
 export type BridgeHermesStreamArgs = {
   body: ReadableStream<Uint8Array>;
@@ -21,8 +22,10 @@ export type BridgeHermesStreamArgs = {
   onError?: (error: unknown) => string;
   /** Optional correlation callback when Hermes completion id is known */
   onCompletionId?: (id: string) => void;
+  /** Hermes Runs API id when present on SSE payloads */
+  onRunId?: (runId: string) => void;
   /** Called after the upstream stream is fully consumed (success, abort, or error). */
-  onEnd?: (info: { completionId?: string; aborted?: boolean }) => void;
+  onEnd?: (info: { completionId?: string; aborted?: boolean; runId?: string }) => void;
 };
 
 /**
@@ -41,8 +44,17 @@ export function bridgeHermesChatCompletionToUIMessageResponse(
       let textStarted = false;
       let toolSeq = 0;
       let completionId: string | undefined;
+      let runId: string | undefined;
       let aborted = false;
       const openTools = new Set<string>();
+
+      const noteRunId = (json: unknown) => {
+        if (runId) return;
+        const found = extractHermesRunId({ json });
+        if (!found) return;
+        runId = found;
+        args.onRunId?.(found);
+      };
 
       const ensureStart = () => {
         if (started) return;
@@ -118,12 +130,16 @@ export function bridgeHermesChatCompletionToUIMessageResponse(
 
             if (frame.event === "hermes.tool.progress") {
               const progress = parseHermesToolProgress(frame.data);
-              if (progress) writeToolProgress(progress);
+              if (progress) {
+                noteRunId(progress);
+                writeToolProgress(progress);
+              }
               continue;
             }
 
             const chunk = parseChatCompletionChunk(frame.data);
             if (!chunk) continue;
+            noteRunId(chunk);
             if (chunk.id) {
               completionId = chunk.id;
               args.onCompletionId?.(chunk.id);
@@ -148,11 +164,15 @@ export function bridgeHermesChatCompletionToUIMessageResponse(
             if (frame.data === "[DONE]") continue;
             if (frame.event === "hermes.tool.progress") {
               const progress = parseHermesToolProgress(frame.data);
-              if (progress) writeToolProgress(progress);
+              if (progress) {
+                noteRunId(progress);
+                writeToolProgress(progress);
+              }
               continue;
             }
             const chunk = parseChatCompletionChunk(frame.data);
             if (!chunk) continue;
+            noteRunId(chunk);
             const delta = contentDeltaFromChunk(chunk);
             if (delta) {
               ensureTextStart();
@@ -169,7 +189,7 @@ export function bridgeHermesChatCompletionToUIMessageResponse(
             writer.write({ type: "finish-step" });
           }
           writer.write({ type: "abort" });
-          args.onEnd?.({ completionId, aborted: true });
+          args.onEnd?.({ completionId, runId, aborted: true });
           return;
         }
 
@@ -183,19 +203,19 @@ export function bridgeHermesChatCompletionToUIMessageResponse(
         }
         writer.write({ type: "finish-step" });
         writer.write({ type: "finish", finishReason: "stop" });
-        args.onEnd?.({ completionId, aborted: false });
+        args.onEnd?.({ completionId, runId, aborted: false });
       } catch (error) {
         if (args.abortSignal?.aborted) {
           aborted = true;
           writer.write({ type: "abort" });
-          args.onEnd?.({ completionId, aborted: true });
+          args.onEnd?.({ completionId, runId, aborted: true });
           return;
         }
         const message = onError(error);
         if (message) {
           writer.write({ type: "error", errorText: message });
         }
-        args.onEnd?.({ completionId, aborted: false });
+        args.onEnd?.({ completionId, runId, aborted: false });
       } finally {
         try {
           reader.releaseLock();

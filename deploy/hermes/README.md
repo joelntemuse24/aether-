@@ -36,7 +36,9 @@ HERMES_API_KEY=same-as-API_SERVER_KEY
 # HERMES_MODEL_NAME=hermes-agent
 ```
 
-When these are set, hosted chat uses Hermes. BYOK still runs the in-process loop on Vercel.
+When these are set, hosted chat uses Hermes (picker `model` + `provider`, default `openrouter`). BYOK still runs the isolated in-process loop on Vercel. `/api/hosted/status` reports Cloud as available so the UI does not sit on “Chat isn’t ready”.
+
+Optional: `HERMES_PROVIDER=openai|anthropic|openrouter` if the Hermes host is not OpenRouter.
 
 ## Tenancy headers Aether sends
 
