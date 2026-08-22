@@ -1,0 +1,23 @@
+# Railway service config for the remote gateway host — not the Next.js app.
+#
+# Config as Code is deprecated for *new* Railway services (hard cutoff
+# 2026-12-01). Also set the service variable:
+#   RAILWAY_DOCKERFILE_PATH=deploy/hermes/Dockerfile
+# A repo-root Dockerfile is the auto-detect safety net so connecting
+# joelntemuse24/aether- cannot Railpack/Nixpack the website.
+#
+# Do NOT set startCommand. Official ENTRYPOINT is entrypoint-dispatch.sh
+# (s6). A Railway start command replaces it and breaks supervision.
+# https://docs.railway.com/builds/build-and-start-commands
+# https://hermes-agent.nousresearch.com/docs/user-guide/docker
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "deploy/hermes/Dockerfile"
+watchPatterns = ["deploy/hermes/**", "railway.toml", "Dockerfile"]
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

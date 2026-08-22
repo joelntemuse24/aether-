@@ -1,19 +1,24 @@
-# Example only — replace image/build with your Hermes fork and add TLS (Caddy/Traefik).
+# Local / VPS example. Railway uses deploy/hermes/Dockerfile + railway.toml.
+# Do not enable HERMES_DASHBOARD. Do not mount docker.sock.
 services:
-  hermes:
-    # image: your-registry/aether-hermes:latest
-    build: .
+  gateway:
+    build:
+      context: ../..
+      dockerfile: deploy/hermes/Dockerfile
+    restart: unless-stopped
     ports:
       - "8642:8642"
     environment:
       API_SERVER_ENABLED: "true"
       API_SERVER_HOST: "0.0.0.0"
       API_SERVER_PORT: "8642"
-      API_SERVER_KEY: "${HERMES_API_KEY}"
+      PORT: "8642"
+      API_SERVER_KEY: "${API_SERVER_KEY}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
+      HERMES_DASHBOARD: "0"
+      HERMES_GATEWAY_BOOTSTRAP_STATE: "running"
     volumes:
-      - hermes-data:/root/.hermes
-    restart: unless-stopped
+      - hermes-data:/opt/data
 
 volumes:
   hermes-data:

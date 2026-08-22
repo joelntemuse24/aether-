@@ -177,7 +177,7 @@ Before a hard turn, Aether may **classify** the message: intent (chat / research
 | `src/auth.ts` | NextAuth configuration |
 | `src/app/globals.css` | Design tokens (parchment light / candlelight dark) |
 | `.env.example` | Documented optional env vars |
-| `deploy/hermes/` | Operator example for always-on Hermes gateway |
+| `deploy/hermes/` | Railway trial/free-tier host for the remote gateway (`Dockerfile`, seed, operator README) |
 | `docs/TDD.md` | This document |
 | `AGENTS.md` | Notes for Cursor Cloud agents |
 | `Match website layout/` | **Not Aether** — ignore |

@@ -1,0 +1,46 @@
+# First-boot seed for the Aether Railway host.
+# The official image copies /opt/hermes/cli-config.yaml.example →
+# /opt/data/config.yaml only when that file is missing (stage2-hook.sh
+# seed_one). A live volume is never overwritten.
+#
+# Keys below are from current Hermes docs, not invented:
+# - model.provider / model.default:
+#   https://hermes-agent.nousresearch.com/docs/integrations/providers
+# - gateway.platforms.api_server.direct_model_requests:
+#   https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server
+# - tool_loop_guardrails.hard_stop_enabled (unattended gateway):
+#   https://hermes-agent.nousresearch.com/docs/user-guide/docker
+# - terminal.backend: local (no docker.sock):
+#   https://hermes-agent.nousresearch.com/docs/user-guide/configuration
+# - agent.disabled_toolsets: browser (1 GB official min without Playwright):
+#   https://hermes-agent.nousresearch.com/docs/user-guide/configuration
+#
+# Telegram / Discord / WhatsApp start only when their bot tokens are set.
+# Do not set those tokens on this host. Dashboard stays off unless
+# HERMES_DASHBOARD=1 (do not set that).
+
+model:
+  provider: openrouter
+  default: openai/gpt-4o
+
+gateway:
+  platforms:
+    api_server:
+      direct_model_requests: true
+
+tool_loop_guardrails:
+  warnings_enabled: true
+  hard_stop_enabled: true
+  hard_stop_after:
+    exact_failure: 5
+    same_tool_failure: 8
+    idempotent_no_progress: 5
+
+terminal:
+  backend: local
+  cwd: "."
+  timeout: 180
+
+agent:
+  disabled_toolsets:
+    - browser
