@@ -43,7 +43,24 @@ export type ConfirmationToolResult = {
   target?: string;
   /** Shown to the model — do not execute until user confirms. */
   instruction: string;
+  /** Echoed so the client can replay approve if the in-memory row is gone. */
+  payload?: Record<string, unknown>;
 };
+
+export function confirmationReplayPayload(raw: unknown): {
+  tool: string;
+  args: unknown;
+  projectId: string | null;
+} | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const rec = raw as { tool?: unknown; args?: unknown; projectId?: unknown };
+  if (typeof rec.tool !== "string" || !rec.tool.trim()) return null;
+  return {
+    tool: rec.tool.trim(),
+    args: rec.args ?? {},
+    projectId: typeof rec.projectId === "string" ? rec.projectId : null,
+  };
+}
 
 export type ConfirmationResolved = {
   ok: true;
@@ -107,6 +124,7 @@ function toResult(row: PendingConfirmationRow): ConfirmationToolResult {
     target: row.request.target,
     instruction:
       "Stop before this side effect. Show the user the preview and wait for explicit approval (UI confirm or user saying approve). Do not claim the action completed.",
+    payload: row.request.payload,
   };
 }
 

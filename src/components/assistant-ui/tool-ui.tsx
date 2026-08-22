@@ -77,10 +77,12 @@ type ConfirmExecution = {
 function ConfirmCardActions({
   confirmationId,
   active,
+  payload,
   onApprovedExecution,
 }: {
   confirmationId?: string;
   active: boolean;
+  payload?: Record<string, unknown>;
   onApprovedExecution?: (execution: ConfirmExecution) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -117,7 +119,11 @@ function ConfirmCardActions({
       const res = await fetch("/api/harness/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmationId, approved }),
+        body: JSON.stringify({
+          confirmationId,
+          approved,
+          ...(payload ? { payload } : {}),
+        }),
       });
       if (!res.ok) {
         window.dispatchEvent(
@@ -191,6 +197,7 @@ function ConfirmCardActions({
 function confirmationFromResult(result: unknown): {
   needsConfirmation: boolean;
   confirmationId?: string;
+  payload?: Record<string, unknown>;
 } {
   if (!result || typeof result !== "object") {
     return { needsConfirmation: false };
@@ -198,11 +205,14 @@ function confirmationFromResult(result: unknown): {
   const rec = result as {
     needs_confirmation?: boolean;
     confirmation_id?: string;
+    payload?: Record<string, unknown>;
   };
   const confirmationId = rec.confirmation_id;
   return {
     needsConfirmation: !!rec.needs_confirmation && !!confirmationId,
     confirmationId,
+    payload:
+      rec.payload && typeof rec.payload === "object" ? rec.payload : undefined,
   };
 }
 
@@ -747,6 +757,7 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       <ConfirmCardActions
         confirmationId={confirm.confirmationId}
         active={confirm.needsConfirmation}
+        payload={confirm.payload}
         onApprovedExecution={(execution) => {
           if (!execution?.title || !execution.content) return;
           const payload = toArtifact(execution.id || part.toolCallId, {
@@ -870,6 +881,7 @@ const MemoryWriteToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       <ConfirmCardActions
         confirmationId={confirm.confirmationId}
         active={confirm.needsConfirmation}
+        payload={confirm.payload}
       />
     </ToolShell>
   );
@@ -1332,6 +1344,7 @@ const ConfirmationToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       <ConfirmCardActions
         confirmationId={confirm.confirmationId}
         active={pending}
+        payload={confirm.payload}
       />
     </ToolShell>
   );
@@ -1445,6 +1458,7 @@ const BrowserActToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       <ConfirmCardActions
         confirmationId={confirm.confirmationId}
         active={pending}
+        payload={confirm.payload}
       />
     </ToolShell>
   );

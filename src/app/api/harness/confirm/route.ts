@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
+  confirmationReplayPayload,
   peekConfirmation,
   resolveConfirmation,
 } from "@/lib/harness/confirmation";
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as {
     confirmationId?: string;
     approved?: boolean;
+    payload?: unknown;
   };
   const confirmationId =
     typeof body.confirmationId === "string" ? body.confirmationId.trim() : "";
@@ -68,11 +70,54 @@ export async function POST(req: Request) {
   }
 
   const peek = await peekConfirmation(confirmationId);
+  const replay = confirmationReplayPayload(body.payload);
+
   if (!peek) {
-    return NextResponse.json(
-      { error: "Confirmation expired or not found." },
-      { status: 404 },
-    );
+    // Guest / other isolate: the row lived only in the chat process.
+    // Replay the echoed payload so Approve still executes.
+    if (!body.approved) {
+      return NextResponse.json({
+        ok: true,
+        needs_confirmation: false,
+        confirmation_id: confirmationId,
+        approved: false,
+        note: "User declined. Do not perform the action; offer an alternative.",
+        execution: null,
+      });
+    }
+    if (
+      !replay ||
+      !isAetherOwnedToolName(replay.tool) ||
+      replay.tool === "request_confirmation"
+    ) {
+      return NextResponse.json(
+        { error: "Confirmation expired or not found." },
+        { status: 404 },
+      );
+    }
+    const execution = await executeAetherTool({
+      name: replay.tool,
+      args: replay.args,
+      ctx: {
+        userId,
+        conversationId: null,
+        projectId: replay.projectId,
+        approvalMode: parseToolApprovalMode("ask"),
+        hasMemory: !!(userId && isCloudDbConfigured()),
+        hasDrive: false,
+        hasGitHub: false,
+        skipGate: true,
+      },
+    });
+    return NextResponse.json({
+      ok: true,
+      needs_confirmation: false,
+      confirmation_id: confirmationId,
+      approved: true,
+      note: "User approved. You may proceed with the described action carefully.",
+      execution,
+      replayed: true,
+    });
   }
 
   const result = await resolveConfirmation(confirmationId, body.approved, userId);
@@ -81,23 +126,21 @@ export async function POST(req: Request) {
   }
 
   let execution: unknown = null;
-  const payload = peek.request.payload as
-    | { tool?: string; args?: unknown; projectId?: string | null }
-    | undefined;
+  const payload =
+    confirmationReplayPayload(peek.request.payload) ?? replay;
   if (
     result.approved &&
-    payload?.tool &&
+    payload &&
     isAetherOwnedToolName(payload.tool) &&
     payload.tool !== "request_confirmation"
   ) {
     execution = await executeAetherTool({
       name: payload.tool,
-      args: payload.args ?? {},
+      args: payload.args,
       ctx: {
         userId,
         conversationId: peek.conversationId,
-        projectId:
-          typeof payload.projectId === "string" ? payload.projectId : null,
+        projectId: payload.projectId,
         runId: peek.runId,
         approvalMode: parseToolApprovalMode("ask"),
         hasMemory: !!(userId && isCloudDbConfigured()),

@@ -240,6 +240,7 @@ async function gateIfNeeded(
     title: conf.title,
     preview: conf.preview,
     instruction: conf.instruction,
+    payload: conf.payload ?? { tool: name, args, projectId: ctx.projectId ?? null },
   };
 }
 

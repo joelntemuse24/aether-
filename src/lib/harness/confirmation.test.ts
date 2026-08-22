@@ -88,6 +88,21 @@ describe("confirmation persist", () => {
     }
   });
 
+  it("parses a client replay payload when the in-memory row is gone", async () => {
+    const { confirmationReplayPayload } = await import("./confirmation");
+    const parsed = confirmationReplayPayload({
+      tool: "create_artifact",
+      args: { title: "Demo", content: "Hi" },
+      projectId: "p1",
+    });
+    assert.deepEqual(parsed, {
+      tool: "create_artifact",
+      args: { title: "Demo", content: "Hi" },
+      projectId: "p1",
+    });
+    assert.equal(confirmationReplayPayload({}), null);
+  });
+
   it("rejects another user's confirmation", async () => {
     const repo = memoryRepo();
     setConfirmationRepository(repo);

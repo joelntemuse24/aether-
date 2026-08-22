@@ -65,8 +65,12 @@ describe("executeAetherTool", () => {
     });
     assert.equal(wrote, false);
     assert.equal(result.needs_confirmation, true);
-    const gated = result as unknown as { confirmation_id: string };
+    const gated = result as unknown as {
+      confirmation_id: string;
+      payload?: { tool?: string };
+    };
     assert.equal(gated.confirmation_id, "conf-1");
+    assert.equal(gated.payload?.tool, "memory_write");
   });
 
   it("writes memory in Auto without a card", async () => {
