@@ -1,5 +1,10 @@
 /**
- * Agent-loop efficiency helpers inspired by ChatGPT/Codex harness practice:
+ * LEGACY in-process loop helpers (BYOK + hosted fallback when Hermes is unset).
+ *
+ * Hosted + HERMES_* uses `src/lib/hermes` — Hermes owns the tool loop.
+ * Do not add new progressive-unlock / prepareStep behavior here.
+ *
+ * Historical notes (still used by the isolated local path):
  * - Stable tool order (prompt-cache friendly prefixes)
  * - Deferred tool discovery (core tools + tool_search)
  * - Hard per-turn web_search quotas + near-duplicate rejection

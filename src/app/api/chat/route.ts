@@ -1,30 +1,11 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAI } from "@ai-sdk/openai";
-import {
-  convertToModelMessages,
-  InvalidToolInputError,
-  NoSuchToolError,
-  stepCountIs,
-  streamText,
-  type LanguageModel,
-  type UIMessage,
-} from "ai";
+import type { UIMessage } from "ai";
 import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
-import { repairToolCallInputJson } from "@/lib/repair-tool-json";
 import {
   budgetForDepthWithTime,
   harnessSystemAddendum,
 } from "@/lib/harness/budgets";
-import {
-  collectMessageText,
-  collectSeedUnlockedToolNames,
-  createAgentLoopController,
-} from "@/lib/harness/loop-efficiency";
+import { streamLegacyLocalChat } from "@/lib/harness/legacy-local-stream";
 import { updateAgentRunStatus } from "@/lib/harness/runs-store";
-import {
-  buildToolRegistry,
-  resolveAvailableToolNames,
-} from "@/lib/harness/tool-registry";
 import {
   HARNESS_DEPTHS,
   HARNESS_INTENTS,
@@ -51,15 +32,16 @@ import {
 } from "@/lib/projects/store";
 import { getValidDriveAccessToken } from "@/lib/drive-session";
 import { getValidGitHubAccessToken } from "@/lib/github-session";
-import { messageMentionsGitHubRepo } from "@/lib/connectors/github";
 import { isCloudDbConfigured } from "@/lib/db";
-import { listHostedCandidates } from "@/lib/hosted/client";
 import { isHostedConfigured } from "@/lib/hosted/config";
-import { createFailoverLanguageModel } from "@/lib/hosted/failover";
-import { friendlyChatError } from "@/lib/chat-errors";
+import { isHostedChatAvailable } from "@/lib/hosted/availability";
 import { CONTINUE_SYSTEM_ADDENDUM } from "@/lib/chat-continue";
 import { isHermesConfigured } from "@/lib/hermes/config";
 import { proxyChatToHermes } from "@/lib/hermes/proxy-chat";
+import {
+  hermesAetherToolSeamAddendum,
+  hermesSafeVerifyAddendum,
+} from "@/lib/hermes/tool-seam";
 
 /**
  * Vercel enforces a plan-specific function wall clock.
@@ -79,16 +61,6 @@ type IncomingAttachment = {
 
 function getHeader(req: Request, name: string): string {
   return req.headers.get(name)?.trim() ?? "";
-}
-
-function resolveModel(provider: ProviderId, model: string): string {
-  if (provider === "anthropic") {
-    return model.replace(/^anthropic\//, "");
-  }
-  if (provider === "openai") {
-    return model.replace(/^openai\//, "");
-  }
-  return model;
 }
 
 /** Inject image parts + optional text prefix into the last user message. */
@@ -162,36 +134,6 @@ function lastUserText(messages: UIMessage[]): string {
   return "";
 }
 
-function buildByokModel(input: {
-  provider: ProviderId;
-  apiKey: string;
-  baseURL: string;
-  modelId: string;
-  origin?: string | null;
-}): LanguageModel {
-  if (input.provider === "anthropic") {
-    return createAnthropic({ apiKey: input.apiKey })(input.modelId);
-  }
-  const openai = createOpenAI({
-    apiKey: input.apiKey,
-    baseURL:
-      input.baseURL ||
-      (input.provider === "openrouter"
-        ? "https://openrouter.ai/api/v1"
-        : input.provider === "openai"
-          ? "https://api.openai.com/v1"
-          : input.baseURL),
-    headers:
-      input.provider === "openrouter"
-        ? {
-            "HTTP-Referer": input.origin ?? "http://localhost:3000",
-            "X-Title": "Aether",
-          }
-        : undefined,
-  });
-  return openai.chat(input.modelId);
-}
-
 export async function POST(req: Request) {
   try {
     const accessMode = getHeader(req, "x-access-mode") || "byok";
@@ -203,7 +145,7 @@ export async function POST(req: Request) {
 
     if (hosted) {
       // Hosted works via Vercel-side provider keys OR a remote Hermes gateway.
-      if (!isHostedConfigured() && !isHermesConfigured()) {
+      if (!isHostedChatAvailable(process.env, isHostedConfigured())) {
         return new Response(
           JSON.stringify({
             error:
@@ -346,14 +288,24 @@ export async function POST(req: Request) {
       ? timeBudgetSystemAddendum(timeBudget)
       : null;
 
+    const hermesLive = hosted && isHermesConfigured();
     // Stable prefix first (tools + harness), volatile memory/project last —
     // helps provider prompt caches across steps within a turn.
     const system = [
-      toolsEnabled ? TOOLS_SYSTEM_PROMPT : null,
+      hermesLive
+        ? hermesAetherToolSeamAddendum({
+            toolsEnabled,
+            hasDrive: hasDriveEarly,
+            hasGitHub: hasGitHubEarly,
+            hasMemory: !!memoryForPrompt,
+          })
+        : toolsEnabled
+          ? TOOLS_SYSTEM_PROMPT
+          : null,
       harnessAddendum,
       timeBlock,
-      verifyBlock,
-      toolsEnabled ? skillsBlock : null,
+      hermesLive ? hermesSafeVerifyAddendum(verifyBlock) : verifyBlock,
+      hermesLive ? null : toolsEnabled ? skillsBlock : null,
       continueSegment ? CONTINUE_SYSTEM_ADDENDUM : null,
       userSystem,
       memoryForPrompt,
@@ -405,9 +357,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // Hosted + Hermes: remote agent owns the tool loop. Browser never calls Hermes.
-    // BYOK keeps the in-process streamText path (user keys stay off Hermes).
-    if (hosted && isHermesConfigured()) {
+    // Hermes owns the hosted tool loop. BYOK (and hosted without Hermes)
+    // stay on the isolated local streamText path — user keys never leave Vercel.
+    if (hermesLive) {
       console.info("[api/chat] hermes proxy", {
         conversationId,
         model: requestedModel,
@@ -422,6 +374,7 @@ export async function POST(req: Request) {
         conversationId,
         runId: harnessRunId,
         abortSignal: req.signal,
+        accessMode: "hosted",
         onFinish: () => {
           if (harnessRunId && userId) {
             void updateAgentRunStatus({
@@ -455,134 +408,28 @@ export async function POST(req: Request) {
       });
     }
 
-    let model: LanguageModel;
-    if (hosted) {
-      const candidates = listHostedCandidates(
-        requestedModel,
-        req.headers.get("origin"),
-      );
-      if (candidates.length === 0) {
-        return new Response(
-          JSON.stringify({
-            error:
-              "That model is not available on Aether Cloud right now. Pick another model or use Bring your own key.",
-          }),
-          { status: 503, headers: { "Content-Type": "application/json" } },
-        );
-      }
-      // BUZZ → optional relays → OpenRouter (see resolveHostedRoute).
-      model = createFailoverLanguageModel(candidates);
-    } else {
-      const modelId = resolveModel(provider, requestedModel);
-      model = buildByokModel({
-        provider,
-        apiKey,
-        baseURL,
-        modelId,
-        origin: req.headers.get("origin"),
-      });
-    }
-
-    const hasDrive = hasDriveEarly;
-    const hasGitHub = hasGitHubEarly;
-
-    const availableToolNames = toolsEnabled
-      ? resolveAvailableToolNames({ userId, hasDrive, hasGitHub })
-      : [];
-    // Seed deferred tools from the whole thread — not just the last user
-    // message. Continue segments use CONTINUE_USER_TEXT, which would otherwise
-    // drop previously unlocked GitHub tools and cause AI_NoSuchToolError.
-    const threadText = toolsEnabled ? collectMessageText(messages) : "";
-    const seedUnlocked = toolsEnabled
-      ? collectSeedUnlockedToolNames({
-          messages,
-          availableToolNames,
-          mentionsGitHubRepo:
-            hasGitHub && messageMentionsGitHubRepo(threadText),
-          // Soft-seed memory/Drive/GitHub from conversation text so discovery
-          // is not solely dependent on a successful tool_search step.
-          intentText: threadText,
-        })
-      : [];
-    const loop = toolsEnabled
-      ? createAgentLoopController({
-          depth: harnessDepth,
-          availableToolNames,
-          seedUnlocked: seedUnlocked.length ? seedUnlocked : undefined,
-          maxWebSearches: timeBudget?.maxSearches ?? null,
-        })
-      : null;
-
-    const result = streamText({
-      model,
-      messages: await convertToModelMessages(enrichedMessages),
-      ...(system ? { system } : {}),
-      ...(toolsEnabled && loop
-        ? {
-            tools: buildToolRegistry({
-              userId,
-              conversationId,
-              projectId: projectId ?? null,
-              hasDrive,
-              hasGitHub,
-              loop,
-            }),
-            activeTools: loop.initialActiveTools,
-            toolOrder: loop.toolOrder,
-            prepareStep: () => loop.prepareStep(),
-            stopWhen: stepCountIs(budget.maxSteps),
-            // Models (esp. Claude) sometimes concatenate two JSON objects in
-            // one tool_use input when they meant parallel calls. Take the first.
-            repairToolCall: async ({ toolCall, error }) => {
-              if (NoSuchToolError.isInstance(error)) return null;
-              if (!InvalidToolInputError.isInstance(error)) return null;
-              const repaired = repairToolCallInputJson(toolCall.input);
-              if (!repaired) return null;
-              console.info("[chat] repaired tool input JSON", {
-                tool: toolCall.toolName,
-                before: toolCall.input.slice(0, 160),
-                after: repaired.slice(0, 160),
-              });
-              return { ...toolCall, input: repaired };
-            },
-          }
-        : {}),
-      maxOutputTokens: 8192,
-      // Failover model walks upstreams itself — don't burn 3 retries on one 429.
-      maxRetries: hosted ? 0 : 2,
+    return streamLegacyLocalChat({
+      hosted,
+      requestedModel,
+      provider,
+      apiKey,
+      baseURL,
+      origin: req.headers.get("origin"),
+      messages,
+      enrichedMessages,
+      system,
+      toolsEnabled,
+      userId,
+      conversationId,
+      projectId,
+      hasDrive: hasDriveEarly,
+      hasGitHub: hasGitHubEarly,
+      harnessDepth,
+      harnessIntent,
+      harnessRunId,
+      maxSteps: budget.maxSteps,
+      maxWebSearches: timeBudget?.maxSearches ?? null,
       abortSignal: req.signal,
-      onFinish: () => {
-        if (harnessRunId && userId) {
-          void updateAgentRunStatus({
-            id: harnessRunId,
-            userId,
-            status: "done",
-            eventType: "chat_finished",
-            eventPayload: {
-              depth: harnessDepth,
-              intent: harnessIntent,
-            },
-          });
-        }
-      },
-    });
-
-    return result.toUIMessageStreamResponse({
-      onError: (error) => {
-        console.error("[api/chat]", error);
-        if (harnessRunId && userId) {
-          void updateAgentRunStatus({
-            id: harnessRunId,
-            userId,
-            status: "done",
-            eventType: "chat_error",
-            eventPayload: {
-              error: error instanceof Error ? error.message : "error",
-            },
-          });
-        }
-        return friendlyChatError(error);
-      },
     });
   } catch (error) {
     console.error("[api/chat]", error);
