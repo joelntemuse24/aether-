@@ -194,6 +194,18 @@ function ConfirmCardActions({
   );
 }
 
+function replayPayloadForPart(
+  part: ToolPartLike,
+  fromResult?: Record<string, unknown>,
+): Record<string, unknown> {
+  if (fromResult && typeof fromResult.tool === "string") return fromResult;
+  return {
+    tool: part.toolName,
+    args: (part.args as Record<string, unknown>) ?? {},
+    projectId: null,
+  };
+}
+
 function confirmationFromResult(result: unknown): {
   needsConfirmation: boolean;
   confirmationId?: string;
@@ -757,7 +769,7 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       <ConfirmCardActions
         confirmationId={confirm.confirmationId}
         active={confirm.needsConfirmation}
-        payload={confirm.payload}
+        payload={replayPayloadForPart(part, confirm.payload)}
         onApprovedExecution={(execution) => {
           if (!execution?.title || !execution.content) return;
           const payload = toArtifact(execution.id || part.toolCallId, {
@@ -881,7 +893,7 @@ const MemoryWriteToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       <ConfirmCardActions
         confirmationId={confirm.confirmationId}
         active={confirm.needsConfirmation}
-        payload={confirm.payload}
+        payload={replayPayloadForPart(part, confirm.payload)}
       />
     </ToolShell>
   );
@@ -1344,7 +1356,7 @@ const ConfirmationToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       <ConfirmCardActions
         confirmationId={confirm.confirmationId}
         active={pending}
-        payload={confirm.payload}
+        payload={replayPayloadForPart(part, confirm.payload)}
       />
     </ToolShell>
   );
@@ -1458,7 +1470,7 @@ const BrowserActToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       <ConfirmCardActions
         confirmationId={confirm.confirmationId}
         active={pending}
-        payload={confirm.payload}
+        payload={replayPayloadForPart(part, confirm.payload)}
       />
     </ToolShell>
   );
