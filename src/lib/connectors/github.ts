@@ -74,16 +74,18 @@ async function githubFetch(
   userId: string,
   path: string,
   init?: RequestInit,
+  accessToken?: string,
 ): Promise<Response | { error: string }> {
-  const auth = await getValidGitHubAccessToken(userId);
-  if (!auth) {
+  const token =
+    accessToken || (await getValidGitHubAccessToken(userId))?.accessToken;
+  if (!token) {
     return { error: "GitHub is not connected." };
   }
 
   const res = await fetch(`${API}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${auth.accessToken}`,
+      Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
       "User-Agent": "Aether",
       "X-GitHub-Api-Version": API_VERSION,
@@ -92,7 +94,7 @@ async function githubFetch(
   });
 
   if (res.status === 401) {
-    await clearGitHubCookie();
+    if (!accessToken) await clearGitHubCookie();
     return { error: "GitHub authorization expired. Reconnect GitHub in Preferences." };
   }
 
@@ -113,6 +115,7 @@ function resolveRef(input: string): GitHubRepoRef | { error: string } {
 export async function githubGetRepoForUser(
   userId: string,
   repo: string,
+  accessToken?: string,
 ): Promise<{
   ok: boolean;
   error?: string;
@@ -132,6 +135,8 @@ export async function githubGetRepoForUser(
   const res = await githubFetch(
     userId,
     `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}`,
+    undefined,
+    accessToken,
   );
   if (!(res instanceof Response)) return { ok: false, error: res.error };
   if (!res.ok) {
@@ -168,6 +173,7 @@ export async function githubListContentsForUser(
   repo: string,
   path = "",
   ref?: string,
+  accessToken?: string,
 ): Promise<{
   ok: boolean;
   error?: string;
@@ -193,7 +199,7 @@ export async function githubListContentsForUser(
     (dirPath ? `/${dirPath.split("/").map(encodeURIComponent).join("/")}` : "") +
     (branch ? `?ref=${encodeURIComponent(branch)}` : "");
 
-  const res = await githubFetch(userId, apiPath);
+  const res = await githubFetch(userId, apiPath, undefined, accessToken);
   if (!(res instanceof Response)) return { ok: false, error: res.error };
   if (!res.ok) {
     return {
@@ -234,6 +240,7 @@ export async function githubReadFileForUser(
   repo: string,
   path: string,
   ref?: string,
+  accessToken?: string,
 ): Promise<{
   ok: boolean;
   error?: string;
@@ -258,7 +265,7 @@ export async function githubReadFileForUser(
     `${filePath.split("/").map(encodeURIComponent).join("/")}` +
     (branch ? `?ref=${encodeURIComponent(branch)}` : "");
 
-  const res = await githubFetch(userId, apiPath);
+  const res = await githubFetch(userId, apiPath, undefined, accessToken);
   if (!(res instanceof Response)) return { ok: false, error: res.error };
   if (!res.ok) {
     return {

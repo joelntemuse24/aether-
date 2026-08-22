@@ -42,9 +42,17 @@ export function consumeSseBuffer(buffer: string): {
   return { frames, rest };
 }
 
+export type OpenAIToolCallDelta = {
+  index?: number;
+  id?: string;
+  type?: string;
+  function?: { name?: string; arguments?: string };
+};
+
 export type ChatCompletionDelta = {
   content?: string | null;
   role?: string;
+  tool_calls?: OpenAIToolCallDelta[];
 };
 
 export type ChatCompletionChunk = {
@@ -128,4 +136,43 @@ export function isToolProgressDone(p: HermesToolProgress): boolean {
     p.output !== undefined ||
     p.result !== undefined
   );
+}
+
+export type AccumulatedToolCall = {
+  id: string;
+  name: string;
+  arguments: string;
+};
+
+/** Merge streamed OpenAI tool_calls deltas into complete calls. */
+export function accumulateToolCallDeltas(
+  acc: AccumulatedToolCall[],
+  deltas: OpenAIToolCallDelta[] | undefined,
+): AccumulatedToolCall[] {
+  if (!deltas?.length) return acc;
+  const next = [...acc];
+  for (const delta of deltas) {
+    const index = typeof delta.index === "number" ? delta.index : next.length;
+    const current = next[index] ?? { id: "", name: "", arguments: "" };
+    next[index] = {
+      id: delta.id || current.id,
+      name: delta.function?.name || current.name,
+      arguments: current.arguments + (delta.function?.arguments ?? ""),
+    };
+  }
+  return next;
+}
+
+export function parsedToolCallArguments(
+  raw: string,
+): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    /* ignore */
+  }
+  return {};
 }

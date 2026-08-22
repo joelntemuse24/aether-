@@ -33,6 +33,7 @@ import {
   resolveAvailableToolNames,
 } from "@/lib/harness/tool-registry";
 import type { HarnessDepth, HarnessIntent } from "@/lib/harness/types";
+import type { ToolApprovalMode } from "@/lib/hermes/tool-approval";
 
 export type LegacyProviderId = "openrouter" | "openai" | "anthropic" | "custom";
 
@@ -98,6 +99,7 @@ export type LegacyLocalStreamArgs = {
   maxSteps: number;
   maxWebSearches?: number | null;
   abortSignal?: AbortSignal;
+  approvalMode?: ToolApprovalMode;
 };
 
 export async function streamLegacyLocalChat(
@@ -167,6 +169,7 @@ export async function streamLegacyLocalChat(
             projectId: args.projectId ?? null,
             hasDrive: args.hasDrive,
             hasGitHub: args.hasGitHub,
+            approvalMode: args.approvalMode,
             loop,
           }),
           activeTools: loop.initialActiveTools,

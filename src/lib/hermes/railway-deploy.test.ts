@@ -52,6 +52,7 @@ describe("Railway gateway deploy contract", () => {
     assert.match(seed, /provider:\s*openrouter/);
     assert.match(seed, /backend:\s*local/);
     assert.match(seed, /disabled_toolsets:[\s\S]*-\s*browser/);
+    assert.match(seed, /aether-tools/);
     assert.doesNotMatch(seed, /API_SERVER_CORS_ORIGINS/);
     assert.doesNotMatch(seed, /sk-or-v1-/);
   });

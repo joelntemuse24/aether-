@@ -2,6 +2,11 @@ import type { ProviderId } from "./models";
 import { providerSupportsTools } from "./models";
 import { DEFAULT_HOSTED_MODEL } from "./hosted/catalog";
 import type { VoiceId } from "./voice";
+import {
+  DEFAULT_TOOL_APPROVAL_MODE,
+  parseToolApprovalMode,
+  type ToolApprovalMode,
+} from "./hermes/tool-approval";
 
 const STORAGE_KEY = "aether:settings:v1";
 
@@ -34,6 +39,11 @@ export type AppSettings = {
   enableTools: boolean;
   /** Conversation voice / personality. */
   voice: VoiceId;
+  /**
+   * Ask = confirm mutations. Auto = routine Aether tools run without a tap.
+   * Destructive actions always confirm.
+   */
+  toolApprovalMode: ToolApprovalMode;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -51,6 +61,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   googleClientId: "",
   enableTools: true,
   voice: "literary",
+  toolApprovalMode: DEFAULT_TOOL_APPROVAL_MODE,
 };
 
 export function loadSettings(): AppSettings {
@@ -69,6 +80,7 @@ export function loadSettings(): AppSettings {
     if (next.accessMode === "hosted" && !next.model?.trim() && !next.useCustomModel) {
       next.model = DEFAULT_HOSTED_MODEL;
     }
+    next.toolApprovalMode = parseToolApprovalMode(next.toolApprovalMode);
     return next;
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -127,6 +139,7 @@ export function buildChatHeaders(settings: AppSettings): Record<string, string> 
       "x-access-mode": "hosted",
       "x-model": resolveModel(settings),
       "x-tools": settings.enableTools ? "1" : "0",
+      "x-tool-approval-mode": parseToolApprovalMode(settings.toolApprovalMode),
     };
   }
   const key = resolveApiKey(settings);
@@ -137,6 +150,7 @@ export function buildChatHeaders(settings: AppSettings): Record<string, string> 
     "x-base-url": resolveBaseURL(settings),
     "x-model": resolveModel(settings),
     "x-tools": toolsEnabled(settings) ? "1" : "0",
+    "x-tool-approval-mode": parseToolApprovalMode(settings.toolApprovalMode),
   };
 }
 

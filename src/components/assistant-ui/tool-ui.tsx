@@ -20,7 +20,10 @@ import {
   WrenchIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ToolApprovalToggle } from "@/components/assistant-ui/tool-approval-toggle";
+import { confirmActionCopy } from "@/lib/hermes/confirm-copy";
 import { useArtifact, type Artifact } from "@/providers/artifact-provider";
+import "@/components/assistant-ui/tool-approval.css";
 import {
   TOOL_NAMES,
   getToolDisplay,
@@ -60,6 +63,174 @@ function partIsRunning(part: ToolPartLike, threadIsRunning: boolean): boolean {
 function usePartRunning(part: ToolPartLike): boolean {
   const threadIsRunning = useAuiState((s) => s.thread.isRunning);
   return partIsRunning(part, threadIsRunning);
+}
+
+type ConfirmExecution = {
+  ok?: boolean;
+  kind?: string;
+  title?: string;
+  content?: string;
+  language?: string;
+  id?: string;
+  persisted?: boolean;
+};
+
+/** Shared confirm / Cancel + Ask|Auto chrome. Talks only to /api/harness/confirm. */
+function ConfirmCardActions({
+  confirmationId,
+  active,
+  payload,
+  onApprovedExecution,
+}: {
+  confirmationId?: string;
+  active: boolean;
+  payload?: Record<string, unknown>;
+  onApprovedExecution?: (execution: ConfirmExecution) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [resolved, setResolved] = useState<"approved" | "declined" | null>(
+    null,
+  );
+  const [expired, setExpired] = useState(false);
+  const payloadAction =
+    payload && typeof payload.args === "object" && payload.args
+      ? (payload.args as { action?: unknown }).action
+      : payload?.action;
+  const copy = confirmActionCopy({
+    tool: typeof payload?.tool === "string" ? payload.tool : undefined,
+    action: typeof payloadAction === "string" ? payloadAction : undefined,
+  });
+
+  useEffect(() => {
+    if (!confirmationId) return;
+    let cancelled = false;
+    void fetch(`/api/harness/confirm?id=${encodeURIComponent(confirmationId)}`)
+      .then(async (res) => {
+        // 404 is normal for a just-created guest card in another isolate.
+        // Keep the confirm / Cancel actions; POST records the decision or shows expired.
+        if (!res.ok) return null;
+        return res.json() as Promise<{ status?: string }>;
+      })
+      .then((data) => {
+        if (cancelled || !data?.status) return;
+        if (data.status === "approved") setResolved("approved");
+        if (data.status === "declined") setResolved("declined");
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [confirmationId]);
+
+  const resolve = async (approved: boolean) => {
+    if (!confirmationId || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/harness/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirmationId,
+          approved,
+          ...(payload ? { payload } : {}),
+        }),
+      });
+      if (!res.ok) {
+        window.dispatchEvent(
+          new CustomEvent("aether:notice", {
+            detail:
+              res.status === 404 ? copy.expired : copy.failedNotice,
+          }),
+        );
+        if (res.status === 404) setExpired(true);
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as {
+        execution?: ConfirmExecution;
+      };
+      setResolved(approved ? "approved" : "declined");
+      if (approved && data.execution) onApprovedExecution?.(data.execution);
+      window.dispatchEvent(
+        new CustomEvent("aether:notice", {
+          detail: approved ? copy.approvedNotice : copy.cancelledNotice,
+        }),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!active || !confirmationId) return null;
+  if (expired && !resolved) {
+    return (
+      <p className="aether-confirm-actions__status" role="status">
+        {copy.expired}
+      </p>
+    );
+  }
+  if (resolved) {
+    return (
+      <p className="aether-confirm-actions__status" role="status">
+        {resolved === "approved" ? copy.approvedStatus : copy.cancelledStatus}
+      </p>
+    );
+  }
+  return (
+    <div className="aether-confirm-actions">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void resolve(true)}
+        data-destructive={copy.destructive ? "true" : undefined}
+        className="aether-confirm-actions__btn aether-confirm-actions__confirm"
+      >
+        {copy.confirm}
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void resolve(false)}
+        className="aether-confirm-actions__btn aether-confirm-actions__cancel"
+      >
+        {copy.cancel}
+      </button>
+      <ToolApprovalToggle />
+    </div>
+  );
+}
+
+function replayPayloadForPart(
+  part: ToolPartLike,
+  fromResult?: Record<string, unknown>,
+): Record<string, unknown> {
+  if (fromResult && typeof fromResult.tool === "string") return fromResult;
+  return {
+    tool: part.toolName,
+    args: (part.args as Record<string, unknown>) ?? {},
+    projectId: null,
+  };
+}
+
+function confirmationFromResult(result: unknown): {
+  needsConfirmation: boolean;
+  confirmationId?: string;
+  payload?: Record<string, unknown>;
+} {
+  if (!result || typeof result !== "object") {
+    return { needsConfirmation: false };
+  }
+  const rec = result as {
+    needs_confirmation?: boolean;
+    confirmation_id?: string;
+    payload?: Record<string, unknown>;
+  };
+  const confirmationId = rec.confirmation_id;
+  return {
+    needsConfirmation: !!rec.needs_confirmation && !!confirmationId,
+    confirmationId,
+    payload:
+      rec.payload && typeof rec.payload === "object" ? rec.payload : undefined,
+  };
 }
 
 /**
@@ -134,6 +305,8 @@ const ToolShell: FC<{
    * body). Collapses again when the run finishes so traces stay quiet.
    */
   expandWhileRunning?: boolean;
+  /** Keep the body open (pending approval). Wins over the post-run collapse. */
+  stayOpen?: boolean;
 }> = ({
   name,
   running,
@@ -142,6 +315,7 @@ const ToolShell: FC<{
   children,
   headerAction,
   expandWhileRunning,
+  stayOpen,
 }) => {
   // Collapsed by default; progressive construction can open while running.
   const [open, setOpen] = useState(false);
@@ -152,12 +326,16 @@ const ToolShell: FC<{
 
   useEffect(() => {
     if (userToggled.current) return;
+    if (stayOpen && hasBody) {
+      setOpen(true);
+      return;
+    }
     if (expandWhileRunning && running && hasBody) {
       setOpen(true);
     } else if (expandWhileRunning && !running) {
       setOpen(false);
     }
-  }, [expandWhileRunning, running, hasBody]);
+  }, [expandWhileRunning, running, hasBody, stayOpen]);
 
   return (
     <div
@@ -400,8 +578,13 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const threadRunning = useAuiState((s) => s.thread.isRunning);
   const input = part.args as Partial<CreateArtifactInput> | undefined;
   const result = part.result as
-    | (CreateArtifactOutput & { content?: string })
+    | (CreateArtifactOutput & {
+        content?: string;
+        needs_confirmation?: boolean;
+        confirmation_id?: string;
+      })
     | undefined;
+  const confirm = confirmationFromResult(result);
   const bodyContent =
     (typeof input?.content === "string" && input.content) ||
     (typeof result?.content === "string" ? result.content : undefined) ||
@@ -410,7 +593,11 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     input?.title ||
     result?.title ||
     extractPartialJsonString(part.argsText, "title");
-  const complete = part.result !== undefined && !!bodyContent && !!bodyTitle;
+  const complete =
+    part.result !== undefined &&
+    !!bodyContent &&
+    !!bodyTitle &&
+    !confirm.needsConfirmation;
   const openedRef = useRef(false);
   const lastSyncedLen = useRef(0);
   /** True if this mount saw a live generation — used to open on complete without rehydrate pop. */
@@ -526,6 +713,7 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       name={TOOL_NAMES.createArtifact}
       running={running}
       expandWhileRunning={hasConstructingBody}
+      stayOpen={confirm.needsConfirmation}
       subtitle={
         streamingTitle
           ? result?.persisted
@@ -583,6 +771,24 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
           label="Writing…"
         />
       )}
+      <ConfirmCardActions
+        confirmationId={confirm.confirmationId}
+        active={confirm.needsConfirmation}
+        payload={replayPayloadForPart(part, confirm.payload)}
+        onApprovedExecution={(execution) => {
+          if (!execution?.title || !execution.content) return;
+          const payload = toArtifact(execution.id || part.toolCallId, {
+            kind: (execution.kind as ArtifactKind) || "document",
+            title: execution.title,
+            language: execution.language,
+            content: execution.content,
+          });
+          const next = { ...payload, persisted: !!execution.persisted };
+          openArtifact(next);
+          rememberSessionArtifact(next);
+          if (execution.persisted) void refreshSaved();
+        }}
+      />
     </ToolShell>
   );
 };
@@ -655,9 +861,12 @@ const MemoryWriteToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const output = part.result as {
     ok?: boolean;
     memory?: MemoryRow;
+    needs_confirmation?: boolean;
+    confirmation_id?: string;
   } | undefined;
   const error = part.isError || (output ? output.ok === false : false);
   const saved = output?.memory;
+  const confirm = confirmationFromResult(output);
 
   return (
     <ToolShell
@@ -665,6 +874,7 @@ const MemoryWriteToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       running={running}
       error={error}
       subtitle={input?.title || saved?.title}
+      stayOpen={confirm.needsConfirmation}
     >
       {(saved || input) && (
         <div className="rounded-lg border border-[var(--border)] bg-[var(--elevated)] px-2.5 py-2">
@@ -685,6 +895,11 @@ const MemoryWriteToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
           )}
         </div>
       )}
+      <ConfirmCardActions
+        confirmationId={confirm.confirmationId}
+        active={confirm.needsConfirmation}
+        payload={replayPayloadForPart(part, confirm.payload)}
+      />
     </ToolShell>
   );
 };
@@ -1105,10 +1320,6 @@ const VerifyChecklistToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 
 const ConfirmationToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const running = usePartRunning(part);
-  const [busy, setBusy] = useState(false);
-  const [resolved, setResolved] = useState<"approved" | "declined" | null>(
-    null,
-  );
   const input = part.args as {
     title?: string;
     preview?: string;
@@ -1124,57 +1335,18 @@ const ConfirmationToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     ok?: boolean;
   } | undefined;
 
-  const title = output?.title || input?.title || "Needs approval";
+  const title = output?.title || input?.title || "Needs your confirmation";
   const preview = output?.preview || input?.preview;
-  const confirmationId = output?.confirmation_id;
-  const pending =
-    !resolved &&
-    !!output?.needs_confirmation &&
-    !!confirmationId &&
-    !running;
-
-  const resolve = async (approved: boolean) => {
-    if (!confirmationId || busy) return;
-    setBusy(true);
-    try {
-      const res = await fetch("/api/harness/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmationId, approved }),
-      });
-      if (!res.ok) {
-        window.dispatchEvent(
-          new CustomEvent("aether:notice", {
-            detail: "Could not record approval. Try again.",
-          }),
-        );
-        return;
-      }
-      setResolved(approved ? "approved" : "declined");
-      window.dispatchEvent(
-        new CustomEvent("aether:notice", {
-          detail: approved
-            ? "Approved — tell Aether to continue."
-            : "Declined — Aether will not take that action.",
-        }),
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
+  const confirm = confirmationFromResult(output);
+  const pending = confirm.needsConfirmation && !running;
 
   return (
     <ToolShell
       name={TOOL_NAMES.requestConfirmation}
       running={running}
-      subtitle={
-        resolved === "approved"
-          ? "Approved"
-          : resolved === "declined"
-            ? "Declined"
-            : title
-      }
-      expandWhileRunning={pending || running}
+      subtitle={title}
+      expandWhileRunning={running}
+      stayOpen={pending}
     >
       {preview && (
         <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--muted)]">
@@ -1186,33 +1358,11 @@ const ConfirmationToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
           {input.target}
         </p>
       )}
-      {pending && (
-        <div className="mt-2 flex items-center gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void resolve(true)}
-            className="rounded-md bg-[var(--accent)] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[var(--accent-hover)] disabled:opacity-50"
-          >
-            Approve
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void resolve(false)}
-            className="rounded-md px-2.5 py-1 text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)] disabled:opacity-50"
-          >
-            Decline
-          </button>
-        </div>
-      )}
-      {resolved && (
-        <p className="mt-1 text-[11px] text-[var(--muted-soft)]">
-          {resolved === "approved"
-            ? "You approved. Ask Aether to continue."
-            : "You declined this action."}
-        </p>
-      )}
+      <ConfirmCardActions
+        confirmationId={confirm.confirmationId}
+        active={pending}
+        payload={replayPayloadForPart(part, confirm.payload)}
+      />
     </ToolShell>
   );
 };
@@ -1272,10 +1422,6 @@ const BrowserNavigateToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 
 const BrowserActToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const running = usePartRunning(part);
-  const [busy, setBusy] = useState(false);
-  const [resolved, setResolved] = useState<"approved" | "declined" | null>(
-    null,
-  );
   const input = part.args as {
     action?: string;
     url?: string;
@@ -1292,24 +1438,8 @@ const BrowserActToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     note?: string;
   } | undefined;
   const error = part.isError || (output ? output.ok === false : false);
-  const confirmationId = output?.confirmation_id;
-  const pending =
-    !resolved && !!output?.needs_confirmation && !!confirmationId && !running;
-
-  const resolve = async (approved: boolean) => {
-    if (!confirmationId || busy) return;
-    setBusy(true);
-    try {
-      const res = await fetch("/api/harness/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmationId, approved }),
-      });
-      if (res.ok) setResolved(approved ? "approved" : "declined");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const confirm = confirmationFromResult(output);
+  const pending = confirm.needsConfirmation && !running;
 
   return (
     <ToolShell
@@ -1317,13 +1447,12 @@ const BrowserActToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       running={running}
       error={error}
       subtitle={
-        resolved
-          ? resolved
-          : output?.needs_confirmation
-            ? "Needs approval"
-            : input?.action || input?.description
+        output?.needs_confirmation
+          ? "Needs your confirmation"
+          : input?.action || input?.description
       }
-      expandWhileRunning={pending || running}
+      expandWhileRunning={running}
+      stayOpen={pending}
     >
       {(output?.preview || input?.description) && (
         <p className="whitespace-pre-wrap text-[11px] text-[var(--muted)]">
@@ -1343,26 +1472,11 @@ const BrowserActToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       {output?.note && (
         <p className="mt-1 text-[11px] text-[var(--muted-soft)]">{output.note}</p>
       )}
-      {pending && (
-        <div className="mt-2 flex items-center gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void resolve(true)}
-            className="rounded-md bg-[var(--accent)] px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-50"
-          >
-            Approve
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void resolve(false)}
-            className="rounded-md px-2.5 py-1 text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)]"
-          >
-            Decline
-          </button>
-        </div>
-      )}
+      <ConfirmCardActions
+        confirmationId={confirm.confirmationId}
+        active={pending}
+        payload={replayPayloadForPart(part, confirm.payload)}
+      />
     </ToolShell>
   );
 };

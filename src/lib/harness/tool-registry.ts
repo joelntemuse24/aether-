@@ -20,8 +20,6 @@ import {
   type WebSearchOutput,
 } from "@/lib/tools";
 import { runWebSearch } from "@/lib/web-search";
-import { searchMemories, writeMemory } from "@/lib/memory/store";
-import { saveArtifact } from "@/lib/artifacts/store";
 import { isCloudDbConfigured } from "@/lib/db";
 import {
   driveReadTextForUser,
@@ -40,6 +38,11 @@ import {
   verifyChecklistInput,
 } from "@/lib/harness/verify";
 import type { AgentLoopController } from "@/lib/harness/loop-efficiency";
+import { executeAetherTool } from "@/lib/hermes/aether-tools";
+import {
+  DEFAULT_TOOL_APPROVAL_MODE,
+  type ToolApprovalMode,
+} from "@/lib/hermes/tool-approval";
 
 export type ToolRegistryContext = {
   userId?: string | null;
@@ -47,6 +50,7 @@ export type ToolRegistryContext = {
   projectId?: string | null;
   hasDrive?: boolean;
   hasGitHub?: boolean;
+  approvalMode?: ToolApprovalMode;
   /** Optional per-turn loop controller (quotas, deferred discovery). */
   loop?: AgentLoopController;
 };
@@ -124,34 +128,23 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
           content?: string;
         }
       > => {
-        if (ctx.userId && isCloudDbConfigured()) {
-          try {
-            const saved = await saveArtifact(ctx.userId, {
-              kind,
-              title,
-              language,
-              content,
-              projectId: ctx.projectId ?? undefined,
-              conversationId: ctx.conversationId ?? undefined,
-            });
-            return {
-              ok: true,
-              kind,
-              title,
-              id: saved.id,
-              persisted: true,
-              content,
-            };
-          } catch (err) {
-            console.warn("[create_artifact] persist failed", err);
-          }
-        }
-        return {
-          ok: true,
-          kind,
-          title,
-          persisted: false,
-          content,
+        const result = await executeAetherTool({
+          name: TOOL_NAMES.createArtifact,
+          args: { kind, title, language, content },
+          ctx: {
+            userId: ctx.userId,
+            conversationId: ctx.conversationId,
+            projectId: ctx.projectId,
+            approvalMode: ctx.approvalMode ?? DEFAULT_TOOL_APPROVAL_MODE,
+            hasMemory: !!(ctx.userId && isCloudDbConfigured()),
+            hasDrive: !!ctx.hasDrive,
+            hasGitHub: !!ctx.hasGitHub,
+          },
+        });
+        return result as CreateArtifactOutput & {
+          id?: string;
+          persisted?: boolean;
+          content?: string;
         };
       },
     }),
@@ -180,6 +173,7 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
             target: input.target,
           },
           ctx.userId,
+          { conversationId: ctx.conversationId },
         ),
     }),
     [TOOL_NAMES.browserNavigate]: tool({
@@ -209,19 +203,39 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
       description:
         "Search the user's curated long-term memory (preferences, people, projects, constraints). Use before assuming you know lasting facts about them. Discover via tool_search first if not already unlocked.",
       inputSchema: memorySearchInput,
-      execute: async ({ query }) => {
-        const results = await searchMemories(ctx.userId!, query, 8);
-        return { ok: true, results };
-      },
+      execute: async ({ query }) =>
+        executeAetherTool({
+          name: TOOL_NAMES.memorySearch,
+          args: { query },
+          ctx: {
+            userId: ctx.userId,
+            conversationId: ctx.conversationId,
+            projectId: ctx.projectId,
+            approvalMode: ctx.approvalMode ?? DEFAULT_TOOL_APPROVAL_MODE,
+            hasMemory: true,
+            hasDrive: !!ctx.hasDrive,
+            hasGitHub: !!ctx.hasGitHub,
+          },
+        }),
     });
     tools[TOOL_NAMES.memoryWrite] = tool({
       description:
         "Write or update a lasting memory about the user (preference, person, project, constraint, writing_voice, belief_or_practice, open_question, note). Only store durable facts they would want remembered across chats. Discover via tool_search first if not already unlocked.",
       inputSchema: memoryWriteInput,
-      execute: async (input) => {
-        const memory = await writeMemory(ctx.userId!, input);
-        return { ok: true, memory };
-      },
+      execute: async (input) =>
+        executeAetherTool({
+          name: TOOL_NAMES.memoryWrite,
+          args: input,
+          ctx: {
+            userId: ctx.userId,
+            conversationId: ctx.conversationId,
+            projectId: ctx.projectId,
+            approvalMode: ctx.approvalMode ?? DEFAULT_TOOL_APPROVAL_MODE,
+            hasMemory: true,
+            hasDrive: !!ctx.hasDrive,
+            hasGitHub: !!ctx.hasGitHub,
+          },
+        }),
     });
   }
 

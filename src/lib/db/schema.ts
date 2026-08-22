@@ -186,7 +186,40 @@ export const vaultNotes = pgTable(
   (t) => [index("vault_notes_user_updated_idx").on(t.userId, t.updatedAt)],
 );
 
+/** Pending side-effect confirmations (survive refresh when cloud DB is on). */
+export const pendingConfirmations = pgTable(
+  "pending_confirmations",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    conversationId: text("conversation_id"),
+    runId: text("run_id"),
+    requestJson: jsonb("request_json")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    status: text("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("pending_confirmations_user_idx").on(t.userId, t.createdAt)],
+);
+
+/** Signed-in user preferences (Ask / Auto, etc.). */
+export const userPreferences = pgTable("user_preferences", {
+  userId: text("user_id").primaryKey(),
+  toolApprovalMode: text("tool_approval_mode").notNull().default("ask"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export type MemoryRecordRow = typeof memoryRecords.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect;
 export type ArtifactRow = typeof artifacts.$inferSelect;
 export type VaultNoteRow = typeof vaultNotes.$inferSelect;
+export type PendingConfirmationDbRow = typeof pendingConfirmations.$inferSelect;
+export type UserPreferenceRow = typeof userPreferences.$inferSelect;

@@ -42,6 +42,11 @@ import {
   hermesAetherToolSeamAddendum,
   hermesSafeVerifyAddendum,
 } from "@/lib/hermes/tool-seam";
+import { parseToolApprovalMode } from "@/lib/hermes/tool-approval";
+import { registerAetherToolSession } from "@/lib/hermes/tool-session";
+import { buildHermesSessionKey } from "@/lib/hermes/config";
+import { getUserPreferences } from "@/lib/preferences/store";
+import { ensureConfirmationRepository } from "@/lib/harness/confirmation-store";
 
 /**
  * Vercel enforces a plan-specific function wall clock.
@@ -215,8 +220,17 @@ export async function POST(req: Request) {
     const harnessRunId =
       typeof rawHarness?.runId === "string" ? rawHarness.runId : undefined;
 
+    ensureConfirmationRepository();
     const session = await auth();
     const userId = session?.user?.id || session?.user?.email || null;
+
+    let approvalMode = parseToolApprovalMode(
+      getHeader(req, "x-tool-approval-mode"),
+    );
+    if (userId && isCloudDbConfigured() && !getHeader(req, "x-tool-approval-mode")) {
+      const prefs = await getUserPreferences(userId);
+      approvalMode = prefs.toolApprovalMode;
+    }
 
     // Time budget from harness body or latest user text ("in 5 minutes").
     const userText = lastUserText(messages);
@@ -297,7 +311,9 @@ export async function POST(req: Request) {
             toolsEnabled,
             hasDrive: hasDriveEarly,
             hasGitHub: hasGitHubEarly,
-            hasMemory: !!memoryForPrompt,
+            hasMemory: !!(userId && isCloudDbConfigured()),
+            canPersistArtifacts: !!(userId && isCloudDbConfigured()),
+            approvalMode,
           })
         : toolsEnabled
           ? TOOLS_SYSTEM_PROMPT
@@ -366,6 +382,26 @@ export async function POST(req: Request) {
         runId: harnessRunId ?? null,
         userId: userId ? "yes" : "no",
       });
+      const driveToken = hasDriveEarly && userId
+        ? await getValidDriveAccessToken(userId)
+        : null;
+      const githubToken = hasGitHubEarly && userId
+        ? await getValidGitHubAccessToken(userId)
+        : null;
+      const sessionKey = buildHermesSessionKey({ userId, conversationId });
+      registerAetherToolSession({
+        sessionKey,
+        userId,
+        conversationId,
+        projectId: projectId ?? null,
+        runId: harnessRunId ?? null,
+        approvalMode,
+        hasMemory: !!(userId && isCloudDbConfigured()),
+        hasDrive: hasDriveEarly,
+        hasGitHub: hasGitHubEarly,
+        driveAccessToken: driveToken?.accessToken,
+        githubAccessToken: githubToken?.accessToken,
+      });
       return proxyChatToHermes({
         messages: enrichedMessages,
         system,
@@ -375,6 +411,20 @@ export async function POST(req: Request) {
         runId: harnessRunId,
         abortSignal: req.signal,
         accessMode: "hosted",
+        aetherTools: toolsEnabled
+          ? {
+              userId,
+              conversationId,
+              projectId: projectId ?? null,
+              runId: harnessRunId ?? null,
+              approvalMode,
+              hasMemory: !!(userId && isCloudDbConfigured()),
+              hasDrive: hasDriveEarly,
+              hasGitHub: hasGitHubEarly,
+              driveAccessToken: driveToken?.accessToken,
+              githubAccessToken: githubToken?.accessToken,
+            }
+          : null,
         onFinish: () => {
           if (harnessRunId && userId) {
             void updateAgentRunStatus({
@@ -430,6 +480,7 @@ export async function POST(req: Request) {
       maxSteps: budget.maxSteps,
       maxWebSearches: timeBudget?.maxSearches ?? null,
       abortSignal: req.signal,
+      approvalMode,
     });
   } catch (error) {
     console.error("[api/chat]", error);

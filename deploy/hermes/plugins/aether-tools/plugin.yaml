@@ -1,0 +1,5 @@
+name: aether-tools
+version: "1.0"
+description: Callback into Aether for memory, artifacts, Drive, GitHub, and confirmations.
+requires_env:
+  - AETHER_TOOLS_URL

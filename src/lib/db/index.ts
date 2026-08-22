@@ -143,6 +143,29 @@ async function ensureSchema(db: AppDb): Promise<void> {
     CREATE INDEX IF NOT EXISTS vault_notes_user_updated_idx
       ON vault_notes (user_id, updated_at DESC)
   `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS pending_confirmations (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      conversation_id TEXT,
+      run_id TEXT,
+      request_json JSONB NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS pending_confirmations_user_idx
+      ON pending_confirmations (user_id, created_at DESC)
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS user_preferences (
+      user_id TEXT PRIMARY KEY,
+      tool_approval_mode TEXT NOT NULL DEFAULT 'ask',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
     })().catch((err) => {
       schemaPromise = null;
       throw err;

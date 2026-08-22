@@ -6,9 +6,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import { useSession } from "next-auth/react";
+import { parseToolApprovalMode } from "@/lib/hermes/tool-approval";
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -57,8 +60,11 @@ type SettingsContextValue = {
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
+  const { status } = useSession();
   const [settings, setSettingsState] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [hydrated, setHydrated] = useState(false);
+  const cloudPrefsLoaded = useRef(false);
+  const approvalTouched = useRef(false);
   const [openSettings, setOpenSettings] = useState(false);
   const [focusConnectedAccounts, setFocusConnectedAccounts] = useState(false);
   const [hostedStatus, setHostedStatus] = useState<HostedStatus | null>(null);
@@ -144,6 +150,36 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (status !== "authenticated" || cloudPrefsLoaded.current) return;
+    let cancelled = false;
+    void fetch("/api/preferences")
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return res.json() as Promise<{ toolApprovalMode?: string }>;
+      })
+      .then((data) => {
+        if (cancelled || !data?.toolApprovalMode || approvalTouched.current) {
+          return;
+        }
+        cloudPrefsLoaded.current = true;
+        setSettingsState((prev) => {
+          const next = {
+            ...prev,
+            toolApprovalMode: parseToolApprovalMode(data.toolApprovalMode),
+          };
+          saveSettings(next);
+          return next;
+        });
+      })
+      .catch(() => {
+        /* guest / no-DB — local settings stay source of truth */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [status]);
+
   const clearFocusConnectedAccounts = useCallback(() => {
     setFocusConnectedAccounts(false);
   }, []);
@@ -161,6 +197,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const updateSettings = useCallback((patch: Partial<AppSettings>) => {
     setSettingsState((prev) => {
       const next = { ...prev, ...patch };
+      if (patch.toolApprovalMode) {
+        approvalTouched.current = true;
+      }
+      if (patch.toolApprovalMode && status === "authenticated") {
+        void fetch("/api/preferences", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            toolApprovalMode: parseToolApprovalMode(patch.toolApprovalMode),
+          }),
+        }).catch(() => undefined);
+      }
       // Keep per-provider keys in sync when editing the active key field
       if (patch.openrouterKey !== undefined && prev.provider === "openrouter") {
         next.apiKey = patch.openrouterKey;
@@ -182,7 +230,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       saveSettings(next);
       return next;
     });
-  }, [hostedStatus?.defaultModel]);
+  }, [hostedStatus?.defaultModel, status]);
 
   const activeModel = resolveModel(settings);
   const hostedAvailable = hostedStatus?.available ?? false;

@@ -102,7 +102,20 @@ On Vercel project **`aether`**, Production:
 ```bash
 HERMES_BASE_URL=https://YOUR-SERVICE.up.railway.app
 HERMES_API_KEY=          # exactly the same string as Railway API_SERVER_KEY
+# Optional Phase 3 tool callback (this host → Aether). Same token as
+# Railway AETHER_TOOLS_TOKEN, or omit and Aether accepts HERMES_API_KEY.
+# AETHER_TOOLS_TOKEN=
 ```
+
+On Railway, also set `AETHER_TOOLS_URL` to the public Aether origin (for example `https://aether-seven-theta.vercel.app`) so the host plugin can call `POST /api/hermes/aether-tools`. Rebuild the gateway image after pulling this plugin. Existing volumes keep their `config.yaml` — add:
+
+```yaml
+plugins:
+  enabled:
+    - aether-tools
+```
+
+Do not put user Drive/GitHub tokens on the host.
 
 No trailing slash on the URL. Hosted ChatGPT and Claude send `custom:buzz`; other hosted models send `openrouter`. Optional override: `HERMES_PROVIDER=openai|anthropic|openrouter|custom:buzz` (alias `buzz`) wins for every hosted turn when set.
 
