@@ -1,27 +1,59 @@
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
 import { describe, it } from "node:test";
 import type { UIMessage } from "ai";
 import { proxyChatToHermes } from "./proxy-chat";
 import type { HermesConfig } from "./config";
 
+function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
 describe("proxyChatToHermes", () => {
-  it("streams UIMessage SSE from a mock Hermes server", async () => {
+  it("maps messages, session headers, bearer auth, and provider", async () => {
+    let seen: {
+      method?: string;
+      url?: string;
+      authorization?: string;
+      sessionKey?: string;
+      sessionId?: string;
+      idempotency?: string;
+      body?: Record<string, unknown>;
+    } = {};
+
     const server = createServer((req, res) => {
-      assert.equal(req.method, "POST");
-      assert.equal(req.url, "/v1/chat/completions");
-      assert.match(req.headers.authorization || "", /^Bearer test-key$/);
-      assert.equal(req.headers["x-hermes-session-key"], "aether:user:u1");
-      res.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      });
-      res.write(
-        'data: {"id":"chatcmpl-mock","choices":[{"delta":{"content":"Pong"}}]}\n\n',
-      );
-      res.write("data: [DONE]\n\n");
-      res.end();
+      void (async () => {
+        seen = {
+          method: req.method,
+          url: req.url,
+          authorization: String(req.headers.authorization ?? ""),
+          sessionKey: String(req.headers["x-hermes-session-key"] ?? ""),
+          sessionId: String(req.headers["x-hermes-session-id"] ?? ""),
+          idempotency: String(req.headers["idempotency-key"] ?? ""),
+          body: await readJsonBody(req),
+        };
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+        res.write(
+          'data: {"id":"chatcmpl-mock","choices":[{"delta":{"content":"Pong"}}]}\n\n',
+        );
+        res.write("data: [DONE]\n\n");
+        res.end();
+      })();
     });
 
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -48,6 +80,8 @@ describe("proxyChatToHermes", () => {
         model: "openai/gpt-4o",
         userId: "u1",
         conversationId: "c1",
+        runId: "run-aether-1",
+        accessMode: "hosted",
         config,
       });
 
@@ -56,6 +90,21 @@ describe("proxyChatToHermes", () => {
       assert.match(body, /Pong/);
       assert.match(body, /text-delta/);
       assert.match(body, /"finish"/);
+
+      assert.equal(seen.method, "POST");
+      assert.equal(seen.url, "/v1/chat/completions");
+      assert.equal(seen.authorization, "Bearer test-key");
+      assert.equal(seen.sessionKey, "aether:user:u1");
+      assert.equal(seen.sessionId, "c1");
+      assert.equal(seen.idempotency, "run-aether-1");
+      assert.equal(seen.body?.model, "openai/gpt-4o");
+      assert.equal(seen.body?.provider, "openrouter");
+      assert.equal(seen.body?.stream, true);
+      const msgs = seen.body?.messages as Array<{ role: string; content: string }>;
+      assert.equal(msgs[0].role, "system");
+      assert.equal(msgs[0].content, "Test system");
+      assert.equal(msgs[1].role, "user");
+      assert.equal(msgs[1].content, "Ping");
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((err) => (err ? reject(err) : resolve())),
