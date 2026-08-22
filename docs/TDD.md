@@ -171,7 +171,7 @@ Before a hard turn, Aether may **classify** the message: intent (chat / research
 | `src/providers/` | React context: settings, runtime, harness, drive, github, vault, … |
 | `src/lib/hosted/` | Hosted config, router, catalog, ranking |
 | `src/lib/harness/` | Classify, budgets, tool registry, run store. `loop-efficiency.ts` + `legacy-local-stream.ts` are the isolated BYOK / no-Hermes fallback — not the hosted live path. |
-| `src/lib/hermes/` | **Hosted live path:** config, provider map, message convert, SSE→UIMessage bridge, stop, Aether tool-seam prompt |
+| `src/lib/hermes/` | **Hosted live path:** config, provider map, message convert, SSE→UIMessage bridge, stop, Aether tool dispatcher + Ask/Auto seam |
 | `src/lib/db/` | Drizzle schema + Neon/PGlite bootstrap |
 | `src/lib/vault.ts` + `src/lib/vault/` | Local fallback + cloud store |
 | `src/auth.ts` | NextAuth configuration |

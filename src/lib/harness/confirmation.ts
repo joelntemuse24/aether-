@@ -2,6 +2,9 @@
  * Confirmation protocol for side-effecting actions.
  * Tools that would submit/send/post return needs_confirmation; the user (or
  * Agent panel later) must approve before the action executes.
+ *
+ * In-memory map covers guests / no-DB. Signed-in + cloud DB also persist so
+ * confirm cards survive refresh (same /api/harness/confirm contract).
  */
 
 import { z } from "zod";
@@ -50,17 +53,37 @@ export type ConfirmationResolved = {
   note: string;
 };
 
-/** In-memory pending confirmations (per server instance). Good enough for Vercel soft state + client relay. */
-const pending = new Map<
-  string,
-  {
-    request: ConfirmationRequest;
-    userId?: string | null;
-    createdAt: number;
-  }
->();
+export type PendingConfirmationRow = {
+  id: string;
+  request: ConfirmationRequest;
+  userId?: string | null;
+  conversationId?: string | null;
+  runId?: string | null;
+  createdAt: number;
+  status: "pending" | "approved" | "declined";
+  approved?: boolean;
+};
 
+export type ConfirmationRepository = {
+  save(row: PendingConfirmationRow): Promise<void>;
+  load(id: string): Promise<PendingConfirmationRow | null>;
+  remove?(id: string): Promise<void>;
+};
+
+const pending = new Map<string, PendingConfirmationRow>();
 const TTL_MS = 30 * 60 * 1000;
+
+let repository: ConfirmationRepository | null = null;
+
+export function setConfirmationRepository(
+  next: ConfirmationRepository | null,
+): void {
+  repository = next;
+}
+
+export function getConfirmationRepository(): ConfirmationRepository | null {
+  return repository;
+}
 
 function gc() {
   const now = Date.now();
@@ -69,44 +92,97 @@ function gc() {
   }
 }
 
-export function createConfirmationRequest(
-  request: ConfirmationRequest,
-  userId?: string | null,
-): ConfirmationToolResult {
-  gc();
-  const confirmation_id = crypto.randomUUID();
-  pending.set(confirmation_id, {
-    request,
-    userId: userId ?? null,
-    createdAt: Date.now(),
-  });
+export function forgetMemoryConfirmation(confirmationId: string): void {
+  pending.delete(confirmationId);
+}
+
+function toResult(row: PendingConfirmationRow): ConfirmationToolResult {
   return {
     ok: true,
     needs_confirmation: true,
-    confirmation_id,
-    action: request.action,
-    title: request.title,
-    preview: request.preview,
-    target: request.target,
+    confirmation_id: row.id,
+    action: row.request.action,
+    title: row.request.title,
+    preview: row.request.preview,
+    target: row.request.target,
     instruction:
       "Stop before this side effect. Show the user the preview and wait for explicit approval (UI confirm or user saying approve). Do not claim the action completed.",
   };
 }
 
-export function resolveConfirmation(
+export async function createConfirmationRequest(
+  request: ConfirmationRequest,
+  userId?: string | null,
+  extras?: { conversationId?: string | null; runId?: string | null },
+): Promise<ConfirmationToolResult> {
+  gc();
+  const confirmation_id = crypto.randomUUID();
+  const row: PendingConfirmationRow = {
+    id: confirmation_id,
+    request,
+    userId: userId ?? null,
+    conversationId: extras?.conversationId ?? null,
+    runId: extras?.runId ?? null,
+    createdAt: Date.now(),
+    status: "pending",
+  };
+  pending.set(confirmation_id, row);
+  if (repository && userId) {
+    await repository.save(row);
+  }
+  return toResult(row);
+}
+
+export async function peekConfirmation(
+  confirmationId: string,
+): Promise<PendingConfirmationRow | null> {
+  gc();
+  const memory = pending.get(confirmationId);
+  if (memory) return memory;
+  if (!repository) return null;
+  const stored = await repository.load(confirmationId);
+  if (!stored) return null;
+  pending.set(confirmationId, stored);
+  return stored;
+}
+
+export async function resolveConfirmation(
   confirmationId: string,
   approved: boolean,
   userId?: string | null,
-): ConfirmationResolved | { ok: false; error: string } {
+): Promise<ConfirmationResolved | { ok: false; error: string }> {
   gc();
-  const row = pending.get(confirmationId);
+  let row = pending.get(confirmationId) ?? null;
+  if (!row && repository) {
+    row = await repository.load(confirmationId);
+  }
   if (!row) {
     return { ok: false, error: "Confirmation expired or not found." };
+  }
+  if (row.status !== "pending") {
+    return {
+      ok: true,
+      needs_confirmation: false,
+      confirmation_id: confirmationId,
+      approved: row.status === "approved",
+      note:
+        row.status === "approved"
+          ? "User already approved. You may proceed with the described action carefully."
+          : "User already declined. Do not perform the action; offer an alternative.",
+    };
   }
   if (row.userId && userId && row.userId !== userId) {
     return { ok: false, error: "Confirmation belongs to another session." };
   }
-  pending.delete(confirmationId);
+  const next: PendingConfirmationRow = {
+    ...row,
+    status: approved ? "approved" : "declined",
+    approved,
+  };
+  pending.set(confirmationId, next);
+  if (repository) {
+    await repository.save(next);
+  }
   return {
     ok: true,
     needs_confirmation: false,
@@ -116,9 +192,4 @@ export function resolveConfirmation(
       ? "User approved. You may proceed with the described action carefully."
       : "User declined. Do not perform the action; offer an alternative.",
   };
-}
-
-export function peekConfirmation(confirmationId: string) {
-  gc();
-  return pending.get(confirmationId) ?? null;
 }

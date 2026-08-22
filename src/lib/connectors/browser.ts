@@ -202,7 +202,7 @@ export async function browserAct(input: {
   if (action === "submit" || (action === "click" && SUBMIT_HINT.test(description || ""))) {
     const confirmAction: ConfirmableAction =
       action === "submit" ? "browser_fill_and_submit" : "browser_click_submit";
-    const conf = createConfirmationRequest(
+    const conf = await createConfirmationRequest(
       {
         action: confirmAction,
         title: description?.slice(0, 100) || "Confirm browser action",

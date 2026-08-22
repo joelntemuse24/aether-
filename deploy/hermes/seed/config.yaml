@@ -65,3 +65,9 @@ terminal:
 agent:
   disabled_toolsets:
     - browser
+
+# First-boot only. Existing volumes keep their config.yaml.
+# Enables the Aether callback plugin (memory / artifacts / Drive / GitHub / confirms).
+plugins:
+  enabled:
+    - aether-tools

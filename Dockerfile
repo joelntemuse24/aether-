@@ -25,8 +25,10 @@ FROM nousresearch/hermes-agent:latest
 # so first boot gets Aether settings; live volumes are left alone.
 COPY deploy/hermes/seed/config.yaml /opt/aether/seed/config.yaml
 COPY deploy/hermes/seed/config.yaml /opt/hermes/cli-config.yaml.example
+COPY deploy/hermes/plugins/aether-tools /opt/aether/plugins/aether-tools
 COPY --chmod=0755 deploy/hermes/railway-cmd.sh /opt/aether/railway-cmd.sh
 COPY --chmod=0755 deploy/hermes/00-aether-port.sh /etc/cont-init.d/00-aether-port
+COPY --chmod=0755 deploy/hermes/01-aether-tools-plugin.sh /etc/cont-init.d/01-aether-tools-plugin
 
 # HERMES_DASHBOARD unset/0 = dashboard service stays down (official Docker docs).
 # HERMES_GATEWAY_BOOTSTRAP_STATE=running seeds gateway_state.json on a blank

@@ -10,6 +10,8 @@ import { toOpenAIChatMessages } from "./messages";
 import { resolveHermesModelRequest } from "./provider";
 import { extractHermesRunId, stopHermesRun } from "./stop";
 import { bridgeHermesChatCompletionToUIMessageResponse } from "./stream-bridge";
+import { runHermesAetherToolLoop } from "./tool-loop";
+import type { AetherToolContext } from "./aether-tools";
 
 export type ProxyChatToHermesArgs = {
   messages: UIMessage[];
@@ -26,6 +28,8 @@ export type ProxyChatToHermesArgs = {
   /** Optional explicit provider slug (wins over resolver) */
   provider?: string;
   config?: HermesConfig;
+  /** When set, Aether-owned tools execute on Vercel during this turn. */
+  aetherTools?: AetherToolContext | null;
   onFinish?: (info: { completionId?: string }) => void;
   onError?: (error: unknown) => void;
 };
@@ -81,6 +85,41 @@ export async function proxyChatToHermes(
     void stopHermesRun({ config, runId: seenRunId });
   };
   abortSignal?.addEventListener("abort", onAbortStop, { once: true });
+
+  const onStreamError = (error: unknown) => {
+    args.onError?.(error);
+    return friendlyChatError(error);
+  };
+  const onEnd = (info: {
+    completionId?: string;
+    aborted?: boolean;
+    runId?: string;
+  }) => {
+    abortSignal?.removeEventListener("abort", onAbortStop);
+    if (info.aborted) {
+      noteRunId(info.runId);
+      onAbortStop();
+      return;
+    }
+    args.onFinish?.({ completionId: info.completionId });
+  };
+
+  if (args.aetherTools) {
+    return runHermesAetherToolLoop({
+      config,
+      messages: openaiMessages,
+      model: resolved.model,
+      provider,
+      sessionId: args.conversationId,
+      sessionKey,
+      idempotencyKey: args.runId,
+      abortSignal,
+      aether: args.aetherTools,
+      onRunId: noteRunId,
+      onError: onStreamError,
+      onEnd,
+    });
+  }
 
   let upstream: Response;
   try {
@@ -143,18 +182,7 @@ export async function proxyChatToHermes(
     body: upstream.body,
     abortSignal,
     onRunId: noteRunId,
-    onError: (error) => {
-      args.onError?.(error);
-      return friendlyChatError(error);
-    },
-    onEnd: (info) => {
-      abortSignal?.removeEventListener("abort", onAbortStop);
-      if (info.aborted) {
-        noteRunId(info.runId);
-        onAbortStop();
-        return;
-      }
-      args.onFinish?.({ completionId: info.completionId });
-    },
+    onError: onStreamError,
+    onEnd,
   });
 }

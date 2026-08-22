@@ -9,12 +9,15 @@ const FOLDER_MIME = "application/vnd.google-apps.folder";
 export async function driveSearchForUser(
   userId: string,
   query: string,
+  accessToken?: string,
 ): Promise<{
   ok: boolean;
   error?: string;
   files: Array<{ id: string; name: string; mimeType: string; isFolder: boolean }>;
 }> {
-  const auth = await getValidDriveAccessToken(userId);
+  const auth = accessToken
+    ? { accessToken }
+    : await getValidDriveAccessToken(userId);
   if (!auth) {
     return { ok: false, error: "Google Drive is not connected.", files: [] };
   }
@@ -56,8 +59,11 @@ export async function driveSearchForUser(
 export async function driveReadTextForUser(
   userId: string,
   fileId: string,
+  accessToken?: string,
 ): Promise<{ ok: boolean; error?: string; name?: string; text?: string }> {
-  const auth = await getValidDriveAccessToken(userId);
+  const auth = accessToken
+    ? { accessToken }
+    : await getValidDriveAccessToken(userId);
   if (!auth) {
     return { ok: false, error: "Google Drive is not connected." };
   }
