@@ -98,13 +98,68 @@ describe("proxyChatToHermes", () => {
       assert.equal(seen.sessionId, "c1");
       assert.equal(seen.idempotency, "run-aether-1");
       assert.equal(seen.body?.model, "openai/gpt-4o");
-      assert.equal(seen.body?.provider, "openrouter");
+      assert.equal(seen.body?.provider, "custom:buzz");
       assert.equal(seen.body?.stream, true);
       const msgs = seen.body?.messages as Array<{ role: string; content: string }>;
       assert.equal(msgs[0].role, "system");
       assert.equal(msgs[0].content, "Test system");
       assert.equal(msgs[1].role, "user");
       assert.equal(msgs[1].content, "Ping");
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      );
+    }
+  });
+
+  it("sends openrouter for hosted models outside ChatGPT and Claude", async () => {
+    let seenProvider: unknown;
+    const server = createServer((req, res) => {
+      void (async () => {
+        const body = await readJsonBody(req);
+        seenProvider = body.provider;
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+        res.write(
+          'data: {"id":"chatcmpl-mock","choices":[{"delta":{"content":"ok"}}]}\n\n',
+        );
+        res.write("data: [DONE]\n\n");
+        res.end();
+      })();
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const addr = server.address();
+    assert.ok(addr && typeof addr === "object");
+    const config: HermesConfig = {
+      baseUrl: `http://127.0.0.1:${addr.port}`,
+      apiKey: "test-key",
+      modelName: "hermes-agent",
+    };
+
+    try {
+      const messages = [
+        {
+          id: "m1",
+          role: "user",
+          parts: [{ type: "text", text: "Ping" }],
+        },
+      ] as unknown as UIMessage[];
+
+      const response = await proxyChatToHermes({
+        messages,
+        model: "google/gemini-2.5-pro",
+        userId: "u1",
+        conversationId: "c1",
+        accessMode: "hosted",
+        config,
+      });
+      assert.equal(response.status, 200);
+      await response.text();
+      assert.equal(seenProvider, "openrouter");
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((err) => (err ? reject(err) : resolve())),
