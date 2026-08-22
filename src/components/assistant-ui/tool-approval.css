@@ -1,0 +1,200 @@
+/* Chrome for Ask | Auto and confirm cards only. Do not restyle the app. */
+
+.aether-tool-approval {
+  --aether-approval-pad: 2px;
+  --aether-approval-outer: 999px;
+  --aether-approval-inner: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: var(--aether-approval-pad);
+  border: 1px solid var(--border);
+  border-radius: var(--aether-approval-outer);
+  background: var(--canvas);
+}
+
+.aether-tool-approval__icon {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  margin-inline: 4px 2px;
+  flex-shrink: 0;
+}
+
+.aether-tool-approval__icon svg {
+  position: absolute;
+  inset: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.aether-tool-approval__icon svg[data-active="true"] {
+  color: var(--text);
+}
+
+.aether-tool-approval__option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--aether-approval-inner);
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  transition: scale 200ms ease-out, color 160ms ease-out,
+    background-color 160ms ease-out;
+}
+
+.aether-tool-approval__option[aria-pressed="true"] {
+  background: var(--elevated);
+  color: var(--text);
+  box-shadow: 0 1px 0 var(--border-subtle);
+}
+
+.aether-tool-approval__option:active:not(:disabled) {
+  scale: 0.97;
+}
+
+.aether-confirm-actions {
+  --aether-confirm-outer: 12px;
+  --aether-confirm-inner: 9px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--aether-confirm-outer);
+  background: var(--canvas);
+}
+
+.aether-confirm-actions__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--aether-confirm-inner);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  transition: scale 200ms ease-out, color 160ms ease-out,
+    background-color 160ms ease-out, opacity 160ms ease-out;
+}
+
+.aether-confirm-actions__btn:active:not(:disabled) {
+  scale: 0.97;
+}
+
+.aether-confirm-actions__btn:disabled {
+  opacity: 0.5;
+}
+
+.aether-confirm-actions__confirm {
+  background: var(--accent);
+  color: #fff;
+}
+
+.aether-confirm-actions__confirm[data-destructive="true"] {
+  background: var(--danger);
+  color: #fff;
+}
+
+.aether-confirm-actions__cancel {
+  background: transparent;
+  color: var(--muted);
+}
+
+.aether-confirm-actions__status {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted-soft);
+}
+
+@media (min-width: 768px) {
+  .aether-tool-approval__option {
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .aether-confirm-actions__btn {
+    min-height: 40px;
+    padding: 0 14px;
+  }
+}
+
+@media (hover: hover) {
+  .aether-tool-approval__option:hover:not([aria-pressed="true"]):not(:disabled) {
+    color: var(--text);
+  }
+
+  .aether-confirm-actions__confirm:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .aether-confirm-actions__confirm[data-destructive="true"]:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+
+  .aether-confirm-actions__cancel:hover:not(:disabled) {
+    background: var(--hover-overlay);
+    color: var(--text);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .aether-tool-approval__icon svg[data-active="true"] {
+    animation: aether-tool-approval-icon-in 200ms ease-out both;
+  }
+
+  .aether-tool-approval__icon svg[data-active="false"] {
+    animation: aether-tool-approval-icon-out 200ms ease-out both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aether-tool-approval__icon svg[data-active="false"] {
+    opacity: 0;
+  }
+
+  .aether-tool-approval__option,
+  .aether-confirm-actions__btn {
+    transition: none;
+  }
+}
+
+@keyframes aether-tool-approval-icon-in {
+  from {
+    transform: scale(0.25);
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes aether-tool-approval-icon-out {
+  from {
+    transform: scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    transform: scale(0.25);
+    opacity: 0;
+    filter: blur(4px);
+  }
+}

@@ -21,7 +21,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ToolApprovalToggle } from "@/components/assistant-ui/tool-approval-toggle";
+import { confirmActionCopy } from "@/lib/hermes/confirm-copy";
 import { useArtifact, type Artifact } from "@/providers/artifact-provider";
+import "@/components/assistant-ui/tool-approval.css";
 import {
   TOOL_NAMES,
   getToolDisplay,
@@ -73,7 +75,7 @@ type ConfirmExecution = {
   persisted?: boolean;
 };
 
-/** Shared Approve / Decline + Ask|Auto chrome. Talks only to /api/harness/confirm. */
+/** Shared confirm / Cancel + Ask|Auto chrome. Talks only to /api/harness/confirm. */
 function ConfirmCardActions({
   confirmationId,
   active,
@@ -90,6 +92,14 @@ function ConfirmCardActions({
     null,
   );
   const [expired, setExpired] = useState(false);
+  const payloadAction =
+    payload && typeof payload.args === "object" && payload.args
+      ? (payload.args as { action?: unknown }).action
+      : payload?.action;
+  const copy = confirmActionCopy({
+    tool: typeof payload?.tool === "string" ? payload.tool : undefined,
+    action: typeof payloadAction === "string" ? payloadAction : undefined,
+  });
 
   useEffect(() => {
     if (!confirmationId) return;
@@ -97,7 +107,7 @@ function ConfirmCardActions({
     void fetch(`/api/harness/confirm?id=${encodeURIComponent(confirmationId)}`)
       .then(async (res) => {
         // 404 is normal for a just-created guest card in another isolate.
-        // Keep Approve/Decline; POST records the decision or shows expired.
+        // Keep the confirm / Cancel actions; POST records the decision or shows expired.
         if (!res.ok) return null;
         return res.json() as Promise<{ status?: string }>;
       })
@@ -129,9 +139,7 @@ function ConfirmCardActions({
         window.dispatchEvent(
           new CustomEvent("aether:notice", {
             detail:
-              res.status === 404
-                ? "This approval expired. Ask Aether to try again."
-                : "Could not record approval. Try again.",
+              res.status === 404 ? copy.expired : copy.failedNotice,
           }),
         );
         if (res.status === 404) setExpired(true);
@@ -144,9 +152,7 @@ function ConfirmCardActions({
       if (approved && data.execution) onApprovedExecution?.(data.execution);
       window.dispatchEvent(
         new CustomEvent("aether:notice", {
-          detail: approved
-            ? "Approved — tell Aether to continue."
-            : "Declined — Aether will not take that action.",
+          detail: approved ? copy.approvedNotice : copy.cancelledNotice,
         }),
       );
     } finally {
@@ -156,38 +162,33 @@ function ConfirmCardActions({
 
   if (!active || !confirmationId) return null;
   if (expired && !resolved) {
-    return (
-      <p className="mt-2 text-[11px] text-[var(--muted-soft)]">
-        This approval expired. Ask Aether to try again.
-      </p>
-    );
+    return <p className="aether-confirm-actions__status">{copy.expired}</p>;
   }
   if (resolved) {
     return (
-      <p className="mt-2 text-[11px] text-[var(--muted-soft)]">
-        {resolved === "approved"
-          ? "You approved. Ask Aether to continue."
-          : "You declined this action."}
+      <p className="aether-confirm-actions__status">
+        {resolved === "approved" ? copy.approvedStatus : copy.cancelledStatus}
       </p>
     );
   }
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-2">
+    <div className="aether-confirm-actions">
       <button
         type="button"
         disabled={busy}
         onClick={() => void resolve(true)}
-        className="rounded-md bg-[var(--accent)] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[var(--accent-hover)] disabled:opacity-50"
+        data-destructive={copy.destructive ? "true" : undefined}
+        className="aether-confirm-actions__btn aether-confirm-actions__confirm"
       >
-        Approve
+        {copy.confirm}
       </button>
       <button
         type="button"
         disabled={busy}
         onClick={() => void resolve(false)}
-        className="rounded-md px-2.5 py-1 text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)] disabled:opacity-50"
+        className="aether-confirm-actions__btn aether-confirm-actions__cancel"
       >
-        Decline
+        {copy.cancel}
       </button>
       <ToolApprovalToggle />
     </div>

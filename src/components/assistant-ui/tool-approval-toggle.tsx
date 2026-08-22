@@ -1,12 +1,26 @@
 "use client";
 
+import { CircleHelpIcon, ZapIcon } from "lucide-react";
 import { useSettings } from "@/providers/settings-provider";
 import { cn } from "@/lib/utils";
 import type { ToolApprovalMode } from "@/lib/hermes/tool-approval";
+import "./tool-approval.css";
 
-const OPTIONS: Array<{ id: ToolApprovalMode; label: string }> = [
-  { id: "ask", label: "Ask" },
-  { id: "auto", label: "Auto" },
+const OPTIONS: Array<{
+  id: ToolApprovalMode;
+  label: string;
+  ariaLabel: string;
+}> = [
+  {
+    id: "ask",
+    label: "Ask",
+    ariaLabel: "Ask. Confirm changes before they run.",
+  },
+  {
+    id: "auto",
+    label: "Auto",
+    ariaLabel: "Auto. Run routine tools without a tap.",
+  },
 ];
 
 export function ToolApprovalToggle({
@@ -22,26 +36,21 @@ export function ToolApprovalToggle({
   return (
     <div
       role="group"
-      aria-label="Tool approval"
-      title="Ask confirms changes. Auto runs routine tools; destructive actions still ask."
-      className={cn(
-        "inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--canvas)] p-0.5",
-        className,
-      )}
+      aria-label="Tool approval. Ask confirms changes. Auto runs routine tools."
+      className={cn("aether-tool-approval", compact && "is-compact", className)}
     >
+      <span className="aether-tool-approval__icon" aria-hidden="true">
+        <CircleHelpIcon data-active={mode === "ask"} />
+        <ZapIcon data-active={mode === "auto"} />
+      </span>
       {OPTIONS.map((opt) => (
         <button
           key={opt.id}
           type="button"
           aria-pressed={mode === opt.id}
+          aria-label={opt.ariaLabel}
           onClick={() => updateSettings({ toolApprovalMode: opt.id })}
-          className={cn(
-            "rounded-full font-medium transition-colors",
-            compact ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-[12px]",
-            mode === opt.id
-              ? "bg-[var(--elevated)] text-[var(--text)] shadow-sm"
-              : "text-[var(--muted)] hover:text-[var(--text)]",
-          )}
+          className="aether-tool-approval__option"
         >
           {opt.label}
         </button>
