@@ -94,10 +94,8 @@ function ConfirmCardActions({
     let cancelled = false;
     void fetch(`/api/harness/confirm?id=${encodeURIComponent(confirmationId)}`)
       .then(async (res) => {
-        if (res.status === 404) {
-          if (!cancelled) setExpired(true);
-          return null;
-        }
+        // 404 is normal for a just-created guest card in another isolate.
+        // Keep Approve/Decline; POST records the decision or shows expired.
         if (!res.ok) return null;
         return res.json() as Promise<{ status?: string }>;
       })
@@ -280,6 +278,8 @@ const ToolShell: FC<{
    * body). Collapses again when the run finishes so traces stay quiet.
    */
   expandWhileRunning?: boolean;
+  /** Keep the body open (pending approval). Wins over the post-run collapse. */
+  stayOpen?: boolean;
 }> = ({
   name,
   running,
@@ -288,6 +288,7 @@ const ToolShell: FC<{
   children,
   headerAction,
   expandWhileRunning,
+  stayOpen,
 }) => {
   // Collapsed by default; progressive construction can open while running.
   const [open, setOpen] = useState(false);
@@ -298,12 +299,16 @@ const ToolShell: FC<{
 
   useEffect(() => {
     if (userToggled.current) return;
+    if (stayOpen && hasBody) {
+      setOpen(true);
+      return;
+    }
     if (expandWhileRunning && running && hasBody) {
       setOpen(true);
     } else if (expandWhileRunning && !running) {
       setOpen(false);
     }
-  }, [expandWhileRunning, running, hasBody]);
+  }, [expandWhileRunning, running, hasBody, stayOpen]);
 
   return (
     <div
@@ -681,6 +686,7 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       name={TOOL_NAMES.createArtifact}
       running={running}
       expandWhileRunning={hasConstructingBody}
+      stayOpen={confirm.needsConfirmation}
       subtitle={
         streamingTitle
           ? result?.persisted
@@ -840,6 +846,7 @@ const MemoryWriteToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       running={running}
       error={error}
       subtitle={input?.title || saved?.title}
+      stayOpen={confirm.needsConfirmation}
     >
       {(saved || input) && (
         <div className="rounded-lg border border-[var(--border)] bg-[var(--elevated)] px-2.5 py-2">
@@ -1309,7 +1316,8 @@ const ConfirmationToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       name={TOOL_NAMES.requestConfirmation}
       running={running}
       subtitle={title}
-      expandWhileRunning={pending || running}
+      expandWhileRunning={running}
+      stayOpen={pending}
     >
       {preview && (
         <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--muted)]">
@@ -1413,7 +1421,8 @@ const BrowserActToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
           ? "Needs approval"
           : input?.action || input?.description
       }
-      expandWhileRunning={pending || running}
+      expandWhileRunning={running}
+      stayOpen={pending}
     >
       {(output?.preview || input?.description) && (
         <p className="whitespace-pre-wrap text-[11px] text-[var(--muted)]">
