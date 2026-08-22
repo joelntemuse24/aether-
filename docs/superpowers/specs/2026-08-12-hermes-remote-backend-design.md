@@ -153,8 +153,9 @@ Bridge emits AI SDK UIMessage chunks via `createUIMessageStream` → `createUIMe
 
 ### 6.4 Cancel
 
-- Phase 1: browser Stop → `AbortSignal` on `/api/chat` → abort Hermes fetch.
-- Phase 2: if using Runs API, also `POST /v1/runs/{run_id}/stop`. Map Hermes approval events to existing `/api/harness/confirm` cards.
+- Browser Stop → `AbortSignal` on `/api/chat` → abort Hermes fetch.
+- If a Hermes `run_id` appears (`X-Hermes-Run-Id` / SSE `run_id`), also `POST /v1/runs/{run_id}/stop`.
+- Phase 2: map Hermes approval events to existing `/api/harness/confirm` cards.
 
 ### 6.5 Tool ownership matrix
 
@@ -176,15 +177,17 @@ Env:
 HERMES_BASE_URL=https://hermes.example.com   # no trailing /v1 required; adapter normalizes
 HERMES_API_KEY=...                           # server only
 HERMES_MODEL_NAME=hermes-agent               # optional default model field
+HERMES_PROVIDER=openrouter                   # sent with picker model (hosted default)
 HERMES_ENABLED=1                             # optional explicit enable; else enabled when URL+key set
 ```
 
 Routing in `/api/chat`:
 
-1. If Hermes configured **and** `accessMode === "hosted"` → Hermes proxy path.
-2. Else → existing `streamText` + tool registry path (BYOK + fallback).
+1. If Hermes configured **and** `accessMode === "hosted"` → Hermes proxy (`src/lib/hermes`). Always send `provider` (default `openrouter`).
+2. Else → isolated `streamLegacyLocalChat` (BYOK + hosted fallback when Hermes env is missing).
+3. If hosted and neither Hermes nor local hosted keys → 503. `/api/hosted/status.available` is true when either path can serve chat.
 
-After Hermes is stable in production: remove loop-efficiency progressive unlock and in-route tool registry from the hosted path; update `AGENTS.md` / TDD.
+The in-process `prepareStep` / progressive unlock loop is isolated under `src/lib/harness/legacy-local-stream.ts`. New work targets the Hermes adapter.
 
 ## 8. Hardening
 
