@@ -1,0 +1,10 @@
+# Railway builds deploy/hermes/Dockerfile from the repo root.
+# The image only COPYs a few files under deploy/hermes/.
+node_modules
+.next
+out
+.data
+.vercel
+coverage
+.git
+Match website layout
