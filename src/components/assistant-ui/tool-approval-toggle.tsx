@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { CircleHelpIcon, ZapIcon } from "lucide-react";
 import { useSettings } from "@/providers/settings-provider";
 import { cn } from "@/lib/utils";
@@ -32,11 +33,20 @@ export function ToolApprovalToggle({
 }) {
   const { settings, updateSettings } = useSettings();
   const mode = settings.toolApprovalMode === "auto" ? "auto" : "ask";
+  const prevMode = useRef(mode);
+  const [motionReady, setMotionReady] = useState(false);
+
+  useEffect(() => {
+    if (prevMode.current === mode) return;
+    prevMode.current = mode;
+    setMotionReady(true);
+  }, [mode]);
 
   return (
     <div
       role="group"
       aria-label="Tool approval. Ask confirms changes. Auto runs routine tools."
+      data-motion={motionReady ? "true" : undefined}
       className={cn("aether-tool-approval", compact && "is-compact", className)}
     >
       <span className="aether-tool-approval__icon" aria-hidden="true">

@@ -162,11 +162,15 @@ function ConfirmCardActions({
 
   if (!active || !confirmationId) return null;
   if (expired && !resolved) {
-    return <p className="aether-confirm-actions__status">{copy.expired}</p>;
+    return (
+      <p className="aether-confirm-actions__status" role="status">
+        {copy.expired}
+      </p>
+    );
   }
   if (resolved) {
     return (
-      <p className="aether-confirm-actions__status">
+      <p className="aether-confirm-actions__status" role="status">
         {resolved === "approved" ? copy.approvedStatus : copy.cancelledStatus}
       </p>
     );
@@ -1331,7 +1335,7 @@ const ConfirmationToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     ok?: boolean;
   } | undefined;
 
-  const title = output?.title || input?.title || "Needs approval";
+  const title = output?.title || input?.title || "Needs your confirmation";
   const preview = output?.preview || input?.preview;
   const confirm = confirmationFromResult(output);
   const pending = confirm.needsConfirmation && !running;
@@ -1444,7 +1448,7 @@ const BrowserActToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       error={error}
       subtitle={
         output?.needs_confirmation
-          ? "Needs approval"
+          ? "Needs your confirmation"
           : input?.action || input?.description
       }
       expandWhileRunning={running}

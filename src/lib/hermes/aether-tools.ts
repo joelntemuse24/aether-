@@ -197,7 +197,7 @@ async function gateIfNeeded(
       ? "Save a memory"
       : name === TOOL_NAMES.createArtifact
         ? "Save an artifact"
-        : "Needs approval");
+        : "Needs your confirmation");
   const preview =
     str(args.preview) ||
     (name === TOOL_NAMES.memoryWrite
@@ -221,8 +221,8 @@ async function gateIfNeeded(
   const conf = await create(
     {
       action,
-      title: title.slice(0, 120) || "Needs approval",
-      preview: preview.slice(0, 2000) || "This action needs your approval.",
+      title: title.slice(0, 120) || "Needs your confirmation",
+      preview: preview.slice(0, 2000) || "This action waits for you.",
       target: str(args.target) || undefined,
       payload: {
         tool: name,
@@ -272,8 +272,8 @@ export async function executeAetherTool(input: {
     const conf = await create(
       {
         action: action as ConfirmationRequest["action"],
-        title: (str(args.title) || "Needs approval").slice(0, 120),
-        preview: (str(args.preview) || "This action needs your approval.").slice(
+        title: (str(args.title) || "Needs your confirmation").slice(0, 120),
+        preview: (str(args.preview) || "This action waits for you.").slice(
           0,
           2000,
         ),

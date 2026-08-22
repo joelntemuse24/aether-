@@ -39,7 +39,7 @@ export function hermesAetherToolSeamAddendum(
       : "- create_artifact: create substantial reusable work for the Aether artifact panel (they can save it).",
   );
   live.push(
-    "- request_confirmation: gate destructive actions, spends, third-party submits, or deletes. Always wait for the user's Approve/Decline card.",
+    "- request_confirmation: gate destructive actions, spends, third-party submits, or deletes. Always wait for the user's confirm or Cancel card.",
   );
 
   if (ctx.hasDrive) {

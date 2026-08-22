@@ -24,6 +24,7 @@ describe("hermes Aether tool seam", () => {
     assert.doesNotMatch(text, /Buzz/i);
     assert.doesNotMatch(text, /Railway/i);
     assert.doesNotMatch(text, /OpenRouter/i);
+    assert.doesNotMatch(text, /Approve\/Decline/);
   });
 
   it("keeps unavailable connectors explicit instead of pretending they work", () => {
