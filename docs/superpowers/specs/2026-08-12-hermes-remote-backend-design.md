@@ -105,7 +105,7 @@ Body:
 ```json
 {
   "model": "<requestedModel or hermes-agent>",
-  "provider": "<optional; hosted openrouter slug when configured>",
+  "provider": "<optional; hosted custom:buzz for ChatGPT/Claude, else openrouter>",
   "stream": true,
   "messages": [
     { "role": "system", "content": "<assembled Aether context>" },
@@ -177,13 +177,13 @@ Env:
 HERMES_BASE_URL=https://hermes.example.com   # no trailing /v1 required; adapter normalizes
 HERMES_API_KEY=...                           # server only
 HERMES_MODEL_NAME=hermes-agent               # optional default model field
-HERMES_PROVIDER=openrouter                   # sent with picker model (hosted default)
+HERMES_PROVIDER=openrouter                   # optional override; else ChatGPT/Claude → custom:buzz, others → openrouter
 HERMES_ENABLED=1                             # optional explicit enable; else enabled when URL+key set
 ```
 
 Routing in `/api/chat`:
 
-1. If Hermes configured **and** `accessMode === "hosted"` → Hermes proxy (`src/lib/hermes`). Always send `provider` (default `openrouter`).
+1. If Hermes configured **and** `accessMode === "hosted"` → Hermes proxy (`src/lib/hermes`). Always send `provider` (ChatGPT/Claude → `custom:buzz`; other hosted models → `openrouter`).
 2. Else → isolated `streamLegacyLocalChat` (BYOK + hosted fallback when Hermes env is missing).
 3. If hosted and neither Hermes nor local hosted keys → 503. `/api/hosted/status.available` is true when either path can serve chat.
 

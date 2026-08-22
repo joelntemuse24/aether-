@@ -8,6 +8,8 @@
 #   https://hermes-agent.nousresearch.com/docs/integrations/providers
 # - gateway.platforms.api_server.direct_model_requests:
 #   https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server
+# - named providers: dict + fallback_providers:
+#   https://hermes-agent.nousresearch.com/docs/developer-guide/provider-runtime
 # - tool_loop_guardrails.hard_stop_enabled (unattended gateway):
 #   https://hermes-agent.nousresearch.com/docs/user-guide/docker
 # - terminal.backend: local (no docker.sock):
@@ -26,7 +28,26 @@ model:
 gateway:
   platforms:
     api_server:
+      # Honor per-request model when the client also sends provider
+      # (Aether always sends provider for hosted + known BYOK slugs).
       direct_model_requests: true
+
+# Named custom provider. Aether sends `provider: custom:buzz` for hosted
+# ChatGPT and Claude. Hermes also accepts the alias `buzz`.
+# Buzz is OpenAI-compatible Chat Completions (https://api.buzzai.cc/v1).
+# Do NOT use Hermes native `anthropic` for this upstream — that is the
+# Anthropic Messages API, which Buzz does not speak.
+providers:
+  buzz:
+    api: https://api.buzzai.cc/v1
+    key_env: BUZZ_API_KEY
+    transport: chat_completions
+
+# When Buzz errors / saturates, try OpenRouter with the same picker model.
+# Leave `model` unset so failover keeps the request id. Pin a catalog id
+# only if your Hermes build ignores entries that omit `model`.
+fallback_providers:
+  - provider: openrouter
 
 tool_loop_guardrails:
   warnings_enabled: true

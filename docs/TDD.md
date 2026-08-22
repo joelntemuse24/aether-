@@ -253,7 +253,7 @@ Cloud features activate only when DB is configured **and** the user is signed in
 | `HERMES_BASE_URL` | Operator Hermes origin (trailing `/v1` optional) |
 | `HERMES_API_KEY` | Server-only bearer key (never sent to the browser) |
 | `HERMES_MODEL_NAME` | Optional default / fallback picker id |
-| `HERMES_PROVIDER` | Provider slug sent with the picker model (default hosted: `openrouter`) |
+| `HERMES_PROVIDER` | Optional override for the Hermes provider slug (wins when set). Default hosted: ChatGPT/Claude → `custom:buzz`, other models → `openrouter` |
 | `HERMES_ENABLED=0` | Force-disable even if URL+key are set |
 
 Full comments live in `.env.example`.
@@ -320,6 +320,7 @@ Model family
 
 - Live catalog: OpenRouter models API, ranked **ChatGPT → Claude → More**, served by `GET /api/hosted/status`.
 - Config: `src/lib/hosted/config.ts`, routing: `src/lib/hosted/router.ts`, ranking: `src/lib/hosted/rank-models.ts`.
+- Hermes hosted path uses the same family split: ChatGPT/Claude send `provider: custom:buzz`; other models send `openrouter`. Hermes then fails over via `fallback_providers` on the host.
 
 If hosted is unconfigured, chat returns **503** in hosted mode; the user can switch to BYOK under Advanced.
 

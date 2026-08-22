@@ -51,13 +51,16 @@ Use `deploy/hermes/.env.example` as the checklist. Minimum:
 API_SERVER_ENABLED=true
 API_SERVER_HOST=0.0.0.0
 API_SERVER_KEY="$(openssl rand -hex 32)"
-OPENROUTER_API_KEY=          # same key family Aether Cloud already uses
+BUZZ_API_KEY=                # hosted ChatGPT + Claude (OpenAI-compatible)
+OPENROUTER_API_KEY=          # long-tail + failover when Buzz is saturated
 HERMES_DASHBOARD=0
 HERMES_GATEWAY_BOOTSTRAP_STATE=running
 RAILWAY_DOCKERFILE_PATH=deploy/hermes/Dockerfile
 ```
 
 Official API server docs: `API_SERVER_KEY` minimum 8 characters. The published image refuses keys shorter than 16. `openssl rand -hex 32` satisfies both.
+
+The first-boot seed (`deploy/hermes/seed/config.yaml`) registers `providers.buzz` and OpenRouter as `fallback_providers`. Aether sends `provider: custom:buzz` for hosted ChatGPT and Claude (Hermes also accepts the alias `buzz`). Do **not** map Claude traffic to Hermes native `anthropic` — that is the Anthropic Messages API; Buzz is Chat Completions only.
 
 **Do not set** `API_SERVER_CORS_ORIGINS=*` — Aether calls this host server-to-server.
 
@@ -101,7 +104,7 @@ HERMES_BASE_URL=https://YOUR-SERVICE.up.railway.app
 HERMES_API_KEY=          # exactly the same string as Railway API_SERVER_KEY
 ```
 
-No trailing slash on the URL. Optional: `HERMES_PROVIDER=openrouter` (hosted default).
+No trailing slash on the URL. Hosted ChatGPT and Claude send `custom:buzz`; other hosted models send `openrouter`. Optional override: `HERMES_PROVIDER=openai|anthropic|openrouter|custom:buzz` (alias `buzz`) wins for every hosted turn when set.
 
 Redeploy Aether after saving.
 
@@ -131,6 +134,7 @@ If `/health` never returns 200: check that `API_SERVER_ENABLED=true`, `API_SERVE
 | `ENTRYPOINT` = `entrypoint-dispatch.sh` → s6 `/init` when the image owns PID 1; empty official `CMD` | [Official Dockerfile](https://github.com/NousResearch/hermes-agent/blob/main/Dockerfile) and live `nousresearch/hermes-agent:latest` amd64 config (2026-08-22 06:32 UTC): `Entrypoint=['/opt/hermes/docker/entrypoint-dispatch.sh']`, `Cmd=None`, `User=root`, volume `/opt/data`, `HERMES_HOME=/opt/data`. `HERMES_DASHBOARD` and `API_SERVER_ENABLED` are unset in the stock image. |
 | `API_SERVER_ENABLED` / `HOST` / `PORT` / `KEY` (min 8), default port **8642**, `GET /health` and `GET /v1/models` | [API server](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server) |
 | `direct_model_requests` under `gateway.platforms.api_server` | Same API server page |
+| Named `providers:` dict slug `custom:buzz` (alias `buzz`) | [Provider runtime](https://hermes-agent.nousresearch.com/docs/developer-guide/provider-runtime) |
 | OpenRouter via `OPENROUTER_API_KEY` + `model.provider: openrouter` | [Providers](https://hermes-agent.nousresearch.com/docs/integrations/providers) |
 | `tool_loop_guardrails.hard_stop_enabled` for unattended gateways | Docker user guide |
 | Dashboard only when `HERMES_DASHBOARD=1` | Docker user guide (do not enable) |
