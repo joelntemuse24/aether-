@@ -51,9 +51,13 @@ export function buildHermesSessionKey(input: {
   userId: string | null;
   conversationId: string | null;
 }): string {
+  // Never collapse anonymous users into one shared scope: without a
+  // conversation id, mint a random one so guests can't read each other's
+  // Hermes session/memory state. Callers should pass a stable id when they
+  // have one (the chat route mints one per anonymous conversation).
   const raw = input.userId
     ? `aether:user:${input.userId}`
-    : `aether:anon:${input.conversationId || "anon"}`;
+    : `aether:anon:${input.conversationId || crypto.randomUUID()}`;
   return raw.replace(/[\r\n\0]/g, "").slice(0, 256);
 }
 

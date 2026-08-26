@@ -7,7 +7,9 @@
  * confirm cards survive refresh (same /api/harness/confirm contract).
  */
 
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { getAuthSecretString } from "@/lib/auth-secret";
 
 export const CONFIRMABLE_ACTIONS = [
   "submit_form",
@@ -60,6 +62,54 @@ export function confirmationReplayPayload(raw: unknown): {
     args: rec.args ?? {},
     projectId: typeof rec.projectId === "string" ? rec.projectId : null,
   };
+}
+
+/**
+ * HMAC over the replay payload, bound to the confirmation id and the user it
+ * was created for. The client echoes the payload (incl. this signature) on
+ * approve; without a valid signature the confirm API refuses to execute a
+ * client-supplied payload. Prevents forging tool executions via
+ * POST /api/harness/confirm with an invented confirmationId + payload.
+ */
+export function signConfirmationReplayPayload(input: {
+  confirmationId: string;
+  tool: string;
+  args: unknown;
+  projectId: string | null;
+  userId: string | null;
+}): string {
+  const mac = createHmac("sha256", getAuthSecretString());
+  mac.update(
+    JSON.stringify([
+      "aether-confirm-v1",
+      input.confirmationId,
+      input.tool,
+      input.args ?? {},
+      input.projectId ?? null,
+      input.userId ?? null,
+    ]),
+  );
+  return mac.digest("base64url");
+}
+
+export function verifyConfirmationReplaySig(input: {
+  confirmationId: string;
+  payload: Record<string, unknown>;
+  userId: string | null;
+}): boolean {
+  const replay = confirmationReplayPayload(input.payload);
+  const sig = input.payload.sig;
+  if (!replay || typeof sig !== "string" || !sig) return false;
+  const expected = signConfirmationReplayPayload({
+    confirmationId: input.confirmationId,
+    tool: replay.tool,
+    args: replay.args,
+    projectId: replay.projectId,
+    userId: input.userId,
+  });
+  const a = Buffer.from(expected);
+  const b = Buffer.from(sig);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 export type ConfirmationResolved = {
@@ -135,9 +185,28 @@ export async function createConfirmationRequest(
 ): Promise<ConfirmationToolResult> {
   gc();
   const confirmation_id = crypto.randomUUID();
+  // Sign replayable payloads so approve can execute even when the pending
+  // row lived in another isolate — without letting clients forge payloads.
+  let signedRequest = request;
+  const replay = confirmationReplayPayload(request.payload);
+  if (replay && request.payload) {
+    signedRequest = {
+      ...request,
+      payload: {
+        ...request.payload,
+        sig: signConfirmationReplayPayload({
+          confirmationId: confirmation_id,
+          tool: replay.tool,
+          args: replay.args,
+          projectId: replay.projectId,
+          userId: userId ?? null,
+        }),
+      },
+    };
+  }
   const row: PendingConfirmationRow = {
     id: confirmation_id,
-    request,
+    request: signedRequest,
     userId: userId ?? null,
     conversationId: extras?.conversationId ?? null,
     runId: extras?.runId ?? null,
@@ -189,7 +258,9 @@ export async function resolveConfirmation(
           : "User already declined. Do not perform the action; offer an alternative.",
     };
   }
-  if (row.userId && userId && row.userId !== userId) {
+  // Rows created for a signed-in user may only be resolved by that user —
+  // including rejecting unauthenticated callers who learned the UUID.
+  if (row.userId && row.userId !== userId) {
     return { ok: false, error: "Confirmation belongs to another session." };
   }
   const next: PendingConfirmationRow = {
