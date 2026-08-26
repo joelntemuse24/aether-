@@ -69,11 +69,17 @@ export async function POST(req: Request) {
     );
   }
 
-  const body = (await req.json()) as {
+  const body = (await req.json().catch(() => null)) as {
     fileId?: string;
     name?: string;
     mimeType?: string;
-  };
+  } | null;
+  if (!body) {
+    return NextResponse.json(
+      { error: "Invalid request body" },
+      { status: 400 },
+    );
+  }
 
   const fileId = body.fileId;
   const name = body.name || "file";

@@ -38,7 +38,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useSettings } from "@/providers/settings-provider";
 import { useTheme } from "@/providers/theme-provider";
-import { listLocalThreads, beginNewChatSession } from "@/lib/local-thread-adapter";
+import { beginNewChatSession } from "@/lib/local-thread-adapter";
 import { useSession, signOut } from "@/providers/session-provider";
 import { useProjects } from "@/providers/projects-provider";
 import { useArtifact } from "@/providers/artifact-provider";
@@ -163,7 +163,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </ThreadListPrimitive.New>
           <button
             type="button"
-            onClick={() => setProjectsExpanded(true)}
+            onClick={() => {
+              // The projects rail only renders in the expanded sidebar.
+              setProjectsExpanded(true);
+              onToggle();
+            }}
             className="flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
             aria-label="Projects"
             title="Projects"
@@ -174,7 +178,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             type="button"
             onClick={() => {
               if (saved[0]) void openSavedById(saved[0].id);
-              else setArtifactsExpanded(true);
+              else {
+                // The artifacts rail only renders in the expanded sidebar.
+                setArtifactsExpanded(true);
+                onToggle();
+              }
             }}
             className="flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
             aria-label="Artifacts"
@@ -365,9 +373,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   <span className="text-[11px]">No conversations yet</span>
                 </div>
               </AuiIf>
-              <ThreadListPrimitive.Items>
-                {() => <ThreadListItem />}
-              </ThreadListPrimitive.Items>
+              {/* `peer`/`peer-empty` drives the No-matches state from what
+                  actually rendered — correct for cloud and local threads. */}
+              <div className="peer flex flex-col gap-0.5">
+                <ThreadListPrimitive.Items>
+                  {() => <ThreadListItem />}
+                </ThreadListPrimitive.Items>
+              </div>
               <ThreadSearchEmpty />
             </ThreadListPrimitive.Root>
           </ThreadSearchContext.Provider>
@@ -678,13 +690,10 @@ const ThreadSearchEmpty: FC = () => {
   const threadCount = useAuiState((s) => s.threads.threadIds.length);
   if (!query || threadCount === 0) return null;
 
-  const hasMatch = listLocalThreads().some((t) =>
-    (t.title || "New chat").toLowerCase().includes(query),
-  );
-  if (hasMatch) return null;
-
+  // Shown only when the sibling items wrapper rendered nothing (peer-empty)
+  // — matches cloud-synced titles too, unlike a localStorage-only check.
   return (
-    <div className="flex flex-col items-center gap-2 px-2 py-8 text-[var(--muted-soft)]">
+    <div className="hidden flex-col items-center gap-2 px-2 py-8 text-[var(--muted-soft)] peer-empty:flex">
       <SearchIcon className="size-5 opacity-40" />
       <span className="text-[11px]">No matches</span>
     </div>

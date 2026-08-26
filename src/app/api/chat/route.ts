@@ -43,7 +43,10 @@ import {
   hermesSafeVerifyAddendum,
 } from "@/lib/hermes/tool-seam";
 import { parseToolApprovalMode } from "@/lib/hermes/tool-approval";
-import { registerAetherToolSession } from "@/lib/hermes/tool-session";
+import {
+  forgetAetherToolSession,
+  registerAetherToolSession,
+} from "@/lib/hermes/tool-session";
 import { buildHermesSessionKey } from "@/lib/hermes/config";
 import { getUserPreferences } from "@/lib/preferences/store";
 import { ensureConfirmationRepository } from "@/lib/harness/confirmation-store";
@@ -438,6 +441,9 @@ export async function POST(req: Request) {
             }
           : null,
         onFinish: () => {
+          // Drop the in-memory session (incl. connector tokens) as soon as
+          // the turn ends instead of waiting for the TTL sweep.
+          forgetAetherToolSession(sessionKey);
           if (harnessRunId && userId) {
             void updateAgentRunStatus({
               id: harnessRunId,
@@ -454,6 +460,7 @@ export async function POST(req: Request) {
         },
         onError: (error) => {
           console.error("[api/chat] hermes", error);
+          forgetAetherToolSession(sessionKey);
           if (harnessRunId && userId) {
             void updateAgentRunStatus({
               id: harnessRunId,

@@ -3,12 +3,14 @@
 import Image from "next/image";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
   type DragEvent,
   type FC,
 } from "react";
+import { usePathname } from "next/navigation";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ToolCallPart, type ToolPartLike } from "@/components/assistant-ui/tool-ui";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
@@ -60,7 +62,10 @@ import {
   heuristicClassify,
   shouldSkipModelClassify,
 } from "@/lib/harness/heuristic";
-import { readThreadIdFromLocation } from "@/lib/thread-url";
+import {
+  parseThreadIdFromPath,
+  readThreadIdFromLocation,
+} from "@/lib/thread-url";
 import {
   speechRecognitionSupported,
   startSpeechSession,
@@ -79,8 +84,14 @@ function useThreadEmptyState() {
   const isLoading = useAuiState(
     (s) => s.thread.isLoading || s.threads.isLoading,
   );
-  // URL id is stable across the first paints; don't flash Welcome on refresh.
-  const [urlThreadId] = useState(() => readThreadIdFromLocation());
+  // Track the URL id across client-side navigations too — Thread doesn't
+  // remount on `/` ↔ `/c/<id>`, so a one-shot initial read would skip the
+  // hold (Welcome flash) on later chat switches.
+  const pathname = usePathname();
+  const urlThreadId = useMemo(
+    () => parseThreadIdFromPath(pathname),
+    [pathname],
+  );
   const [holdRoute, setHoldRoute] = useState(() => !!urlThreadId);
 
   useEffect(() => {
@@ -93,6 +104,7 @@ function useThreadEmptyState() {
       return;
     }
     // Load settled with no messages — brief hold so late setMessages can land.
+    setHoldRoute(true);
     const t = window.setTimeout(() => setHoldRoute(false), 450);
     return () => window.clearTimeout(t);
   }, [hasMessages, isLoading, urlThreadId]);
