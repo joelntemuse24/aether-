@@ -78,7 +78,11 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
     return () => clearTimeout(t);
   }, [query]);
 
+  /** Monotonic id so a slow, stale folder/search response can't overwrite a newer one. */
+  const loadSeqRef = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     setError(null);
     setNextPageToken(null);
@@ -88,14 +92,16 @@ export function DriveBrowserModal({ open, onClose, onSelect }: Props) {
         q: debouncedQuery || undefined,
         type,
       });
+      if (seq !== loadSeqRef.current) return;
       setFiles(result.files);
       setNextPageToken(result.nextPageToken);
     } catch (err) {
+      if (seq !== loadSeqRef.current) return;
       setFiles([]);
       setNextPageToken(null);
       setError(err instanceof Error ? err.message : "Failed to load files");
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, [folderId, debouncedQuery, type]);
 

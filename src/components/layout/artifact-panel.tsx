@@ -508,6 +508,18 @@ export function ArtifactPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artifact?.id]);
 
+  // Same artifact, new content (streaming updates re-open with the same id
+  // and a longer code string). Sync unless the user has local edits.
+  useEffect(() => {
+    if (!artifact) return;
+    if (content === artifact.code) return;
+    // User is editing (differs from what we last accepted) — don't clobber.
+    if (content !== lastPersisted.current) return;
+    lastPersisted.current = artifact.code;
+    setContent(artifact.code);
+    setDebounced(artifact.code);
+  }, [artifact, content]);
+
   // Debounce content edits feeding the live preview (auto-refresh).
   useEffect(() => {
     const t = setTimeout(() => setDebounced(content), 400);

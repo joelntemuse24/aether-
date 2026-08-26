@@ -3,12 +3,14 @@
 import Image from "next/image";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
   type DragEvent,
   type FC,
 } from "react";
+import { usePathname } from "next/navigation";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ToolCallPart, type ToolPartLike } from "@/components/assistant-ui/tool-ui";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
@@ -60,7 +62,10 @@ import {
   heuristicClassify,
   shouldSkipModelClassify,
 } from "@/lib/harness/heuristic";
-import { readThreadIdFromLocation } from "@/lib/thread-url";
+import {
+  parseThreadIdFromPath,
+  readThreadIdFromLocation,
+} from "@/lib/thread-url";
 import {
   speechRecognitionSupported,
   startSpeechSession,
@@ -79,8 +84,14 @@ function useThreadEmptyState() {
   const isLoading = useAuiState(
     (s) => s.thread.isLoading || s.threads.isLoading,
   );
-  // URL id is stable across the first paints; don't flash Welcome on refresh.
-  const [urlThreadId] = useState(() => readThreadIdFromLocation());
+  // Track the URL id across client-side navigations too — Thread doesn't
+  // remount on `/` ↔ `/c/<id>`, so a one-shot initial read would skip the
+  // hold (Welcome flash) on later chat switches.
+  const pathname = usePathname();
+  const urlThreadId = useMemo(
+    () => parseThreadIdFromPath(pathname),
+    [pathname],
+  );
   const [holdRoute, setHoldRoute] = useState(() => !!urlThreadId);
 
   useEffect(() => {
@@ -93,6 +104,7 @@ function useThreadEmptyState() {
       return;
     }
     // Load settled with no messages — brief hold so late setMessages can land.
+    setHoldRoute(true);
     const t = window.setTimeout(() => setHoldRoute(false), 450);
     return () => window.clearTimeout(t);
   }, [hasMessages, isLoading, urlThreadId]);
@@ -210,13 +222,13 @@ const ThreadWelcome: FC = () => {
   return (
     <div className="flex w-full flex-col">
       <div className="mb-4 flex size-11 self-center items-center justify-center rounded-full border border-[var(--border)] bg-[var(--elevated)]">
-        <Image
-          src="/logo.jpg"
-          alt="Aether"
-          width={36}
-          height={36}
-          className="size-9 rounded-full object-cover"
-        />
+            <Image
+              src="/logo.jpg"
+              alt="Aether"
+              width={36}
+              height={36}
+              className="rounded-full object-cover"
+            />
       </div>
       <h1
         className="mb-3 font-[family-name:var(--font-serif)] text-[var(--text)]"
@@ -839,6 +851,7 @@ const ComposerAction: FC<{
   onMicToggle,
   onHarnessSend,
 }) => {
+  const composerRuntime = useComposerRuntime();
   const micLabel =
     micState === "idle"
       ? "Speak"
@@ -981,6 +994,20 @@ const ComposerAction: FC<{
               type="button"
               className="flex h-8 items-center gap-2 rounded-full bg-[var(--text)] px-3 text-[var(--canvas)] transition-opacity hover:opacity-80"
               aria-label="Stop generating"
+              onClick={() => {
+                // Abort restores the prompt into the composer even when the
+                // user message is already in the thread — clear it after the
+                // primitive restores so Stop doesn't look like a failed send.
+                const clear = () => {
+                  try {
+                    composerRuntime.setText("");
+                  } catch {
+                    // ignore
+                  }
+                };
+                queueMicrotask(clear);
+                window.setTimeout(clear, 0);
+              }}
             >
               <SquareIcon className="size-3 fill-current" />
               <span className="text-[13px] font-medium">Stop</span>

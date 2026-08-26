@@ -71,9 +71,6 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     console.error("[api/harness/classify]", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Classify failed" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Classify failed" }, { status: 500 });
   }
 }

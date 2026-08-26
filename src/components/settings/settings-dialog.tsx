@@ -64,6 +64,15 @@ export function SettingsDialog() {
     () => settings.accessMode === "byok" && !hasKey,
   );
 
+  // Hosted selected but not available on this server: surface the BYOK
+  // escape hatch instead of leaving it buried under a collapsed Advanced.
+  useEffect(() => {
+    if (!openSettings || hostedLoading) return;
+    if (settings.accessMode === "hosted" && hostedStatus?.available === false) {
+      setAdvOpen(true);
+    }
+  }, [openSettings, hostedLoading, hostedStatus?.available, settings.accessMode]);
+
   useEffect(() => {
     if (!openSettings) return;
     void refreshDrive();
@@ -85,11 +94,14 @@ export function SettingsDialog() {
   useEffect(() => {
     if (!openSettings) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && hasKey) setOpenSettings(false);
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setOpenSettings(false);
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [openSettings, hasKey, setOpenSettings]);
+  }, [openSettings, setOpenSettings]);
 
   if (!openSettings) return null;
 
@@ -111,7 +123,7 @@ export function SettingsDialog() {
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-[var(--overlay)]"
-        onClick={() => hasKey && setOpenSettings(false)}
+        onClick={() => setOpenSettings(false)}
         aria-hidden
       />
       <div
@@ -127,16 +139,14 @@ export function SettingsDialog() {
           >
             Preferences
           </h2>
-          {hasKey && (
-            <button
-              type="button"
-              onClick={() => setOpenSettings(false)}
-              className="rounded p-1 text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
-              aria-label="Close preferences"
-            >
-              <XIcon className="size-4" />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setOpenSettings(false)}
+            className="rounded p-1 text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+            aria-label="Close preferences"
+          >
+            <XIcon className="size-4" />
+          </button>
         </div>
 
         <div className="max-h-[70vh] space-y-6 overflow-y-auto px-5 py-5">
@@ -592,16 +602,7 @@ export function SettingsDialog() {
         </div>
 
         <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
-          <Button
-            onClick={() => setOpenSettings(false)}
-            disabled={
-              settings.accessMode === "byok"
-                ? !keyValue.trim()
-                : !hasKey && !hostedLoading
-            }
-          >
-            Done
-          </Button>
+          <Button onClick={() => setOpenSettings(false)}>Done</Button>
         </div>
       </div>
     </div>

@@ -35,14 +35,27 @@ export function ThreadUrlSync() {
     }
   });
 
-  // Active thread → URL
+  /** Last canonical id this effect saw — used to tell state-driven changes apart from URL-driven ones. */
+  const prevCanonicalRef = useRef<string | null>(null);
+
+  // Active thread → URL. Only navigate when the *thread* changed; when only
+  // the pathname diverged (browser Back/Forward, deep link), let the
+  // URL → thread effect win instead of replacing the URL back.
   useEffect(() => {
+    const canonicalChanged = prevCanonicalRef.current !== canonicalId;
+    prevCanonicalRef.current = canonicalId;
+
     const desired = canonicalId ? threadPath(canonicalId) : NEW_CHAT_PATH;
     if (pathname === desired) {
       pendingPath.current = null;
       return;
     }
+    if (!canonicalChanged) return;
     pendingPath.current = desired;
+    // Leaving a conversation for a blank chat (delete, New chat) — drop the
+    // stale active id so a later initialize isn't treated as A→B, and clear
+    // composer attachments that belonged to the old thread.
+    if (!canonicalId) beginNewChatSession();
     router.replace(desired, { scroll: false });
   }, [canonicalId, pathname, router]);
 

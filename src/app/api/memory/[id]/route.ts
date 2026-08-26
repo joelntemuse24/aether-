@@ -25,15 +25,30 @@ export async function PATCH(req: Request, ctx: Ctx) {
       { status: 400 },
     );
   }
-  const memory = await writeMemory(gate.userId, {
-    id,
-    type: body.type,
-    title: body.title.trim(),
-    body: body.body.trim(),
-    importance: body.importance,
-    tags: body.tags,
-  });
-  return NextResponse.json({ memory });
+  try {
+    const memory = await writeMemory(gate.userId, {
+      id,
+      type: body.type,
+      title: body.title.trim(),
+      body: body.body.trim(),
+      importance: body.importance,
+      tags: body.tags,
+    });
+    return NextResponse.json({ memory });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (/belongs to another user/i.test(message)) {
+      return NextResponse.json(
+        { error: "Memory not found" },
+        { status: 404 },
+      );
+    }
+    console.error("[memory/:id] PATCH", err);
+    return NextResponse.json(
+      { error: "Could not update memory" },
+      { status: 500 },
+    );
+  }
 }
 
 export async function DELETE(_req: Request, ctx: Ctx) {

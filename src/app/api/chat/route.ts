@@ -43,7 +43,10 @@ import {
   hermesSafeVerifyAddendum,
 } from "@/lib/hermes/tool-seam";
 import { parseToolApprovalMode } from "@/lib/hermes/tool-approval";
-import { registerAetherToolSession } from "@/lib/hermes/tool-session";
+import {
+  forgetAetherToolSession,
+  registerAetherToolSession,
+} from "@/lib/hermes/tool-session";
 import { buildHermesSessionKey } from "@/lib/hermes/config";
 import { getUserPreferences } from "@/lib/preferences/store";
 import { ensureConfirmationRepository } from "@/lib/harness/confirmation-store";
@@ -224,12 +227,16 @@ export async function POST(req: Request) {
     const session = await auth();
     const userId = session?.user?.id || session?.user?.email || null;
 
-    let approvalMode = parseToolApprovalMode(
-      getHeader(req, "x-tool-approval-mode"),
-    );
-    if (userId && isCloudDbConfigured() && !getHeader(req, "x-tool-approval-mode")) {
+    const approvalHeader = getHeader(req, "x-tool-approval-mode");
+    let approvalMode = parseToolApprovalMode(approvalHeader);
+    if (userId && isCloudDbConfigured()) {
+      // The stored preference is authoritative for signed-in users; the
+      // header may only tighten to "ask", never loosen to "auto".
       const prefs = await getUserPreferences(userId);
-      approvalMode = prefs.toolApprovalMode;
+      approvalMode =
+        approvalHeader && approvalMode === "ask"
+          ? "ask"
+          : prefs.toolApprovalMode;
     }
 
     // Time budget from harness body or latest user text ("in 5 minutes").
@@ -388,11 +395,19 @@ export async function POST(req: Request) {
       const githubToken = hasGitHubEarly && userId
         ? await getValidGitHubAccessToken(userId)
         : null;
-      const sessionKey = buildHermesSessionKey({ userId, conversationId });
+      // Anonymous chats need a per-conversation scope; without one every
+      // guest would share a single Hermes session key. Mint an id so the
+      // proxy header, the tool session, and the loop all agree.
+      const hermesConversationId =
+        conversationId ?? (userId ? null : crypto.randomUUID());
+      const sessionKey = buildHermesSessionKey({
+        userId,
+        conversationId: hermesConversationId,
+      });
       registerAetherToolSession({
         sessionKey,
         userId,
-        conversationId,
+        conversationId: hermesConversationId,
         projectId: projectId ?? null,
         runId: harnessRunId ?? null,
         approvalMode,
@@ -407,14 +422,14 @@ export async function POST(req: Request) {
         system,
         model: requestedModel,
         userId,
-        conversationId,
+        conversationId: hermesConversationId,
         runId: harnessRunId,
         abortSignal: req.signal,
         accessMode: "hosted",
         aetherTools: toolsEnabled
           ? {
               userId,
-              conversationId,
+              conversationId: hermesConversationId,
               projectId: projectId ?? null,
               runId: harnessRunId ?? null,
               approvalMode,
@@ -426,6 +441,9 @@ export async function POST(req: Request) {
             }
           : null,
         onFinish: () => {
+          // Drop the in-memory session (incl. connector tokens) as soon as
+          // the turn ends instead of waiting for the TTL sweep.
+          forgetAetherToolSession(sessionKey);
           if (harnessRunId && userId) {
             void updateAgentRunStatus({
               id: harnessRunId,
@@ -442,6 +460,7 @@ export async function POST(req: Request) {
         },
         onError: (error) => {
           console.error("[api/chat] hermes", error);
+          forgetAetherToolSession(sessionKey);
           if (harnessRunId && userId) {
             void updateAgentRunStatus({
               id: harnessRunId,
@@ -483,12 +502,16 @@ export async function POST(req: Request) {
       approvalMode,
     });
   } catch (error) {
+    // Log the detail server-side; never echo raw provider/internal messages.
     console.error("[api/chat]", error);
-    const message =
-      error instanceof Error ? error.message : "Request failed";
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        error: "Something went wrong handling this chat request. Try again.",
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 }

@@ -4,6 +4,7 @@ import {
   confirmationReplayPayload,
   peekConfirmation,
   resolveConfirmation,
+  verifyConfirmationReplaySig,
 } from "@/lib/harness/confirmation";
 import { ensureConfirmationRepository } from "@/lib/harness/confirmation-store";
 import { executeAetherTool, isAetherOwnedToolName } from "@/lib/hermes/aether-tools";
@@ -31,7 +32,7 @@ export async function GET(req: Request) {
       { status: 404 },
     );
   }
-  if (peek.userId && userId && peek.userId !== userId) {
+  if (peek.userId && peek.userId !== userId) {
     return NextResponse.json(
       { error: "Confirmation belongs to another session." },
       { status: 403 },
@@ -93,6 +94,22 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "Confirmation expired or not found." },
         { status: 404 },
+      );
+    }
+    // The payload must carry the HMAC issued when the card was created —
+    // otherwise anyone could execute tools by inventing a payload.
+    if (
+      !body.payload ||
+      typeof body.payload !== "object" ||
+      !verifyConfirmationReplaySig({
+        confirmationId,
+        payload: body.payload as Record<string, unknown>,
+        userId,
+      })
+    ) {
+      return NextResponse.json(
+        { error: "Confirmation could not be verified. Ask again in chat." },
+        { status: 403 },
       );
     }
     const execution = await executeAetherTool({
