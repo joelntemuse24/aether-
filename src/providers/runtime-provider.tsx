@@ -20,7 +20,7 @@ import {
   persistThreadUIMessages,
   announceThreadSwitch,
 } from "@/lib/local-thread-adapter";
-import { readThreadIdFromLocation } from "@/lib/thread-url";
+import { readThreadIdFromLocation, resolveThreadStorageKey } from "@/lib/thread-url";
 import { useSettings } from "./settings-provider";
 import { useAttachments } from "./attachments-provider";
 import { buildTextAttachmentPrefix } from "@/lib/attachments";
@@ -34,6 +34,7 @@ import { localMemoryContextForChat } from "@/lib/memory/local";
 import {
   CONTINUE_USER_TEXT,
   MAX_AUTO_CONTINUES,
+  FIRST_TOKEN_TIMEOUT_MS,
   hasContinuableAssistant,
   isServerTimeoutError,
   shouldAutoContinue,
@@ -63,10 +64,7 @@ function saveActiveThreadId(threadId: string) {
 
 function readThreadStorageKey(aui: ReturnType<typeof useAui>): string | undefined {
   if (!aui.threadListItem.source) return undefined;
-  const state = aui.threadListItem().getState();
-  if (state.remoteId) return state.remoteId;
-  if (state.status !== "new") return state.id;
-  return undefined;
+  return resolveThreadStorageKey(aui.threadListItem().getState());
 }
 
 type AddToolResult = (result: {
@@ -92,15 +90,15 @@ function useChatThreadRuntime() {
   const projectIdRef = useRef(activeProjectId);
   projectIdRef.current = activeProjectId;
   const threadIdRef = useRef<string | undefined>(undefined);
-  threadIdRef.current = readThreadStorageKey(aui) ?? readThreadIdFromLocation();
+  threadIdRef.current = readThreadStorageKey(aui);
 
   // Each remote-thread runtime instance mounts for one thread. Seed that
   // thread's useChat from localStorage so refresh/switch don't depend on
   // assistant-ui's one-shot useExternalHistory (which often skips load).
-  // Prefer URL id when the list item isn't bound yet — cuts empty-frame flash.
+  // Bound remoteId only — never the URL, or a new chat inherits another
+  // conversation's messages (refresh duplication / delete ghosts).
   const [seedMessages] = useState<UIMessage[]>(() => {
-    const key =
-      readThreadStorageKey(aui) ?? readThreadIdFromLocation() ?? undefined;
+    const key = readThreadStorageKey(aui);
     return key ? loadThreadUIMessages(key) : [];
   });
 
@@ -166,6 +164,7 @@ function useChatThreadRuntime() {
     sendMessage: (msg: { text: string }) => Promise<void>;
     regenerate?: () => Promise<void>;
     clearError?: () => void;
+    stop?: () => void;
   } | null>(null);
 
   const emitContinueStatus = useCallback(
@@ -376,6 +375,7 @@ function useChatThreadRuntime() {
   chatApiRef.current = {
     sendMessage: (msg) => chat.sendMessage(msg),
     regenerate: () => chat.regenerate(),
+    stop: () => chat.stop(),
     clearError: () => {
       const withClear = chat as typeof chat & { clearError?: () => void };
       withClear.clearError?.();
@@ -388,9 +388,7 @@ function useChatThreadRuntime() {
   errorRef.current = error;
 
   const loadedKeyRef = useRef<string | null>(
-    seedMessages.length > 0
-      ? (readThreadStorageKey(aui) ?? readThreadIdFromLocation() ?? null)
-      : null,
+    seedMessages.length > 0 ? (readThreadStorageKey(aui) ?? null) : null,
   );
 
   // Late remoteId (after initialize): pull history once.
@@ -427,6 +425,28 @@ function useChatThreadRuntime() {
     }
   }, [status]);
 
+  // Abort if the provider never starts a reply (hung SSE / silent gateway).
+  useEffect(() => {
+    if (status !== "submitted" && status !== "streaming") return;
+    const timer = window.setTimeout(() => {
+      if (hasContinuableAssistant(messagesRef.current)) return;
+      const api = chatApiRef.current;
+      try {
+        api?.stop?.();
+      } catch {
+        // ignore
+      }
+      emitContinueStatus({ phase: "idle" });
+      window.dispatchEvent(
+        new CustomEvent("aether:notice", {
+          detail:
+            "The model didn’t start a reply. Check Settings or try again.",
+        }),
+      );
+    }, FIRST_TOKEN_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [status, emitContinueStatus]);
+
   // Assign a durable thread id as soon as a turn starts so /c/<id> + drafts work
   // before assistant-ui's end-of-run history flush.
   useEffect(() => {
@@ -439,8 +459,7 @@ function useChatThreadRuntime() {
           await aui.threadListItem().initialize();
         }
         if (!cancelled) {
-          threadIdRef.current =
-            readThreadStorageKey(aui) ?? readThreadIdFromLocation();
+          threadIdRef.current = readThreadStorageKey(aui);
         }
       } catch {
         // ignore — drafts fall back to whatever id we already have

@@ -52,6 +52,10 @@ export function ThreadUrlSync() {
     }
     if (!canonicalChanged) return;
     pendingPath.current = desired;
+    // Leaving a conversation for a blank chat (delete, New chat) — drop the
+    // stale active id so a later initialize isn't treated as A→B, and clear
+    // composer attachments that belonged to the old thread.
+    if (!canonicalId) beginNewChatSession();
     router.replace(desired, { scroll: false });
   }, [canonicalId, pathname, router]);
 

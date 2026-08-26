@@ -3,6 +3,12 @@ import type { UIMessage } from "ai";
 /** Cap auto-continues so a stuck loop can't burn unbounded segments. */
 export const MAX_AUTO_CONTINUES = 5;
 
+/**
+ * If the provider never emits a first token, abort so the composer doesn't
+ * sit on “Thinking…” forever (hung gateway, role-only SSE, dropped socket).
+ */
+export const FIRST_TOKEN_TIMEOUT_MS = 90_000;
+
 /** Ignore short disconnects (flaky network); long runs are likely platform kills. */
 export const MIN_DISCONNECT_RUN_MS = 45_000;
 

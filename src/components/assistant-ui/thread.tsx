@@ -851,6 +851,7 @@ const ComposerAction: FC<{
   onMicToggle,
   onHarnessSend,
 }) => {
+  const composerRuntime = useComposerRuntime();
   const micLabel =
     micState === "idle"
       ? "Speak"
@@ -993,6 +994,20 @@ const ComposerAction: FC<{
               type="button"
               className="flex h-8 items-center gap-2 rounded-full bg-[var(--text)] px-3 text-[var(--canvas)] transition-opacity hover:opacity-80"
               aria-label="Stop generating"
+              onClick={() => {
+                // Abort restores the prompt into the composer even when the
+                // user message is already in the thread — clear it after the
+                // primitive restores so Stop doesn't look like a failed send.
+                const clear = () => {
+                  try {
+                    composerRuntime.setText("");
+                  } catch {
+                    // ignore
+                  }
+                };
+                queueMicrotask(clear);
+                window.setTimeout(clear, 0);
+              }}
             >
               <SquareIcon className="size-3 fill-current" />
               <span className="text-[13px] font-medium">Stop</span>
