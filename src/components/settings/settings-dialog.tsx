@@ -94,7 +94,10 @@ export function SettingsDialog() {
   useEffect(() => {
     if (!openSettings) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpenSettings(false);
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setOpenSettings(false);
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);

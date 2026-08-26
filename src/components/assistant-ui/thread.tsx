@@ -222,13 +222,13 @@ const ThreadWelcome: FC = () => {
   return (
     <div className="flex w-full flex-col">
       <div className="mb-4 flex size-11 self-center items-center justify-center rounded-full border border-[var(--border)] bg-[var(--elevated)]">
-        <Image
-          src="/logo.jpg"
-          alt="Aether"
-          width={36}
-          height={36}
-          className="size-9 rounded-full object-cover"
-        />
+            <Image
+              src="/logo.jpg"
+              alt="Aether"
+              width={36}
+              height={36}
+              className="rounded-full object-cover"
+            />
       </div>
       <h1
         className="mb-3 font-[family-name:var(--font-serif)] text-[var(--text)]"

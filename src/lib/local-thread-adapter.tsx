@@ -298,6 +298,27 @@ function saveFormatRepo(remoteId: string, repo: StoredFormatRepo) {
   storage.setItem(messagesKey(remoteId), JSON.stringify(repo));
 }
 
+/** Drop untitled local shells with no messages (failed inits / refresh clones). */
+function pruneEmptyLocalThreads(threads: StoredThread[]): StoredThread[] {
+  const kept: StoredThread[] = [];
+  let dropped = false;
+  for (const thread of threads) {
+    const repo = loadFormatRepo(thread.remoteId);
+    const named =
+      typeof thread.title === "string" &&
+      thread.title.trim().length > 0 &&
+      thread.title.trim() !== "New chat";
+    if (repo.entries.length > 0 || named) {
+      kept.push(thread);
+    } else {
+      dropped = true;
+      storage.removeItem(messagesKey(thread.remoteId));
+    }
+  }
+  if (dropped) saveThreads(kept);
+  return kept;
+}
+
 function firstUserText(messages: readonly ThreadMessage[]): string {
   const firstUser = messages.find((m) => m.role === "user");
   if (!firstUser) return "";
@@ -548,7 +569,7 @@ export function createAetherThreadListAdapter(): RemoteThreadListAdapter {
           })),
         };
       }
-      const threads = loadThreads();
+      const threads = pruneEmptyLocalThreads(loadThreads());
       return {
         threads: threads.map((t) => ({
           remoteId: t.remoteId,
