@@ -30,6 +30,7 @@ import {
   ExportedMessageRepository,
   MessagePrimitive,
   ThreadPrimitive,
+  useAui,
   useAuiState,
   useComposerRuntime,
   useThreadRuntime,
@@ -69,6 +70,7 @@ import {
 } from "@/lib/speech";
 import { looksLikeTimeoutCopy } from "@/lib/chat-continue";
 import { parseTimeBudgetFromText } from "@/lib/harness/time-budget";
+import { waitForChatHistoryReady } from "@/lib/chat-history-gate";
 
 /**
  * True only for a settled empty chat. Avoid welcome flash while history is
@@ -413,6 +415,7 @@ const Composer: FC = () => {
     setLastPlanSteps,
   } = useHarness();
   const composerRuntime = useComposerRuntime();
+  const aui = useAui();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -450,6 +453,15 @@ const Composer: FC = () => {
     skipClassify?: boolean;
   }) => {
     if (!hasKey || isRunning || classifying || resumeBusy) return;
+    await waitForChatHistoryReady();
+    try {
+      const listState = aui.threadListItem().getState();
+      if (!listState.remoteId) {
+        await aui.threadListItem().initialize();
+      }
+    } catch {
+      // send still proceeds — transport prepareSend also mints the id
+    }
     const state = composerRuntime.getState();
     let text = (opts?.text ?? state.text).trim();
     // Attachments live in AttachmentsProvider, not composerRuntime — allow

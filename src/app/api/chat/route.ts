@@ -47,6 +47,11 @@ import { registerAetherToolSession } from "@/lib/hermes/tool-session";
 import { buildHermesSessionKey } from "@/lib/hermes/config";
 import { getUserPreferences } from "@/lib/preferences/store";
 import { ensureConfirmationRepository } from "@/lib/harness/confirmation-store";
+import {
+  resolveChatMessages,
+  uiMessagesFromFormatRepo,
+} from "@/lib/chat-history-merge";
+import { getMessageRepo } from "@/lib/conversations/store";
 
 /**
  * Vercel enforces a plan-specific function wall clock.
@@ -179,13 +184,15 @@ export async function POST(req: Request) {
       );
     }
 
-    const messages = body.messages as UIMessage[];
-    if (!Array.isArray(messages) || messages.length === 0) {
+    const incomingMessages = body.messages as UIMessage[];
+    if (!Array.isArray(incomingMessages) || incomingMessages.length === 0) {
       return new Response(
         JSON.stringify({ error: "No messages provided." }),
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
+    const conversationId =
+      typeof body.conversationId === "string" ? body.conversationId : null;
     const toolsEnabled = getHeader(req, "x-tools") !== "0";
     const continueSegment = body.continueSegment === true;
     const userSystem =
@@ -224,6 +231,25 @@ export async function POST(req: Request) {
     const session = await auth();
     const userId = session?.user?.id || session?.user?.email || null;
 
+    let storedMessages: UIMessage[] = [];
+    if (conversationId && userId && isCloudDbConfigured()) {
+      try {
+        storedMessages = uiMessagesFromFormatRepo(
+          await getMessageRepo(userId, conversationId),
+        );
+      } catch {
+        storedMessages = [];
+      }
+    }
+    const messages = resolveChatMessages({
+      conversationId,
+      incoming: incomingMessages,
+      stored: storedMessages,
+      log: (event, details) => {
+        console.warn(`[api/chat] ${event}`, details);
+      },
+    });
+
     let approvalMode = parseToolApprovalMode(
       getHeader(req, "x-tool-approval-mode"),
     );
@@ -252,8 +278,6 @@ export async function POST(req: Request) {
     });
     const projectId =
       typeof body.projectId === "string" ? body.projectId : undefined;
-    const conversationId =
-      typeof body.conversationId === "string" ? body.conversationId : null;
 
     let memoryBlock = "";
     let projectBlock = "";

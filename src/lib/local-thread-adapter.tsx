@@ -28,7 +28,13 @@ import { useSession } from "@/providers/session-provider";
 import {
   fetchCloudStatus,
   invalidateCloudStatus,
+  peekCloudEnabled,
 } from "@/lib/conversations/cloud-client";
+import {
+  formatRepoFromUIMessages,
+  mergeStoredThreadWithIncoming,
+  uiMessagesFromFormatRepo,
+} from "@/lib/chat-history-merge";
 
 const PREFIX = "aether:";
 export const ACTIVE_THREAD_KEY = `${PREFIX}active-thread`;
@@ -177,22 +183,7 @@ export function clearAllLocalConversations(): void {
 
 /** Load persisted UI messages for a thread (used to bootstrap chat on switch/refresh). */
 export function loadThreadUIMessages(remoteId: string): UIMessage[] {
-  const repo = loadFormatRepo(remoteId);
-  const messages: UIMessage[] = [];
-
-  for (const entry of repo.entries) {
-    if (entry.format !== AI_SDK_FORMAT) continue;
-    try {
-      messages.push({
-        id: entry.id,
-        ...(entry.content as Omit<UIMessage, "id">),
-      });
-    } catch {
-      // skip corrupt rows
-    }
-  }
-
-  return messages;
+  return uiMessagesFromFormatRepo(loadFormatRepo(remoteId));
 }
 
 /**
@@ -214,20 +205,18 @@ export function persistThreadUIMessages(
     saveThreads(threads);
   }
 
-  const entries: StoredFormatEntry[] = messages.map((message, idx) => {
-    const { id, ...content } = message;
-    return {
-      id,
-      parent_id: idx === 0 ? null : messages[idx - 1]!.id,
-      format: AI_SDK_FORMAT,
-      content: content as Record<string, unknown>,
-    };
-  });
+  saveFormatRepo(remoteId, formatRepoFromUIMessages(messages));
 
-  saveFormatRepo(remoteId, {
-    headId: messages[messages.length - 1]?.id ?? null,
-    entries,
-  });
+  // Local write is sync. Cloud catch-up is best-effort and must not block send.
+  if (peekCloudEnabled()) {
+    void import("@/lib/conversations/cloud-client")
+      .then(({ cloudSaveMessageRepo }) =>
+        cloudSaveMessageRepo(remoteId, formatRepoFromUIMessages(messages)),
+      )
+      .catch(() => {
+        // local snapshot is already durable
+      });
+  }
 }
 
 /** Async loader — cloud when signed in + DB configured, else localStorage. */
@@ -241,19 +230,12 @@ export async function loadThreadUIMessagesAsync(
     const status = await fetchCloudStatus();
     if (status.cloud) {
       const repo = await cloudGetMessageRepo(remoteId);
-      const messages: UIMessage[] = [];
-      for (const entry of repo.entries) {
-        if (entry.format !== AI_SDK_FORMAT) continue;
-        try {
-          messages.push({
-            id: entry.id,
-            ...(entry.content as Omit<UIMessage, "id">),
-          });
-        } catch {
-          // skip
-        }
-      }
-      return messages;
+      const remote = uiMessagesFromFormatRepo(repo);
+      const local = loadThreadUIMessages(remoteId);
+      // Cloud persist is async — don't clobber a longer local snapshot after refresh.
+      const longer = remote.length >= local.length ? remote : local;
+      const shorter = remote.length >= local.length ? local : remote;
+      return mergeStoredThreadWithIncoming(longer, shorter).messages;
     }
   } catch {
     // fall through to local
