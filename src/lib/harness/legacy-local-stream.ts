@@ -32,6 +32,7 @@ import {
 } from "@/lib/harness/tool-registry";
 import type { HarnessDepth, HarnessIntent } from "@/lib/harness/types";
 import type { ToolApprovalMode } from "@/lib/hermes/tool-approval";
+import { ensureDurableToolStubs } from "@/lib/chat-tool-transcript";
 
 export type LegacyProviderId = "openrouter" | "openai" | "anthropic" | "custom";
 
@@ -157,7 +158,10 @@ export async function streamLegacyLocalChat(
 
   const result = streamText({
     model,
-    messages: await convertToModelMessages(args.enrichedMessages),
+    messages: await convertToModelMessages(
+      ensureDurableToolStubs(args.enrichedMessages),
+      { ignoreIncompleteToolCalls: true },
+    ),
     ...(args.system ? { system: args.system } : {}),
     ...(args.toolsEnabled && loop
       ? {

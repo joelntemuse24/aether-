@@ -24,6 +24,10 @@ import {
   resolveSessionSkills,
   sessionSkillsSystemAddendum,
 } from "@/lib/harness/session-skills";
+import {
+  playbooksSystemAddendum,
+  resolvePlaybooks,
+} from "@/lib/harness/playbooks";
 import { auth } from "@/auth";
 import { relevantMemoryPrompt } from "@/lib/memory/store";
 import {
@@ -317,6 +321,11 @@ export async function POST(req: Request) {
       signedIn: !!userId,
     });
     const skillsBlock = sessionSkillsSystemAddendum(skills);
+    const playbooksBlock = toolsEnabled
+      ? playbooksSystemAddendum(
+          resolvePlaybooks({ text: userText, intent: harnessIntent }),
+        )
+      : "";
     const verifyBlock = verifySystemAddendum({
       depth: harnessDepth,
       intent: harnessIntent,
@@ -346,6 +355,7 @@ export async function POST(req: Request) {
       timeBlock,
       hermesLive ? hermesSafeVerifyAddendum(verifyBlock) : verifyBlock,
       hermesLive ? null : toolsEnabled ? skillsBlock : null,
+      playbooksBlock || null,
       continueSegment ? CONTINUE_SYSTEM_ADDENDUM : null,
       userSystem,
       memoryForPrompt,

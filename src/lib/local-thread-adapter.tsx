@@ -35,6 +35,7 @@ import {
   mergeStoredThreadWithIncoming,
   uiMessagesFromFormatRepo,
 } from "@/lib/chat-history-merge";
+import { ensureDurableToolStubs } from "@/lib/chat-tool-transcript";
 
 const PREFIX = "aether:";
 export const ACTIVE_THREAD_KEY = `${PREFIX}active-thread`;
@@ -205,13 +206,14 @@ export function persistThreadUIMessages(
     saveThreads(threads);
   }
 
-  saveFormatRepo(remoteId, formatRepoFromUIMessages(messages));
+  const durable = ensureDurableToolStubs(messages);
+  saveFormatRepo(remoteId, formatRepoFromUIMessages(durable));
 
   // Local write is sync. Cloud catch-up is best-effort and must not block send.
   if (peekCloudEnabled()) {
     void import("@/lib/conversations/cloud-client")
       .then(({ cloudSaveMessageRepo }) =>
-        cloudSaveMessageRepo(remoteId, formatRepoFromUIMessages(messages)),
+        cloudSaveMessageRepo(remoteId, formatRepoFromUIMessages(durable)),
       )
       .catch(() => {
         // local snapshot is already durable
