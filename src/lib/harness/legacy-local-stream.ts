@@ -1,9 +1,7 @@
 /**
  * LEGACY in-process agent loop (BYOK + hosted fallback when Hermes is unset).
  *
- * Hosted chat with HERMES_BASE_URL + HERMES_API_KEY uses `src/lib/hermes`.
- * New loop / tool-unlock / prepareStep work belongs there — do not extend
- * this path except for BYOK regressions.
+ * Default hosted + BYOK path. Hermes is opt-in only (`HERMES_ENABLED=1`).
  */
 
 import { createAnthropic } from "@ai-sdk/anthropic";

@@ -36,7 +36,7 @@ import { isCloudDbConfigured } from "@/lib/db";
 import { isHostedConfigured } from "@/lib/hosted/config";
 import { isHostedChatAvailable } from "@/lib/hosted/availability";
 import { CONTINUE_SYSTEM_ADDENDUM } from "@/lib/chat-continue";
-import { isHermesConfigured } from "@/lib/hermes/config";
+import { shouldProxyChatToHermes } from "@/lib/hermes/config";
 import { proxyChatToHermes } from "@/lib/hermes/proxy-chat";
 import {
   hermesAetherToolSeamAddendum,
@@ -54,9 +54,9 @@ import {
 import { getMessageRepo } from "@/lib/conversations/store";
 
 /**
- * Vercel enforces a plan-specific function wall clock.
- * Pro allows up to 300s — use the full budget.
- * Longer Opus / tool / artifact turns rely on client auto-continue across segments.
+ * Only applies on Vercel serverless. Railway / `next start` has no function
+ * wall clock — long tool turns finish in one request. Keep Continue for
+ * genuine disconnects.
  */
 export const maxDuration = 300;
 export const runtime = "nodejs";
@@ -154,12 +154,12 @@ export async function POST(req: Request) {
     const hosted = accessMode === "hosted";
 
     if (hosted) {
-      // Hosted works via Vercel-side provider keys OR a remote Hermes gateway.
+      // Hosted = server OpenRouter / BUZZ keys. Hermes is opt-in only.
       if (!isHostedChatAvailable(process.env, isHostedConfigured())) {
         return new Response(
           JSON.stringify({
             error:
-              "Aether Cloud is not configured on this server. Switch to Bring your own key in Settings, or ask the operator to set OPENROUTER_API_KEY (or HERMES_BASE_URL + HERMES_API_KEY).",
+              "Aether Cloud is not configured on this server. Switch to Bring your own key in Settings, or ask the operator to set OPENROUTER_API_KEY.",
           }),
           { status: 503, headers: { "Content-Type": "application/json" } },
         );
@@ -326,7 +326,7 @@ export async function POST(req: Request) {
       ? timeBudgetSystemAddendum(timeBudget)
       : null;
 
-    const hermesLive = hosted && isHermesConfigured();
+    const hermesLive = shouldProxyChatToHermes({ hosted });
     // Stable prefix first (tools + harness), volatile memory/project last —
     // helps provider prompt caches across steps within a turn.
     const system = [
@@ -391,7 +391,7 @@ export async function POST(req: Request) {
             maxSteps: budget.maxSteps,
             timeBudgetMinutes: timeBudget?.minutes ?? null,
             surface: rawHarness?.surface ?? "chat",
-            engine: hosted && isHermesConfigured() ? "hermes" : "local",
+            engine: hermesLive ? "hermes" : "local",
           },
         });
       }
