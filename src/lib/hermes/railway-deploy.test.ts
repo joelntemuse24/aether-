@@ -9,10 +9,8 @@ function read(rel: string): string {
   return readFileSync(join(root, rel), "utf8");
 }
 
-describe("Railway gateway deploy contract", () => {
+describe("optional Hermes gateway deploy (isolated)", () => {
   const dockerfile = read("deploy/hermes/Dockerfile");
-  const rootDockerfile = read("Dockerfile");
-  const railwayToml = read("railway.toml");
   const nestedToml = read("deploy/hermes/railway.toml");
   const seed = read("deploy/hermes/seed/config.yaml");
   const envExample = read("deploy/hermes/.env.example");
@@ -20,8 +18,7 @@ describe("Railway gateway deploy contract", () => {
   const readme = read("deploy/hermes/README.md");
   const compose = read("deploy/hermes/docker-compose.example.yml");
 
-  it("keeps the root Dockerfile identical so Railway cannot Railpack Next.js", () => {
-    assert.equal(rootDockerfile, dockerfile);
+  it("keeps the Hermes image only under deploy/hermes", () => {
     assert.match(dockerfile, /^FROM nousresearch\/hermes-agent:latest$/m);
   });
 
@@ -36,14 +33,12 @@ describe("Railway gateway deploy contract", () => {
     assert.doesNotMatch(cmd, /HERMES_DASHBOARD=1/);
   });
 
-  it("omits startCommand from Railway config", () => {
-    for (const toml of [railwayToml, nestedToml]) {
-      assert.doesNotMatch(toml, /^\s*startCommand\s*=/m);
-      assert.match(toml, /builder = "DOCKERFILE"/);
-      assert.match(toml, /dockerfilePath = "deploy\/hermes\/Dockerfile"/);
-      assert.match(toml, /healthcheckPath = "\/health"/);
-      assert.match(toml, /restartPolicyType = "ON_FAILURE"/);
-    }
+  it("omits startCommand from the isolated Hermes Railway config", () => {
+    assert.doesNotMatch(nestedToml, /^\s*startCommand\s*=/m);
+    assert.match(nestedToml, /builder = "DOCKERFILE"/);
+    assert.match(nestedToml, /dockerfilePath = "deploy\/hermes\/Dockerfile"/);
+    assert.match(nestedToml, /healthcheckPath = "\/health"/);
+    assert.match(nestedToml, /restartPolicyType = "ON_FAILURE"/);
   });
 
   it("seeds only documented Aether-required keys", () => {

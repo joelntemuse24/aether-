@@ -6,11 +6,19 @@ import {
 } from "./availability";
 
 describe("hosted chat availability", () => {
-  it("is available when only Hermes is configured", () => {
+  it("is not available from Hermes credentials unless the opt-in flag is set", () => {
     assert.equal(
       isHostedChatAvailable({
         HERMES_BASE_URL: "https://h.example",
         HERMES_API_KEY: "secret",
+      }, false),
+      false,
+    );
+    assert.equal(
+      isHostedChatAvailable({
+        HERMES_BASE_URL: "https://h.example",
+        HERMES_API_KEY: "secret",
+        HERMES_ENABLED: "1",
       }, false),
       true,
     );
@@ -22,6 +30,7 @@ describe("hosted chat availability", () => {
     const models = hermesFallbackPickerModels({
       HERMES_BASE_URL: "https://h.example",
       HERMES_API_KEY: "secret",
+      HERMES_ENABLED: "1",
       HERMES_MODEL_NAME: "hermes-agent",
     });
     assert.equal(models.length, 1);

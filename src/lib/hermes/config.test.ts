@@ -6,6 +6,7 @@ import {
   hermesChatCompletionsUrl,
   isHermesConfigured,
   normalizeHermesBaseUrl,
+  shouldProxyChatToHermes,
 } from "./config";
 
 describe("hermes config", () => {
@@ -47,14 +48,14 @@ describe("hermes config", () => {
     );
   });
 
-  it("is configured only when URL and key are set", () => {
+  it("is off by default even when URL and key are set", () => {
     assert.equal(isHermesConfigured({}), false);
     assert.equal(
       isHermesConfigured({
         HERMES_BASE_URL: "https://h.example",
         HERMES_API_KEY: "secret",
       }),
-      true,
+      false,
     );
     assert.equal(
       isHermesConfigured({
@@ -66,15 +67,71 @@ describe("hermes config", () => {
     );
   });
 
-  it("reads model name default", () => {
+  it("is live only with an explicit enable flag plus URL and key", () => {
+    assert.equal(
+      isHermesConfigured({
+        HERMES_BASE_URL: "https://h.example",
+        HERMES_API_KEY: "secret",
+        HERMES_ENABLED: "1",
+      }),
+      true,
+    );
+    assert.equal(
+      isHermesConfigured({
+        HERMES_BASE_URL: "https://h.example",
+        HERMES_API_KEY: "secret",
+        HERMES_ENABLED: "true",
+      }),
+      true,
+    );
+    assert.equal(
+      isHermesConfigured({
+        HERMES_ENABLED: "1",
+        HERMES_API_KEY: "secret",
+      }),
+      false,
+    );
+  });
+
+  it("does not proxy hosted chat through Hermes unless the flag is on", () => {
+    const creds = {
+      HERMES_BASE_URL: "https://h.example",
+      HERMES_API_KEY: "secret",
+    };
+    assert.equal(shouldProxyChatToHermes({ hosted: true, env: creds }), false);
+    assert.equal(
+      shouldProxyChatToHermes({
+        hosted: true,
+        env: { ...creds, HERMES_ENABLED: "1" },
+      }),
+      true,
+    );
+    assert.equal(
+      shouldProxyChatToHermes({
+        hosted: false,
+        env: { ...creds, HERMES_ENABLED: "1" },
+      }),
+      false,
+    );
+  });
+
+  it("reads model name default when opted in", () => {
     const cfg = getHermesConfig({
       HERMES_BASE_URL: "https://h.example/v1",
       HERMES_API_KEY: "k",
+      HERMES_ENABLED: "1",
     });
     assert.deepEqual(cfg, {
       baseUrl: "https://h.example",
       apiKey: "k",
       modelName: "hermes-agent",
     });
+    assert.equal(
+      getHermesConfig({
+        HERMES_BASE_URL: "https://h.example/v1",
+        HERMES_API_KEY: "k",
+      }),
+      null,
+    );
   });
 });

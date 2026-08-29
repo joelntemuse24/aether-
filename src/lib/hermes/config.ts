@@ -19,17 +19,30 @@ export function normalizeHermesBaseUrl(raw: string): string {
   return u;
 }
 
+function isHermesOptIn(env: NodeJS.ProcessEnv): boolean {
+  const enabled = env.HERMES_ENABLED?.trim().toLowerCase();
+  return enabled === "1" || enabled === "true" || enabled === "on" || enabled === "yes";
+}
+
+/**
+ * Hermes is off unless HERMES_ENABLED is an explicit on-value
+ * and URL + key are both set. URL+key alone must not take the product path.
+ */
 export function isHermesConfigured(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  const enabled = env.HERMES_ENABLED?.trim().toLowerCase();
-  if (enabled === "0" || enabled === "false" || enabled === "off") {
-    return false;
-  }
+  if (!isHermesOptIn(env)) return false;
   const url = env.HERMES_BASE_URL?.trim();
   const key = env.HERMES_API_KEY?.trim();
-  if (!url || !key) return false;
-  return true;
+  return Boolean(url && key);
+}
+
+/** Hosted chat uses Hermes only when the operator opted in. BYOK never does. */
+export function shouldProxyChatToHermes(input: {
+  hosted: boolean;
+  env?: NodeJS.ProcessEnv;
+}): boolean {
+  return input.hosted && isHermesConfigured(input.env ?? process.env);
 }
 
 export function getHermesConfig(

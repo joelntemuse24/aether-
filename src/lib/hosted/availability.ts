@@ -2,8 +2,8 @@ import type { RankedModelOption } from "./rank-models";
 import { isHermesConfigured } from "@/lib/hermes/config";
 
 /**
- * Hosted chat can run via local upstream keys (OpenRouter / BUZZ) OR a
- * remote Hermes gateway. The picker must treat either as "ready".
+ * Hosted chat runs on server OpenRouter / BUZZ keys.
+ * A remote Hermes gateway is opt-in (`HERMES_ENABLED=1`) and not the default.
  */
 export function isHostedChatAvailable(
   env: NodeJS.ProcessEnv = process.env,

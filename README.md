@@ -10,7 +10,7 @@ A high-fidelity AI chat workspace inspired by modern cream-canvas assistants. Bu
 - BYOK providers: **OpenRouter** (default), OpenAI, Anthropic, or any OpenAI-compatible base URL
 - Markdown + GFM, code blocks, and a right-side **artifact panel** for longer code
 - Hover-only message actions (copy, regenerate, feedback)
-- Ready for one-click deploy on **Vercel**
+- Deploy as a long-lived **Node** process (`next start` on Railway)
 
 ## Quick start
 
@@ -55,17 +55,20 @@ Colors and type live in:
 
 Assistant messages use Newsreader with `leading-[1.65]` and slight negative tracking. UI chrome uses Geist / system sans. Do **not** use Tailwind’s generic `font-serif`.
 
-## Deploy on Vercel
+## Deploy (Railway)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone)
-
-Or from the CLI:
+Production chat is a long-lived Node process, not a Vercel serverless function:
 
 ```bash
-npx vercel
+npm run build
+npm run start
 ```
 
-No required environment variables for v1 — users bring their own keys in the UI.
+Connect this repo to [Railway](https://railway.app). Root `railway.toml` + `Dockerfile` run `next start` and honor `PORT`. Set `OPENROUTER_API_KEY` (and optional `AETHER_HOSTED_BUZZ_*`) for Aether Cloud. BYOK still works from Settings.
+
+Hermes is **optional / deprecated**. It is not the default hosted path. `HERMES_BASE_URL` + `HERMES_API_KEY` alone do nothing; set `HERMES_ENABLED=1` only if you still operate `deploy/hermes/`.
+
+Vercel remains possible for previews, but serverless `maxDuration` is why Continue existed. Prefer Railway (or Fly) for multi-minute tool turns.
 
 ## Project layout
 
