@@ -32,24 +32,50 @@ export function prepareOutgoingChatMessages(input: {
   return mergeStoredThreadWithIncoming(input.stored, input.live).messages;
 }
 
-export function prepareContinueOutgoingMessages(
-  stored: UIMessage[],
-  continueUser: UIMessage,
-): UIMessage[] {
-  return mergeStoredThreadWithIncoming(stored, [continueUser]).messages;
+/**
+ * Same function the transport uses: conversationId is set before POST,
+ * and messages are stored + new tail (never a lone Continue / lone B).
+ */
+export function buildChatSendBody(input: {
+  conversationId: string | undefined;
+  stored: UIMessage[];
+  live: UIMessage[];
+}): { conversationId: string | undefined; messages: UIMessage[] } {
+  return {
+    conversationId: input.conversationId,
+    messages: prepareOutgoingChatMessages({
+      stored: input.stored,
+      live: input.live,
+    }),
+  };
 }
 
-/** A→B never carries A's live array. B comes from B's store (possibly empty). */
-export function messagesAfterThreadSwitch(input: {
+/** A→B replaces live with B's store. Same thread merges stored + live tail. */
+export function hydrateThreadMessages(input: {
   previousKey: string | null;
   nextKey: string;
   live: UIMessage[];
-  storedNext: UIMessage[];
+  stored: UIMessage[];
 }): UIMessage[] {
-  if (input.previousKey && input.previousKey !== input.nextKey) {
-    return input.storedNext;
+  const switched =
+    input.previousKey != null && input.previousKey !== input.nextKey;
+  if (switched) return input.stored;
+  if (input.stored.length > 0) {
+    return mergeStoredThreadWithIncoming(input.stored, input.live).messages;
   }
-  return input.storedNext.length > 0 ? input.storedNext : input.live;
+  return input.live;
+}
+
+export function shouldPersistTranscriptImmediately(input: {
+  last: UIMessage | undefined;
+  status: string;
+}): boolean {
+  return (
+    input.last?.role === "user" ||
+    hasCompletedToolResult(input.last) ||
+    input.status === "ready" ||
+    input.status === "error"
+  );
 }
 
 export function hasCompletedToolResult(message: UIMessage | undefined): boolean {

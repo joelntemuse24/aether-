@@ -3,11 +3,11 @@ import { afterEach, describe, it } from "node:test";
 import type { UIMessage } from "ai";
 import { CONTINUE_USER_TEXT } from "./chat-continue";
 import {
-  messagesAfterThreadSwitch,
-  prepareContinueOutgoingMessages,
-  prepareOutgoingChatMessages,
+  buildChatSendBody,
+  hydrateThreadMessages,
   shouldBlockSend,
   shouldCopyDraftToRemoteId,
+  shouldPersistTranscriptImmediately,
 } from "./chat-transcript";
 
 function user(id: string, text: string): UIMessage {
@@ -16,6 +16,20 @@ function user(id: string, text: string): UIMessage {
 
 function assistant(id: string, text: string): UIMessage {
   return { id, role: "assistant", parts: [{ type: "text", text }] };
+}
+
+function toolWithOutput(id: string): UIMessage {
+  return {
+    id,
+    role: "assistant",
+    parts: [
+      {
+        type: "tool-web_search",
+        toolCallId: "t1",
+        output: { hits: 1 },
+      } as UIMessage["parts"][number],
+    ],
+  };
 }
 
 function installLocalStorage() {
@@ -30,7 +44,10 @@ function installLocalStorage() {
     },
   };
   const globalWithWindow = globalThis as typeof globalThis & {
-    window?: { localStorage: typeof localStorage; dispatchEvent: (event?: Event) => boolean };
+    window?: {
+      localStorage: typeof localStorage;
+      dispatchEvent: (event?: Event) => boolean;
+    };
   };
   const previous = globalWithWindow.window;
   globalWithWindow.window = {
@@ -84,6 +101,44 @@ describe("chat transcript client helpers", () => {
       false,
     );
   });
+
+  it("persists immediately on user append, tool result, abort/ready, and error", () => {
+    assert.equal(
+      shouldPersistTranscriptImmediately({
+        last: user("u1", "A"),
+        status: "submitted",
+      }),
+      true,
+    );
+    assert.equal(
+      shouldPersistTranscriptImmediately({
+        last: toolWithOutput("a1"),
+        status: "streaming",
+      }),
+      true,
+    );
+    assert.equal(
+      shouldPersistTranscriptImmediately({
+        last: assistant("a1", "cut off"),
+        status: "ready",
+      }),
+      true,
+    );
+    assert.equal(
+      shouldPersistTranscriptImmediately({
+        last: assistant("a1", "err"),
+        status: "error",
+      }),
+      true,
+    );
+    assert.equal(
+      shouldPersistTranscriptImmediately({
+        last: assistant("a1", "token"),
+        status: "streaming",
+      }),
+      false,
+    );
+  });
 });
 
 describe("transcript persist / reload / switch / continue", () => {
@@ -93,32 +148,32 @@ describe("transcript persist / reload / switch / continue", () => {
     restore = undefined;
   });
 
-  it("second POST after reload includes A, assistant reply, and B", async () => {
+  it("second POST after reload includes conversationId, A, assistant reply, and B", async () => {
     restore = installLocalStorage();
     const { persistThreadUIMessages, loadThreadUIMessages } = await import(
       "./local-thread-adapter"
     );
     const id = "thread-reload";
-    const storedTurn = [
+    persistThreadUIMessages(id, [
       user("u1", "My favourite number is 17."),
       assistant("a1", "Got it — 17."),
-    ];
-    persistThreadUIMessages(id, storedTurn);
+    ]);
 
     const reloaded = loadThreadUIMessages(id);
-    const outgoing = prepareOutgoingChatMessages({
+    const body = buildChatSendBody({
+      conversationId: id,
       stored: reloaded,
-      // Simulate the buggy client that only sends the new user turn.
       live: [user("u2", "What number?")],
     });
 
-    assert.equal(outgoing.length, 3);
-    assert.equal(outgoing[0]?.id, "u1");
-    assert.equal(outgoing[1]?.id, "a1");
-    assert.equal(outgoing[2]?.id, "u2");
+    assert.equal(body.conversationId, id);
+    assert.deepEqual(
+      body.messages.map((m) => m.id),
+      ["u1", "a1", "u2"],
+    );
   });
 
-  it("sidebar switch away and back loads B from B's store, not A", async () => {
+  it("sidebar switch away and back loads B from B's store, then A + B-turn on return", async () => {
     restore = installLocalStorage();
     const { persistThreadUIMessages, loadThreadUIMessages } = await import(
       "./local-thread-adapter"
@@ -133,35 +188,36 @@ describe("transcript persist / reload / switch / continue", () => {
     ]);
 
     const liveFromA = loadThreadUIMessages("thread-a");
-    const storedB = loadThreadUIMessages("thread-b");
-    const afterSwitch = messagesAfterThreadSwitch({
+    const afterSwitch = hydrateThreadMessages({
       previousKey: "thread-a",
       nextKey: "thread-b",
       live: liveFromA,
-      storedNext: storedB,
+      stored: loadThreadUIMessages("thread-b"),
     });
     assert.deepEqual(
       afterSwitch.map((m) => m.id),
       ["ub", "ab"],
     );
 
-    const backToA = messagesAfterThreadSwitch({
+    const backToA = hydrateThreadMessages({
       previousKey: "thread-b",
       nextKey: "thread-a",
       live: afterSwitch,
-      storedNext: loadThreadUIMessages("thread-a"),
+      stored: loadThreadUIMessages("thread-a"),
     });
-    const outgoing = prepareOutgoingChatMessages({
+    const body = buildChatSendBody({
+      conversationId: "thread-a",
       stored: backToA,
-      live: [...backToA, user("u2", "What number?")],
+      live: [user("u2", "What number?")],
     });
-    assert.equal(outgoing.length, 3);
-    assert.equal(outgoing[0]?.id, "ua");
-    assert.equal(outgoing[1]?.id, "aa");
-    assert.equal(outgoing[2]?.id, "u2");
+    assert.equal(body.conversationId, "thread-a");
+    assert.deepEqual(
+      body.messages.map((m) => m.id),
+      ["ua", "aa", "u2"],
+    );
   });
 
-  it("Continue resends full history, not only CONTINUE_USER_TEXT", async () => {
+  it("Continue POST body is full history plus CONTINUE_USER_TEXT", async () => {
     restore = installLocalStorage();
     const { persistThreadUIMessages, loadThreadUIMessages } = await import(
       "./local-thread-adapter"
@@ -171,18 +227,35 @@ describe("transcript persist / reload / switch / continue", () => {
       assistant("a1", "Partial..."),
     ]);
     const stored = loadThreadUIMessages("thread-cont");
-    const outgoing = prepareContinueOutgoingMessages(
+    const body = buildChatSendBody({
+      conversationId: "thread-cont",
       stored,
-      user("cont", CONTINUE_USER_TEXT),
-    );
-    assert.equal(outgoing.length, 3);
-    assert.equal(outgoing[0]?.id, "u1");
-    assert.equal(outgoing[1]?.id, "a1");
-    assert.equal(outgoing[2]?.id, "cont");
-    const lastText = outgoing[2]?.parts.find((p) => p.type === "text");
+      live: [user("cont", CONTINUE_USER_TEXT)],
+    });
+    assert.equal(body.conversationId, "thread-cont");
+    assert.equal(body.messages.length, 3);
+    assert.equal(body.messages[0]?.id, "u1");
+    assert.equal(body.messages[1]?.id, "a1");
+    assert.equal(body.messages[2]?.id, "cont");
+    const lastText = body.messages[2]?.parts.find((p) => p.type === "text");
     assert.equal(
       lastText && "text" in lastText ? lastText.text : "",
       CONTINUE_USER_TEXT,
+    );
+  });
+
+  it("local persist is synchronous — load after persist sees the full array", async () => {
+    restore = installLocalStorage();
+    const { persistThreadUIMessages, loadThreadUIMessages } = await import(
+      "./local-thread-adapter"
+    );
+    persistThreadUIMessages("sync-id", [
+      user("u1", "A"),
+      assistant("a1", "ok"),
+    ]);
+    assert.deepEqual(
+      loadThreadUIMessages("sync-id").map((m) => m.id),
+      ["u1", "a1"],
     );
   });
 });

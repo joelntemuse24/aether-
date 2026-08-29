@@ -39,13 +39,13 @@ import {
   shouldAutoContinue,
 } from "@/lib/chat-continue";
 import type { HarnessChatContext } from "@/lib/harness/types";
-import { mergeStoredThreadWithIncoming } from "@/lib/chat-history-merge";
 import { setChatHistoryReady } from "@/lib/chat-history-gate";
 import {
-  hasCompletedToolResult,
-  prepareOutgoingChatMessages,
+  buildChatSendBody,
+  hydrateThreadMessages,
   shouldBlockSend,
   shouldCopyDraftToRemoteId,
+  shouldPersistTranscriptImmediately,
 } from "@/lib/chat-transcript";
 
 function loadInitialThreadIdFromUrl(): string | undefined {
@@ -193,20 +193,21 @@ function useChatThreadRuntime() {
           }
           const stored = remoteId ? loadThreadUIMessages(remoteId) : [];
           storedCountRef.current = Math.max(storedCountRef.current, stored.length);
-          const outgoing = prepareOutgoingChatMessages({
+          const send = buildChatSendBody({
+            conversationId: remoteId,
             stored,
             live: options.messages,
           });
-          if (remoteId && outgoing.length > 0) {
-            persistThreadUIMessages(remoteId, outgoing);
+          if (remoteId && send.messages.length > 0) {
+            persistThreadUIMessages(remoteId, send.messages);
             persistedKeyRef.current = remoteId;
           }
           return {
             body: {
               ...options.body,
               id: remoteId,
-              conversationId: remoteId,
-              messages: outgoing,
+              conversationId: send.conversationId,
+              messages: send.messages,
               trigger: options.trigger,
               messageId: options.messageId,
               metadata: options.requestMetadata,
@@ -476,16 +477,14 @@ function useChatThreadRuntime() {
       void loadThreadUIMessagesAsync(key).then((stored) => {
         if (cancelled) return;
         storedCountRef.current = stored.length;
-        const switched =
-          loadedKeyRef.current != null && loadedKeyRef.current !== key;
-        if (switched) {
-          setMessages(stored);
-        } else if (stored.length > 0) {
-          const next = mergeStoredThreadWithIncoming(
-            stored,
-            messagesRef.current,
-          );
-          setMessages(next.messages);
+        const next = hydrateThreadMessages({
+          previousKey: loadedKeyRef.current,
+          nextKey: key,
+          live: messagesRef.current,
+          stored,
+        });
+        if (next.length > 0) {
+          setMessages(next);
         } else if (messagesRef.current.length > 0) {
           persistThreadUIMessages(key, messagesRef.current);
         }
@@ -563,11 +562,10 @@ function useChatThreadRuntime() {
     const key = threadIdRef.current ?? readThreadStorageKey(aui);
     if (!key || messages.length === 0) return;
     const last = messages[messages.length - 1];
-    const persistNow =
-      last?.role === "user" ||
-      hasCompletedToolResult(last) ||
-      status === "ready" ||
-      status === "error";
+    const persistNow = shouldPersistTranscriptImmediately({
+      last,
+      status,
+    });
     if (persistNow) {
       persistThreadUIMessages(key, messages);
       persistedKeyRef.current = key;
