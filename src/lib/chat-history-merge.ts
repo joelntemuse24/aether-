@@ -1,4 +1,5 @@
 import type { UIMessage } from "ai";
+import { restoreDurableToolStubsFromStored } from "./chat-tool-transcript";
 
 export const AI_SDK_MESSAGE_FORMAT = "ai-sdk/v6";
 
@@ -57,7 +58,8 @@ export function mergeStoredThreadWithIncoming(
   const tailMissing = storedTail ? !incomingHas(storedTail, incomingList) : false;
 
   if (!incomingShorter && !tailMissing) {
-    return { messages: incomingList, merged: false };
+    const withTools = restoreDurableToolStubsFromStored(storedList, incomingList);
+    return { messages: withTools, merged: false };
   }
 
   const merged: UIMessage[] = storedList.map((message) => {
@@ -70,7 +72,10 @@ export function mergeStoredThreadWithIncoming(
     merged.push(message);
   }
 
-  return { messages: merged, merged: true };
+  return {
+    messages: restoreDurableToolStubsFromStored(storedList, merged),
+    merged: true,
+  };
 }
 
 export type UnderSentHistoryDetails = {
