@@ -28,6 +28,25 @@ describe("chat transport wiring contract", () => {
     assert.doesNotMatch(runtime, /headStart|Head Start|chat\.headStart/);
   });
 
+  it("starts and mints against the transport chatId, not a remapped thread remoteId", () => {
+    const runtime = readFileSync(
+      new URL("../../providers/runtime-provider.tsx", import.meta.url),
+      "utf8",
+    );
+    // Remapping start-session to assistant-ui's remoteId while useChat
+    // still appends with its own id is the production 403:
+    // appendToSessionStream failed: 403 unauthorized access_token.
+    assert.doesNotMatch(runtime, /chatId:\s*remoteId/);
+    assert.match(runtime, /buildStartSessionRequest/);
+    assert.match(runtime, /transportChatId:\s*chatId/);
+    assert.match(runtime, /parseMintedAccessToken/);
+    assert.match(runtime, /parseStartSessionResult/);
+    assert.match(
+      runtime,
+      /id:\s*chatTransport === "durable" \? durableChatId : undefined/,
+    );
+  });
+
   it("does not name vendors in the cream UI runtime", () => {
     const runtime = readFileSync(
       new URL("../../providers/runtime-provider.tsx", import.meta.url),
@@ -53,6 +72,7 @@ describe("chat transport wiring contract", () => {
       "utf8",
     );
     assert.match(route, /sessionSafeChatClientData/);
+    assert.match(route, /parseStartSessionResult/);
     assert.doesNotMatch(route, /drizzle|getDb\(|sql`/);
   });
 
@@ -64,5 +84,17 @@ describe("chat transport wiring contract", () => {
     const transpile = /transpilePackages:\s*\[[^\]]*@trigger\.dev\/sdk/.test(config);
     const external = /serverExternalPackages:\s*\[[^\]]*@trigger\.dev\/sdk/.test(config);
     assert.equal(transpile && external, false);
+  });
+
+  it("initializes __LOCALID_ threads with the durable useChat id", () => {
+    const adapter = readFileSync(
+      new URL("../local-thread-adapter.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.match(adapter, /resolveInitializedRemoteId/);
+    assert.doesNotMatch(
+      adapter,
+      /const remoteId = threadId\.startsWith\("__LOCALID_"\)\s*\n\s*\? crypto\.randomUUID\(\)/,
+    );
   });
 });

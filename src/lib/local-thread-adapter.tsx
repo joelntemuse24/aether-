@@ -36,6 +36,7 @@ import {
   uiMessagesFromFormatRepo,
 } from "@/lib/chat-history-merge";
 import { ensureDurableToolStubs } from "@/lib/chat-tool-transcript";
+import { resolveInitializedRemoteId } from "@/lib/trigger/thread-remote-id";
 
 const PREFIX = "aether:";
 export const ACTIVE_THREAD_KEY = `${PREFIX}active-thread`;
@@ -545,11 +546,10 @@ export function createAetherThreadListAdapter(): RemoteThreadListAdapter {
     },
 
     async initialize(threadId: string) {
-      // assistant-ui hands us `__LOCALID_…` for optimistic threads. Mint a
-      // normal public id so URLs look like `/c/<uuid>` instead of that prefix.
-      const remoteId = threadId.startsWith("__LOCALID_")
-        ? crypto.randomUUID()
-        : threadId;
+      // assistant-ui hands us `__LOCALID_…` for optimistic threads. Reuse the
+      // durable useChat id when bound so Trigger session externalId, URL, and
+      // localStorage all share one id. A second UUID here is the 403 mismatch.
+      const remoteId = resolveInitializedRemoteId(threadId);
       if (await ensureMode()) {
         const { cloudCreateThread } = await import(
           "@/lib/conversations/cloud-client"

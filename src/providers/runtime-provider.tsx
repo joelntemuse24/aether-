@@ -19,6 +19,12 @@ import { useTriggerChatTransport } from "@trigger.dev/sdk/chat/react";
 import { CHAT_AGENT_TASK_ID } from "@/lib/trigger/config";
 import { buildBrowserChatClientData } from "@/lib/trigger/client-data";
 import {
+  buildStartSessionRequest,
+  parseMintedAccessToken,
+  parseStartSessionResult,
+} from "@/lib/trigger/session-auth";
+import { bindDurableChatId } from "@/lib/trigger/thread-remote-id";
+import {
   createAetherThreadListAdapter,
   ACTIVE_THREAD_KEY,
   loadThreadUIMessages,
@@ -257,20 +263,24 @@ function useChatThreadRuntime() {
       if (!res.ok) {
         throw new Error((await res.text().catch(() => "")) || "Could not start chat.");
       }
-      return res.text();
+      return parseMintedAccessToken(await res.text());
     },
     startSession: async ({ chatId, clientData }) => {
       const currentAui = auiRef.current;
-      let remoteId = threadIdRef.current ?? readThreadStorageKey(currentAui) ?? chatId;
+      try {
+        bindDurableChatId(chatId, currentAui.threadListItem().getState().id);
+      } catch {
+        bindDurableChatId(chatId);
+      }
       if (!threadIdRef.current) {
         try {
           const initialized = await currentAui.threadListItem().initialize();
-          remoteId = initialized.remoteId || remoteId;
+          threadIdRef.current = initialized.remoteId || chatId;
         } catch {
-          remoteId = readThreadIdFromLocation() || remoteId;
+          threadIdRef.current = readThreadIdFromLocation() || chatId;
         }
-        threadIdRef.current = remoteId;
       }
+      const conversationId = threadIdRef.current || chatId;
       const turn = buildTurnBodyRef.current();
       const payload = buildBrowserChatClientData({
         settings: settingsRef.current,
@@ -278,7 +288,7 @@ function useChatThreadRuntime() {
         harness: turn.harness,
         memoryContext: turn.memoryContext,
         projectId: turn.projectId,
-        conversationId: remoteId,
+        conversationId,
         continueSegment: turn.continueSegment,
         attachments: turn.attachments,
         textPrefix: turn.textPrefix,
@@ -287,15 +297,18 @@ function useChatThreadRuntime() {
       const res = await fetch("/api/chat/start-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chatId: remoteId,
-          clientData: { ...clientData, ...payload, conversationId: remoteId },
-        }),
+        body: JSON.stringify(
+          buildStartSessionRequest({
+            transportChatId: chatId,
+            threadRemoteId: conversationId,
+            clientData: { ...clientData, ...payload },
+          }),
+        ),
       });
       if (!res.ok) {
         throw new Error((await res.text().catch(() => "")) || "Could not start chat.");
       }
-      return res.json();
+      return parseStartSessionResult(await res.json());
     },
     clientData: durableClientData,
   });
@@ -385,17 +398,23 @@ function useChatThreadRuntime() {
     return true;
   }, [emitContinueStatus]);
 
-  const [durableChatId] = useState(
-    () =>
+  const [durableChatId] = useState(() => {
+    const id =
       readThreadStorageKey(aui) ??
       readThreadIdFromLocation() ??
       (typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()
-        : `chat-${Date.now()}`),
-  );
+        : `chat-${Date.now()}`);
+    try {
+      bindDurableChatId(id, aui.threadListItem().getState().id);
+    } catch {
+      bindDurableChatId(id);
+    }
+    return id;
+  });
 
   const chat = useChat({
-    id: chatTransport === "durable" ? (threadIdRef.current || durableChatId) : undefined,
+    id: chatTransport === "durable" ? durableChatId : undefined,
     messages: seedMessages,
     transport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
@@ -633,6 +652,7 @@ function useChatThreadRuntime() {
     void (async () => {
       try {
         const state = aui.threadListItem().getState();
+        bindDurableChatId(durableChatId, state.id);
         if (!state.remoteId) {
           await aui.threadListItem().initialize();
         }
@@ -658,7 +678,7 @@ function useChatThreadRuntime() {
     return () => {
       cancelled = true;
     };
-  }, [status, aui]);
+  }, [status, aui, durableChatId]);
 
   // Persist the full linear transcript: user append, tool result, and ready/error
   // are sync. Token streaming stays debounced so we don't write every chunk.

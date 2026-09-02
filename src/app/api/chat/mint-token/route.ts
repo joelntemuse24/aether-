@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth as triggerAuth } from "@trigger.dev/sdk";
 import { isTriggerChatConfigured } from "@/lib/trigger/config";
+import { publicTokenToJwt } from "@/lib/trigger/session-auth";
 
 export const runtime = "nodejs";
 
@@ -32,8 +33,14 @@ export async function POST(req: Request) {
     expirationTime: "1h",
   });
 
-  return new NextResponse(typeof token === "string" ? token : String(token), {
-    status: 200,
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
-  });
+  console.info("[chat/mint-token]", { chatId });
+
+  try {
+    return new NextResponse(publicTokenToJwt(token), {
+      status: 200,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  } catch {
+    return NextResponse.json({ error: "Could not start chat." }, { status: 502 });
+  }
 }
