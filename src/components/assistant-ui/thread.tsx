@@ -73,6 +73,7 @@ import { parseTimeBudgetFromText } from "@/lib/harness/time-budget";
 import { isChatHistoryReady, waitForChatHistoryReady } from "@/lib/chat-history-gate";
 import {
   HISTORY_WAIT_BEFORE_SEND_MS,
+  planClassifyBeforeSend,
   shouldAwaitHistoryBeforeSend,
   shouldAwaitThreadInitializeBeforeSend,
 } from "@/lib/chat-first-send";
@@ -426,6 +427,7 @@ const Composer: FC = () => {
   const [dragging, setDragging] = useState(false);
   const [resumeBusy, setResumeBusy] = useState(false);
   const isRunning = useAuiState((s) => s.thread.isRunning);
+  const isFirstTurn = useAuiState((s) => s.thread.messages.length === 0);
 
   // Auto-dismiss attach errors so they don't stick after chips are gone.
   useEffect(() => {
@@ -496,14 +498,14 @@ const Composer: FC = () => {
 
     let classification = opts?.classification;
     let runId = opts?.runId;
+    const heuristic = text ? heuristicClassify(text) : undefined;
+    const classifyPlan = planClassifyBeforeSend({
+      isFirstTurn,
+      heuristicSkipsModel: !!(heuristic && shouldSkipModelClassify(heuristic)),
+    });
 
     if (!opts?.skipClassify && !classification) {
-      // Heuristics-first: skip the BYOK model call for cheap shallow turns.
-      const heuristic = text ? heuristicClassify(text) : undefined;
-      if (heuristic && shouldSkipModelClassify(heuristic)) {
-        classification = heuristic;
-        runId = crypto.randomUUID();
-      } else {
+      if (classifyPlan.awaitModelClassify) {
         setClassifying(true);
         try {
           const res = await fetch("/api/harness/classify", {
@@ -537,10 +539,16 @@ const Composer: FC = () => {
         } finally {
           setClassifying(false);
         }
+      } else {
+        // First turn and cheap shallow turns: sync heuristic only.
+        // Do not POST /api/harness/classify before Head Start.
+        classification = heuristic;
+        runId = crypto.randomUUID();
       }
     }
 
     if (
+      !classifyPlan.skipClarifyGate &&
       classification?.needsClarify &&
       (classification.questions?.length ?? 0) > 0 &&
       !opts?.clarifications

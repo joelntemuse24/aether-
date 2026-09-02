@@ -3,10 +3,15 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   HISTORY_WAIT_BEFORE_SEND_MS,
+  planClassifyBeforeSend,
   shouldAwaitHistoryBeforeSend,
   shouldAwaitThreadInitializeBeforeSend,
 } from "./chat-first-send";
 import { heuristicClassify, shouldSkipModelClassify } from "./harness/heuristic";
+
+/** Richer than pong — heuristic does not skip the model classify call. */
+const RICHER_FIRST_TURN =
+  "Help me think through how to organize my notes from last week into a simple system I can keep using";
 
 describe("first send must not wait on /c/ navigation", () => {
   it("does not wait for history hydrate on a new empty chat from /", () => {
@@ -60,6 +65,49 @@ describe("first send must not wait on /c/ navigation", () => {
   });
 });
 
+describe("first send must not wait on classify", () => {
+  it("does not await model classify on a richer first turn", () => {
+    const heuristic = heuristicClassify(RICHER_FIRST_TURN);
+    assert.equal(shouldSkipModelClassify(heuristic), false);
+    const plan = planClassifyBeforeSend({
+      isFirstTurn: true,
+      heuristicSkipsModel: shouldSkipModelClassify(heuristic),
+    });
+    assert.equal(plan.awaitModelClassify, false);
+    assert.equal(plan.skipClarifyGate, true);
+  });
+
+  it("does not hold first send for heuristic clarify cards", () => {
+    const heuristic = heuristicClassify("write something");
+    assert.equal(heuristic.needsClarify, true);
+    const plan = planClassifyBeforeSend({
+      isFirstTurn: true,
+      heuristicSkipsModel: shouldSkipModelClassify(heuristic),
+    });
+    assert.equal(plan.awaitModelClassify, false);
+    assert.equal(plan.skipClarifyGate, true);
+  });
+
+  it("still allows later turns to await model classify when heuristic does not skip", () => {
+    const heuristic = heuristicClassify(RICHER_FIRST_TURN);
+    const plan = planClassifyBeforeSend({
+      isFirstTurn: false,
+      heuristicSkipsModel: shouldSkipModelClassify(heuristic),
+    });
+    assert.equal(plan.awaitModelClassify, true);
+    assert.equal(plan.skipClarifyGate, false);
+  });
+
+  it("keeps the shallow pong skip on later turns without a classify round-trip", () => {
+    const heuristic = heuristicClassify("Reply with the single word pong");
+    const plan = planClassifyBeforeSend({
+      isFirstTurn: false,
+      heuristicSkipsModel: shouldSkipModelClassify(heuristic),
+    });
+    assert.equal(plan.awaitModelClassify, false);
+  });
+});
+
 describe("composer send wiring", () => {
   const thread = readFileSync(
     new URL("../components/assistant-ui/thread.tsx", import.meta.url),
@@ -86,5 +134,27 @@ describe("composer send wiring", () => {
     assert.ok(initAt >= 0 && sendAt > initAt);
     assert.doesNotMatch(sendFn, /await aui\.threadListItem\(\)\.initialize\(\)/);
     assert.doesNotMatch(sendFn, /router\.(push|replace)/);
+  });
+
+  it("gates model classify so first send does not await /api/harness/classify", () => {
+    const sendFn = thread.slice(
+      thread.indexOf("const sendWithHarness"),
+      thread.indexOf("const onClarifySubmit"),
+    );
+    assert.match(sendFn, /planClassifyBeforeSend/);
+    assert.match(sendFn, /awaitModelClassify/);
+    const classifyAwait = sendFn.search(
+      /await fetch\(\s*["']\/api\/harness\/classify["']/,
+    );
+    const sendAt = sendFn.indexOf("composerRuntime.send()");
+    if (classifyAwait >= 0) {
+      assert.match(sendFn, /if\s*\([^)]*awaitModelClassify/);
+      assert.ok(sendAt > classifyAwait);
+    }
+    const adapter = readFileSync(
+      new URL("./local-thread-adapter.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(adapter, /\/api\/harness\/classify/);
   });
 });
