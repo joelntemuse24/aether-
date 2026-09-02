@@ -18,6 +18,7 @@ import {
 import { mergeStartSessionClientData } from "@/lib/trigger/start-session";
 import { signAgentContextToken } from "@/lib/trigger/context-token";
 import { parseToolApprovalMode } from "@/lib/hermes/tool-approval";
+import { parseStartSessionResult } from "@/lib/trigger/session-auth";
 
 export const runtime = "nodejs";
 
@@ -123,8 +124,9 @@ export async function POST(req: Request) {
     chatId,
     clientData: sessionSafeChatClientData(clientData),
   });
-  if (typeof started === "string") {
-    return NextResponse.json({ publicAccessToken: started });
+  const { publicAccessToken } = parseStartSessionResult(started);
+  if (started && typeof started === "object") {
+    return NextResponse.json({ ...started, publicAccessToken });
   }
-  return NextResponse.json(started);
+  return NextResponse.json({ publicAccessToken });
 }
