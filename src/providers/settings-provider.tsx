@@ -28,6 +28,7 @@ import { getModelLabel } from "@/lib/models";
 
 export type HostedStatus = {
   available: boolean;
+  chatTransport?: "durable" | "request";
   defaultModel: string;
   models: Array<{
     id: string;
@@ -48,6 +49,8 @@ type SettingsContextValue = {
   hasKey: boolean;
   hostedStatus: HostedStatus | null;
   hostedLoading: boolean;
+  /** Internal: durable agent vs request fallback. Never shown in UI copy. */
+  chatTransport: "durable" | "request";
   chatHeaders: Record<string, string>;
   openSettings: boolean;
   setOpenSettings: (open: boolean) => void;
@@ -252,6 +255,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       hasKey: canChat(settings, hostedAvailable),
       hostedStatus,
       hostedLoading,
+      chatTransport:
+        hostedStatus?.chatTransport === "durable" ? "durable" : "request",
       chatHeaders: buildChatHeaders(settings),
       openSettings,
       setOpenSettings,

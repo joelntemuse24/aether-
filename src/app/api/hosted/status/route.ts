@@ -6,6 +6,7 @@ import {
   isHostedChatAvailable,
 } from "@/lib/hosted/availability";
 import { fetchRankedHostedCatalog } from "@/lib/hosted/openrouter-catalog";
+import { resolveChatTransportMode } from "@/lib/trigger/config";
 
 export const runtime = "nodejs";
 
@@ -43,6 +44,7 @@ export async function GET() {
 
   return NextResponse.json({
     available,
+    chatTransport: resolveChatTransportMode(),
     capabilities: {
       claude: capabilities.claude,
       gpt: capabilities.gpt,

@@ -11,7 +11,13 @@ import {
   useAISDKRuntime,
 } from "@assistant-ui/react-ai-sdk";
 import { useChat, type UIMessage } from "@ai-sdk/react";
-import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
+import {
+  lastAssistantMessageIsCompleteWithToolCalls,
+  type ChatTransport,
+} from "ai";
+import { useTriggerChatTransport } from "@trigger.dev/sdk/chat/react";
+import { CHAT_AGENT_TASK_ID } from "@/lib/trigger/config";
+import { buildBrowserChatClientData } from "@/lib/trigger/client-data";
 import {
   createAetherThreadListAdapter,
   ACTIVE_THREAD_KEY,
@@ -84,7 +90,8 @@ type AddToolResult = (result: {
 }) => void;
 
 function useChatThreadRuntime() {
-  const { chatHeaders, activeModel, hasKey, settings } = useSettings();
+  const { chatHeaders, activeModel, hasKey, settings, chatTransport, hostedLoading } =
+    useSettings();
   const { attachments, clearAttachments } = useAttachments();
   const { peekChatContext, clearChatContext, armChatContext } = useHarness();
   const { activeProjectId } = useProjects();
@@ -99,6 +106,8 @@ function useChatThreadRuntime() {
   armHarnessRef.current = armChatContext;
   const projectIdRef = useRef(activeProjectId);
   projectIdRef.current = activeProjectId;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const threadIdRef = useRef<string | undefined>(undefined);
   threadIdRef.current = readThreadStorageKey(aui) ?? readThreadIdFromLocation();
   const persistedKeyRef = useRef<string | undefined>(threadIdRef.current);
@@ -128,46 +137,48 @@ function useChatThreadRuntime() {
 
   // Rebuild transport only when provider/model headers change — not on every
   // attach. body() reads the latest attachments via ref at send time.
-  const transport = useMemo(
+  const buildTurnBody = useCallback(() => {
+    const current = attachmentsRef.current;
+    const fileAttachments = current
+      .map((a) => {
+        const dataUrl =
+          a.dataUrl ??
+          (a.hasPayload || a.kind === "image" || a.kind === "file"
+            ? getAttachmentPayload(a.id)
+            : undefined);
+        if (!dataUrl) return null;
+        if (a.kind !== "image" && a.kind !== "file") return null;
+        return { name: a.name, mime: a.mime, dataUrl };
+      })
+      .filter((a): a is { name: string; mime: string; dataUrl: string } =>
+        a !== null,
+      );
+
+    const textPrefix = buildTextAttachmentPrefix(current);
+    const harness = peekHarnessRef.current();
+    if (harness) lastHarnessRef.current = harness;
+    const memoryContext = localMemoryContextForChat();
+    const continueSegment = continueSegmentRef.current;
+
+    return {
+      model: activeModel,
+      attachments: fileAttachments,
+      textPrefix: textPrefix || undefined,
+      system: resolveVoicePrompt(voiceRef.current),
+      harness: harness ?? lastHarnessRef.current ?? undefined,
+      memoryContext: memoryContext || undefined,
+      projectId: projectIdRef.current ?? undefined,
+      conversationId: threadIdRef.current ?? undefined,
+      continueSegment: continueSegment || undefined,
+    };
+  }, [activeModel]);
+
+  const httpTransport = useMemo(
     () =>
       new AssistantChatTransport({
         api: "/api/chat",
         headers: () => chatHeaders,
-        body: () => {
-          const current = attachmentsRef.current;
-          const fileAttachments = current
-            .map((a) => {
-              const dataUrl =
-                a.dataUrl ??
-                (a.hasPayload || a.kind === "image" || a.kind === "file"
-                  ? getAttachmentPayload(a.id)
-                  : undefined);
-              if (!dataUrl) return null;
-              if (a.kind !== "image" && a.kind !== "file") return null;
-              return { name: a.name, mime: a.mime, dataUrl };
-            })
-            .filter((a): a is { name: string; mime: string; dataUrl: string } =>
-              a !== null,
-            );
-
-          const textPrefix = buildTextAttachmentPrefix(current);
-          const harness = peekHarnessRef.current();
-          if (harness) lastHarnessRef.current = harness;
-          const memoryContext = localMemoryContextForChat();
-          const continueSegment = continueSegmentRef.current;
-
-          return {
-            model: activeModel,
-            attachments: fileAttachments,
-            textPrefix: textPrefix || undefined,
-            system: resolveVoicePrompt(voiceRef.current),
-            harness: harness ?? lastHarnessRef.current ?? undefined,
-            memoryContext: memoryContext || undefined,
-            projectId: projectIdRef.current ?? undefined,
-            conversationId: threadIdRef.current ?? undefined,
-            continueSegment: continueSegment || undefined,
-          };
-        },
+        body: () => buildTurnBody(),
         prepareSendMessagesRequest: async (options) => {
           let remoteId = threadIdRef.current ?? readThreadStorageKey(aui);
           if (!remoteId) {
@@ -214,8 +225,90 @@ function useChatThreadRuntime() {
           };
         },
       }),
-    [chatHeaders, activeModel, aui],
+    [chatHeaders, aui, buildTurnBody],
   );
+
+  const buildTurnBodyRef = useRef(buildTurnBody);
+  buildTurnBodyRef.current = buildTurnBody;
+  const auiRef = useRef(aui);
+  auiRef.current = aui;
+
+  const durableClientData = buildBrowserChatClientData({
+    settings,
+    origin: typeof window !== "undefined" ? window.location.origin : undefined,
+    harness: peekHarnessRef.current() ?? lastHarnessRef.current,
+    memoryContext: localMemoryContextForChat() || undefined,
+    projectId: projectIdRef.current,
+    conversationId: threadIdRef.current,
+    continueSegment: continueSegmentRef.current,
+    attachments: buildTurnBody().attachments,
+    textPrefix: buildTurnBody().textPrefix,
+    system: resolveVoicePrompt(voiceRef.current),
+  });
+
+  const triggerTransport = useTriggerChatTransport({
+    task: CHAT_AGENT_TASK_ID,
+    accessToken: async ({ chatId }) => {
+      const res = await fetch("/api/chat/mint-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId }),
+      });
+      if (!res.ok) {
+        throw new Error((await res.text().catch(() => "")) || "Could not start chat.");
+      }
+      return res.text();
+    },
+    startSession: async ({ chatId, clientData }) => {
+      const currentAui = auiRef.current;
+      let remoteId = threadIdRef.current ?? readThreadStorageKey(currentAui) ?? chatId;
+      if (!threadIdRef.current) {
+        try {
+          const initialized = await currentAui.threadListItem().initialize();
+          remoteId = initialized.remoteId || remoteId;
+        } catch {
+          remoteId = readThreadIdFromLocation() || remoteId;
+        }
+        threadIdRef.current = remoteId;
+      }
+      const turn = buildTurnBodyRef.current();
+      const payload = buildBrowserChatClientData({
+        settings: settingsRef.current,
+        origin: typeof window !== "undefined" ? window.location.origin : undefined,
+        harness: turn.harness,
+        memoryContext: turn.memoryContext,
+        projectId: turn.projectId,
+        conversationId: remoteId,
+        continueSegment: turn.continueSegment,
+        attachments: turn.attachments,
+        textPrefix: turn.textPrefix,
+        system: turn.system,
+      });
+      const res = await fetch("/api/chat/start-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chatId: remoteId,
+          clientData: { ...clientData, ...payload, conversationId: remoteId },
+        }),
+      });
+      if (!res.ok) {
+        throw new Error((await res.text().catch(() => "")) || "Could not start chat.");
+      }
+      return res.json();
+    },
+    clientData: durableClientData,
+  });
+
+  const selectedTransport: ChatTransport<UIMessage> =
+    chatTransport === "durable" ? triggerTransport : httpTransport;
+  const selectedTransportRef = useRef(selectedTransport);
+  selectedTransportRef.current = selectedTransport;
+  const [transport] = useState<ChatTransport<UIMessage>>(() => ({
+    sendMessages: (options) => selectedTransportRef.current.sendMessages(options),
+    reconnectToStream: (options) =>
+      selectedTransportRef.current.reconnectToStream(options),
+  }));
 
   const addToolResultRef = useRef<AddToolResult | null>(null);
   const statusRef = useRef<string>("ready");
@@ -292,7 +385,17 @@ function useChatThreadRuntime() {
     return true;
   }, [emitContinueStatus]);
 
+  const [durableChatId] = useState(
+    () =>
+      readThreadStorageKey(aui) ??
+      readThreadIdFromLocation() ??
+      (typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `chat-${Date.now()}`),
+  );
+
   const chat = useChat({
+    id: chatTransport === "durable" ? (threadIdRef.current || durableChatId) : undefined,
     messages: seedMessages,
     transport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
@@ -697,7 +800,7 @@ function useChatThreadRuntime() {
   });
 
   return useAISDKRuntime(chat, {
-    isDisabled: !hasKey || historyBlocked,
+    isDisabled: !hasKey || historyBlocked || hostedLoading,
   });
 }
 
