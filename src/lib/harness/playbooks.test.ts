@@ -97,8 +97,8 @@ describe("playbooks stay addenda — budgets and approval unchanged", () => {
 
 describe("chat route loads playbooks as system addenda", () => {
   it("imports resolvePlaybooks and injects the addendum", () => {
-    const route = readFileSync(new URL("../../app/api/chat/route.ts", import.meta.url), "utf8");
-    assert.match(route, /resolvePlaybooks/);
-    assert.match(route, /playbooksSystemAddendum/);
+    const turn = readFileSync(new URL("../chat-turn.ts", import.meta.url), "utf8");
+    assert.match(turn, /resolvePlaybooks/);
+    assert.match(turn, /playbooksSystemAddendum/);
   });
 });

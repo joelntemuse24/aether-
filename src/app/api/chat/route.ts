@@ -1,33 +1,7 @@
 import type { UIMessage } from "ai";
-import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
-import {
-  budgetForDepthWithTime,
-  harnessSystemAddendum,
-} from "@/lib/harness/budgets";
 import { streamLegacyLocalChat } from "@/lib/harness/legacy-local-stream";
 import { updateAgentRunStatus } from "@/lib/harness/runs-store";
-import {
-  HARNESS_DEPTHS,
-  HARNESS_INTENTS,
-  type HarnessChatContext,
-  type HarnessDepth,
-  type HarnessIntent,
-} from "@/lib/harness/types";
-import {
-  depthUnderTimePressure,
-  parseTimeBudgetFromText,
-  timeBudgetForMinutes,
-  timeBudgetSystemAddendum,
-} from "@/lib/harness/time-budget";
-import { verifySystemAddendum } from "@/lib/harness/verify";
-import {
-  resolveSessionSkills,
-  sessionSkillsSystemAddendum,
-} from "@/lib/harness/session-skills";
-import {
-  playbooksSystemAddendum,
-  resolvePlaybooks,
-} from "@/lib/harness/playbooks";
+import type { HarnessChatContext } from "@/lib/harness/types";
 import { auth } from "@/auth";
 import { relevantMemoryPrompt } from "@/lib/memory/store";
 import {
@@ -39,13 +13,8 @@ import { getValidGitHubAccessToken } from "@/lib/github-session";
 import { isCloudDbConfigured } from "@/lib/db";
 import { isHostedConfigured } from "@/lib/hosted/config";
 import { isHostedChatAvailable } from "@/lib/hosted/availability";
-import { CONTINUE_SYSTEM_ADDENDUM } from "@/lib/chat-continue";
 import { shouldProxyChatToHermes } from "@/lib/hermes/config";
 import { proxyChatToHermes } from "@/lib/hermes/proxy-chat";
-import {
-  hermesAetherToolSeamAddendum,
-  hermesSafeVerifyAddendum,
-} from "@/lib/hermes/tool-seam";
 import { parseToolApprovalMode } from "@/lib/hermes/tool-approval";
 import { registerAetherToolSession } from "@/lib/hermes/tool-session";
 import { buildHermesSessionKey } from "@/lib/hermes/config";
@@ -56,6 +25,14 @@ import {
   uiMessagesFromFormatRepo,
 } from "@/lib/chat-history-merge";
 import { getMessageRepo } from "@/lib/conversations/store";
+import {
+  composeChatSystem,
+  enrichMessagesWithAttachments,
+  lastUserText,
+  parseHarnessFields,
+  resolveTurnTimeBudget,
+  type IncomingAttachment,
+} from "@/lib/chat-turn";
 
 /**
  * Only applies on Vercel serverless. Railway / `next start` has no function
@@ -67,85 +44,8 @@ export const runtime = "nodejs";
 
 type ProviderId = "openrouter" | "openai" | "anthropic" | "custom";
 
-type IncomingAttachment = {
-  name: string;
-  mime: string;
-  dataUrl: string;
-};
-
 function getHeader(req: Request, name: string): string {
   return req.headers.get(name)?.trim() ?? "";
-}
-
-/** Inject image parts + optional text prefix into the last user message. */
-function enrichMessagesWithAttachments(
-  messages: UIMessage[],
-  attachments: IncomingAttachment[],
-  textPrefix?: string,
-): UIMessage[] {
-  if ((!attachments || attachments.length === 0) && !textPrefix) {
-    return messages;
-  }
-
-  // Find the last user message
-  const lastUserIdx = [...messages]
-    .map((m, i) => ({ m, i }))
-    .reverse()
-    .find(({ m }) => m.role === "user")?.i;
-
-  if (lastUserIdx === undefined) return messages;
-
-  const original = messages[lastUserIdx];
-  const existingParts: UIMessage["parts"] = Array.isArray(original.parts)
-    ? [...original.parts]
-    : [];
-
-  // Prepend text prefix if present
-  if (textPrefix) {
-    const firstTextIdx = existingParts.findIndex((p) => p.type === "text");
-    if (firstTextIdx >= 0) {
-      const part = existingParts[firstTextIdx] as { type: "text"; text: string };
-      existingParts[firstTextIdx] = {
-        type: "text",
-        text: textPrefix + (part.text || ""),
-      };
-    } else {
-      existingParts.unshift({ type: "text", text: textPrefix });
-    }
-  }
-
-  // Append image parts (data URLs)
-  for (const att of attachments) {
-    existingParts.push({
-      type: "file",
-      mediaType: att.mime,
-      url: att.dataUrl,
-      filename: att.name,
-    } as UIMessage["parts"][number]);
-  }
-
-  const enriched: UIMessage = {
-    ...original,
-    parts: existingParts,
-  };
-
-  const next = [...messages];
-  next[lastUserIdx] = enriched;
-  return next;
-}
-
-/** Last user text for memory relevance. */
-function lastUserText(messages: UIMessage[]): string {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m.role !== "user") continue;
-    const parts = Array.isArray(m.parts) ? m.parts : [];
-    const texts = parts
-      .filter((p): p is { type: "text"; text: string } => p.type === "text")
-      .map((p) => p.text);
-    if (texts.length) return texts.join("\n");
-  }
-  return "";
 }
 
 export async function POST(req: Request) {
@@ -205,31 +105,13 @@ export async function POST(req: Request) {
         : undefined;
 
     const rawHarness = body.harness as HarnessChatContext | undefined;
-    let harnessDepth: HarnessDepth =
-      rawHarness &&
-      typeof rawHarness.depth === "string" &&
-      (HARNESS_DEPTHS as readonly string[]).includes(rawHarness.depth)
-        ? rawHarness.depth
-        : "standard";
-    const harnessIntent: HarnessIntent =
-      rawHarness &&
-      typeof rawHarness.intent === "string" &&
-      (HARNESS_INTENTS as readonly string[]).includes(rawHarness.intent)
-        ? rawHarness.intent
-        : "chat";
-    const harnessClarifications =
-      rawHarness?.clarifications &&
-      typeof rawHarness.clarifications === "object"
-        ? rawHarness.clarifications
-        : undefined;
-    const harnessPlanSteps = Array.isArray(rawHarness?.planSteps)
-      ? rawHarness.planSteps
-          .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
-          .map((s) => s.trim().slice(0, 200))
-          .slice(0, 6)
-      : undefined;
-    const harnessRunId =
-      typeof rawHarness?.runId === "string" ? rawHarness.runId : undefined;
+    const {
+      harnessDepth: parsedDepth,
+      harnessIntent,
+      harnessClarifications,
+      harnessPlanSteps,
+      harnessRunId,
+    } = parseHarnessFields(rawHarness);
 
     ensureConfirmationRepository();
     const session = await auth();
@@ -262,24 +144,8 @@ export async function POST(req: Request) {
       approvalMode = prefs.toolApprovalMode;
     }
 
-    // Time budget from harness body or latest user text ("in 5 minutes").
     const userText = lastUserText(messages);
-    const timeBudget =
-      typeof rawHarness?.timeBudgetMinutes === "number" &&
-      rawHarness.timeBudgetMinutes > 0
-        ? timeBudgetForMinutes(rawHarness.timeBudgetMinutes)
-        : parseTimeBudgetFromText(userText);
-    harnessDepth = depthUnderTimePressure(harnessDepth, timeBudget);
-    const budget = budgetForDepthWithTime(
-      harnessDepth,
-      timeBudget?.minutes ?? null,
-    );
-    const harnessAddendum = harnessSystemAddendum({
-      depth: harnessDepth,
-      intent: harnessIntent,
-      clarifications: harnessClarifications,
-      planSteps: harnessPlanSteps,
-    });
+    const timeBudget = resolveTurnTimeBudget(rawHarness, userText);
     const projectId =
       typeof body.projectId === "string" ? body.projectId : undefined;
 
@@ -314,55 +180,30 @@ export async function POST(req: Request) {
       process.env.BROWSERLESS_TOKEN?.trim() ||
       process.env.BROWSERLESS_URL?.trim()
     );
-    const skills = resolveSessionSkills({
+
+    const hermesLive = shouldProxyChatToHermes({ hosted });
+    const composed = composeChatSystem({
+      toolsEnabled,
+      hermesLive,
+      userText,
+      harnessDepth: parsedDepth,
+      harnessIntent,
+      harnessClarifications,
+      harnessPlanSteps,
+      timeBudget,
+      continueSegment,
+      userSystem,
+      memoryForPrompt,
+      projectBlock,
       hasDrive: hasDriveEarly,
       hasGitHub: hasGitHubEarly,
       hasBrowserless,
       signedIn: !!userId,
+      hasMemory: !!(userId && isCloudDbConfigured()),
+      canPersistArtifacts: !!(userId && isCloudDbConfigured()),
+      approvalMode,
     });
-    const skillsBlock = sessionSkillsSystemAddendum(skills);
-    const playbooksBlock = toolsEnabled
-      ? playbooksSystemAddendum(
-          resolvePlaybooks({ text: userText, intent: harnessIntent }),
-        )
-      : "";
-    const verifyBlock = verifySystemAddendum({
-      depth: harnessDepth,
-      intent: harnessIntent,
-      timeBudget,
-    });
-    const timeBlock = timeBudget
-      ? timeBudgetSystemAddendum(timeBudget)
-      : null;
-
-    const hermesLive = shouldProxyChatToHermes({ hosted });
-    // Stable prefix first (tools + harness), volatile memory/project last —
-    // helps provider prompt caches across steps within a turn.
-    const system = [
-      hermesLive
-        ? hermesAetherToolSeamAddendum({
-            toolsEnabled,
-            hasDrive: hasDriveEarly,
-            hasGitHub: hasGitHubEarly,
-            hasMemory: !!(userId && isCloudDbConfigured()),
-            canPersistArtifacts: !!(userId && isCloudDbConfigured()),
-            approvalMode,
-          })
-        : toolsEnabled
-          ? TOOLS_SYSTEM_PROMPT
-          : null,
-      harnessAddendum,
-      timeBlock,
-      hermesLive ? hermesSafeVerifyAddendum(verifyBlock) : verifyBlock,
-      hermesLive ? null : toolsEnabled ? skillsBlock : null,
-      playbooksBlock || null,
-      continueSegment ? CONTINUE_SYSTEM_ADDENDUM : null,
-      userSystem,
-      memoryForPrompt,
-      projectBlock,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    const { system, harnessDepth, budget } = composed;
     const requestedModel =
       (typeof body.model === "string" && body.model) || headerModel;
 

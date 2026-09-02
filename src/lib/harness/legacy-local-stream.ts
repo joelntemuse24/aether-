@@ -13,6 +13,8 @@ import {
   stepCountIs,
   streamText,
   type LanguageModel,
+  type ModelMessage,
+  type ToolSet,
   type UIMessage,
 } from "ai";
 import { repairToolCallInputJson } from "@/lib/repair-tool-json";
@@ -99,11 +101,17 @@ export type LegacyLocalStreamArgs = {
   maxWebSearches?: number | null;
   abortSignal?: AbortSignal;
   approvalMode?: ToolApprovalMode;
+  /** Pre-converted model messages (durable agent). */
+  modelMessages?: ModelMessage[];
+  /** Pre-built tools (durable agent). */
+  tools?: ToolSet;
+  /** Spread first into streamText (durable agent toStreamTextOptions). */
+  extraStreamTextOptions?: Record<string, unknown>;
+  /** Return the streamText result instead of an HTTP Response. */
+  asStreamResult?: boolean;
 };
 
-export async function streamLegacyLocalChat(
-  args: LegacyLocalStreamArgs,
-): Promise<Response> {
+export async function runLegacyLocalChat(args: LegacyLocalStreamArgs) {
   let model: LanguageModel;
   if (args.hosted) {
     const candidates = listHostedCandidates(
@@ -156,24 +164,34 @@ export async function streamLegacyLocalChat(
       })
     : null;
 
+  const modelMessages =
+    args.modelMessages ??
+    (await convertToModelMessages(ensureDurableToolStubs(args.enrichedMessages), {
+      ignoreIncompleteToolCalls: true,
+    }));
+
+  const tools =
+    args.tools ??
+    (args.toolsEnabled && loop
+      ? buildToolRegistry({
+          userId: args.userId,
+          conversationId: args.conversationId,
+          projectId: args.projectId ?? null,
+          hasDrive: args.hasDrive,
+          hasGitHub: args.hasGitHub,
+          approvalMode: args.approvalMode,
+          loop,
+        })
+      : undefined);
+
   const result = streamText({
+    ...(args.extraStreamTextOptions as object | undefined),
     model,
-    messages: await convertToModelMessages(
-      ensureDurableToolStubs(args.enrichedMessages),
-      { ignoreIncompleteToolCalls: true },
-    ),
+    messages: modelMessages,
     ...(args.system ? { system: args.system } : {}),
-    ...(args.toolsEnabled && loop
+    ...(args.toolsEnabled && loop && tools
       ? {
-          tools: buildToolRegistry({
-            userId: args.userId,
-            conversationId: args.conversationId,
-            projectId: args.projectId ?? null,
-            hasDrive: args.hasDrive,
-            hasGitHub: args.hasGitHub,
-            approvalMode: args.approvalMode,
-            loop,
-          }),
+          tools,
           activeTools: loop.initialActiveTools,
           toolOrder: loop.toolOrder,
           prepareStep: () => loop.prepareStep(),
@@ -212,6 +230,8 @@ export async function streamLegacyLocalChat(
     },
   });
 
+  if (args.asStreamResult) return result;
+
   return result.toUIMessageStreamResponse({
     onError: (error) => {
       console.error("[api/chat]", error);
@@ -230,4 +250,11 @@ export async function streamLegacyLocalChat(
       return friendlyChatError(error);
     },
   });
+}
+
+export async function streamLegacyLocalChat(
+  args: LegacyLocalStreamArgs,
+): Promise<Response> {
+  const result = await runLegacyLocalChat({ ...args, asStreamResult: false });
+  return result as Response;
 }
