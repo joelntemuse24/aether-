@@ -29,3 +29,29 @@ export function shouldAwaitHistoryBeforeSend(input: {
 export function shouldAwaitThreadInitializeBeforeSend(): boolean {
   return false;
 }
+
+export type ClassifyBeforeSendDecision = {
+  /** When true, composer send awaits POST /api/harness/classify. */
+  awaitModelClassify: boolean;
+  /** When true, needsClarify must not delay composer.send() / Head Start. */
+  skipClarifyGate: boolean;
+};
+
+/**
+ * First send must not wait on model classify. Head Start fires on Send;
+ * classify is skipped for the first turn (do not run it in parallel — that
+ * would contend with the hosted first-token call). Later turns may still
+ * await classify for clarify cards and plan quality.
+ */
+export function planClassifyBeforeSend(input: {
+  isFirstTurn: boolean;
+  heuristicSkipsModel: boolean;
+}): ClassifyBeforeSendDecision {
+  if (input.isFirstTurn) {
+    return { awaitModelClassify: false, skipClarifyGate: true };
+  }
+  if (input.heuristicSkipsModel) {
+    return { awaitModelClassify: false, skipClarifyGate: false };
+  }
+  return { awaitModelClassify: true, skipClarifyGate: false };
+}

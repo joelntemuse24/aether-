@@ -20,6 +20,7 @@ Measured 2026-09-02 (guest Claude Sonnet 5, “Reply with the single word pong�
 - Existing thread with stored history: wait at most 250ms.
 - Do **not** await initialize / router replace before send. Bind the durable `useChat` id, fire-and-forget initialize so `/c/<id>` updates in the background.
 - Heuristic classify stays sync for shallow turns (pong). Do not add round-trips.
+- First turn must not await `POST /api/harness/classify` before Head Start. Skip model classify on the first send (do not run it in parallel — that contends with the hosted first-token call). Use sync heuristic extras. Do not hold first send for clarify cards. Later turns may still classify.
 
 ## Head Start (first turn only)
 
