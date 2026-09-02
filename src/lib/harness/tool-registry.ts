@@ -1,21 +1,6 @@
 import { tool, type ToolSet } from "ai";
 import {
   TOOL_NAMES,
-  executePythonInput,
-  webSearchInput,
-  createArtifactInput,
-  memorySearchInput,
-  memoryWriteInput,
-  driveSearchInput,
-  driveReadInput,
-  githubGetRepoInput,
-  githubListContentsInput,
-  githubReadFileInput,
-  fetchUrlInput,
-  toolSearchInput,
-  requestConfirmationInput,
-  browserNavigateInput,
-  browserActInput,
   type CreateArtifactOutput,
   type WebSearchOutput,
 } from "@/lib/tools";
@@ -25,10 +10,8 @@ import {
   fetchUrlText,
 } from "@/lib/connectors/web-and-drive";
 import { browserAct, browserNavigate } from "@/lib/connectors/browser";
-import {
-  runVerifyChecklist,
-  verifyChecklistInput,
-} from "@/lib/harness/verify";
+import { runVerifyChecklist } from "@/lib/harness/verify";
+import { buildHeadStartToolSchemas } from "@/lib/harness/tool-schemas";
 import type { AgentLoopController } from "@/lib/harness/loop-efficiency";
 import {
   DEFAULT_TOOL_APPROVAL_MODE,
@@ -109,16 +92,17 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     return executeAetherTool({ name, args, ctx: aetherCtx });
   };
 
+  const schemas = buildHeadStartToolSchemas({
+    toolsEnabled: true,
+    hasMemory: !!(ctx.userId && aetherCtx.hasMemory),
+    hasDrive: !!(ctx.userId && ctx.hasDrive),
+    hasGitHub: !!(ctx.userId && ctx.hasGitHub),
+  });
+
   const tools: ToolSet = {
-    [TOOL_NAMES.executePython]: tool({
-      description:
-        "Execute Python code in a sandboxed in-browser Pyodide runtime and return stdout and the final expression value. Use for math, data processing, or verifying code.",
-      inputSchema: executePythonInput,
-    }),
+    ...schemas,
     [TOOL_NAMES.webSearch]: tool({
-      description:
-        "Search the web for current or factual information and return a list of result snippets. Prefer few focused queries; near-duplicates are blocked. Do not use for inspecting GitHub repositories — use github_* tools instead.",
-      inputSchema: webSearchInput,
+      ...schemas[TOOL_NAMES.webSearch],
       execute: async ({ query }): Promise<WebSearchOutput> => {
         const blocked = ctx.loop?.gateWebSearch(query);
         if (blocked) return blocked;
@@ -126,9 +110,7 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
       },
     }),
     [TOOL_NAMES.createArtifact]: tool({
-      description:
-        "Create a rich artifact (code, document, data, image, or svg) shown in the side panel. Prefer for substantial reusable content. Persists to the user's account when signed in with cloud storage.",
-      inputSchema: createArtifactInput,
+      ...schemas[TOOL_NAMES.createArtifact],
       execute: async ({
         kind,
         title,
@@ -138,7 +120,6 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
         CreateArtifactOutput & {
           id?: string;
           persisted?: boolean;
-          /** Echo content so the client can open even if args were truncated. */
           content?: string;
         }
       > => {
@@ -156,34 +137,24 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
       },
     }),
     [TOOL_NAMES.fetchUrl]: tool({
-      description:
-        "Fetch a public http(s) URL and return extracted text (HTML stripped). Soft-fails paywalls; PDF text is best-effort. Do not use for github.com repositories — use github_* tools.",
-      inputSchema: fetchUrlInput,
+      ...schemas[TOOL_NAMES.fetchUrl],
       execute: async ({ url }) => fetchUrlText(url),
     }),
     [TOOL_NAMES.verifyChecklist]: tool({
-      description:
-        "Run a structured verify pass before handing back substantial work (deep research, essays, multi-step jobs). Call after drafting; fix failed checks or state limits clearly.",
-      inputSchema: verifyChecklistInput,
+      ...schemas[TOOL_NAMES.verifyChecklist],
       execute: async (input) => runVerifyChecklist(input),
     }),
     [TOOL_NAMES.requestConfirmation]: tool({
-      description:
-        "Request user approval before any side effect (submit form, send message, upload, irreversible action). Returns needs_confirmation — do not claim the action completed until the user approves.",
-      inputSchema: requestConfirmationInput,
+      ...schemas[TOOL_NAMES.requestConfirmation],
       execute: async (input) =>
         runAether(TOOL_NAMES.requestConfirmation, input),
     }),
     [TOOL_NAMES.browserNavigate]: tool({
-      description:
-        "Open a public URL and extract readable text (fetch mode, or Browserless when configured). Prefer for portal-like pages after the user shares a link. Not for github.com repos.",
-      inputSchema: browserNavigateInput,
+      ...schemas[TOOL_NAMES.browserNavigate],
       execute: async ({ url }) => browserNavigate(url, ctx.userId),
     }),
     [TOOL_NAMES.browserAct]: tool({
-      description:
-        "Browser action: extract, fill_preview (no apply), click, or submit. submit and submit-like clicks always return needs_confirmation — never auto-submit.",
-      inputSchema: browserActInput,
+      ...schemas[TOOL_NAMES.browserAct],
       execute: async (input) =>
         browserAct({
           url: input.url,
@@ -196,80 +167,62 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     }),
   };
 
-  if (ctx.userId && aetherCtx.hasMemory) {
+  if (schemas[TOOL_NAMES.memorySearch]) {
     tools[TOOL_NAMES.memorySearch] = tool({
-      description:
-        "Search the user's curated long-term memory (preferences, people, projects, constraints). Use before assuming you know lasting facts about them. Discover via tool_search first if not already unlocked.",
-      inputSchema: memorySearchInput,
+      ...schemas[TOOL_NAMES.memorySearch],
       execute: async ({ query }) =>
         runAether(TOOL_NAMES.memorySearch, { query }),
     });
+  }
+  if (schemas[TOOL_NAMES.memoryWrite]) {
     tools[TOOL_NAMES.memoryWrite] = tool({
-      description:
-        "Write or update a lasting memory about the user (preference, person, project, constraint, writing_voice, belief_or_practice, open_question, note). Only store durable facts they would want remembered across chats. Discover via tool_search first if not already unlocked.",
-      inputSchema: memoryWriteInput,
+      ...schemas[TOOL_NAMES.memoryWrite],
       execute: async (input) => runAether(TOOL_NAMES.memoryWrite, input),
     });
   }
-
-  if (ctx.userId && ctx.hasDrive) {
+  if (schemas[TOOL_NAMES.driveSearch]) {
     tools[TOOL_NAMES.driveSearch] = tool({
-      description:
-        "Search the user's Google Drive by file name. Returns file ids for drive_read. Discover via tool_search first if not already unlocked.",
-      inputSchema: driveSearchInput,
+      ...schemas[TOOL_NAMES.driveSearch],
       execute: async ({ query }) =>
         runAether(TOOL_NAMES.driveSearch, { query }),
     });
+  }
+  if (schemas[TOOL_NAMES.driveRead]) {
     tools[TOOL_NAMES.driveRead] = tool({
-      description:
-        "Read a Google Drive file as text (Docs/Sheets export or text-like files). Pass a file id from drive_search. Discover via tool_search first if not already unlocked.",
-      inputSchema: driveReadInput,
+      ...schemas[TOOL_NAMES.driveRead],
       execute: async ({ fileId }) =>
         runAether(TOOL_NAMES.driveRead, { fileId }),
     });
   }
-
-  if (ctx.userId && ctx.hasGitHub) {
+  if (schemas[TOOL_NAMES.githubGetRepo]) {
     tools[TOOL_NAMES.githubGetRepo] = tool({
-      description:
-        "Get metadata for a GitHub repository the signed-in user can access. Pass owner/repo or a github.com URL. Prefer this over fetch_url/web_search for repos.",
-      inputSchema: githubGetRepoInput,
+      ...schemas[TOOL_NAMES.githubGetRepo],
       execute: async ({ repo }) =>
         runAether(TOOL_NAMES.githubGetRepo, { repo }),
     });
+  }
+  if (schemas[TOOL_NAMES.githubListContents]) {
     tools[TOOL_NAMES.githubListContents] = tool({
-      description:
-        "List files and folders at a path in a GitHub repository. Pass owner/repo (or URL), optional path and ref.",
-      inputSchema: githubListContentsInput,
+      ...schemas[TOOL_NAMES.githubListContents],
       execute: async ({ repo, path, ref }) =>
         runAether(TOOL_NAMES.githubListContents, { repo, path, ref }),
     });
+  }
+  if (schemas[TOOL_NAMES.githubReadFile]) {
     tools[TOOL_NAMES.githubReadFile] = tool({
-      description:
-        "Read one text file from a GitHub repository by path (README, source, config). Pass owner/repo (or URL), a single path, optional ref. For multiple files, call this tool multiple times in parallel — never put two JSON objects in one call.",
-      inputSchema: githubReadFileInput,
+      ...schemas[TOOL_NAMES.githubReadFile],
       execute: async ({ repo, path, ref }) =>
         runAether(TOOL_NAMES.githubReadFile, { repo, path, ref }),
     });
   }
 
-  // tool_search only when deferred tools exist for this session.
-  const hasDeferred =
-    !!tools[TOOL_NAMES.memorySearch] ||
-    !!tools[TOOL_NAMES.memoryWrite] ||
-    !!tools[TOOL_NAMES.driveSearch] ||
-    !!tools[TOOL_NAMES.driveRead] ||
-    !!tools[TOOL_NAMES.githubGetRepo] ||
-    !!tools[TOOL_NAMES.githubListContents] ||
-    !!tools[TOOL_NAMES.githubReadFile];
-
-  if (hasDeferred && ctx.loop) {
+  if (schemas[TOOL_NAMES.toolSearch] && ctx.loop) {
     tools[TOOL_NAMES.toolSearch] = tool({
-      description:
-        "Discover and unlock optional tools by keyword (memory, Drive, GitHub). Call once with clear capability words — e.g. 'memory preferences', 'google drive files', 'github repository' — then use the unlocked tools in later steps of this turn. Sibling tools unlock together (read+write, full GitHub suite).",
-      inputSchema: toolSearchInput,
+      ...schemas[TOOL_NAMES.toolSearch],
       execute: async ({ query }) => ctx.loop!.runToolSearch(query),
     });
+  } else if (schemas[TOOL_NAMES.toolSearch] && !ctx.loop) {
+    delete tools[TOOL_NAMES.toolSearch];
   }
 
   return tools;

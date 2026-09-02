@@ -549,19 +549,24 @@ export function createAetherThreadListAdapter(): RemoteThreadListAdapter {
       // assistant-ui hands us `__LOCALID_…` for optimistic threads. Reuse the
       // durable useChat id when bound so Trigger session externalId, URL, and
       // localStorage all share one id. A second UUID here is the 403 mismatch.
+      //
+      // Return the id immediately. assistant-ui's append path can await this
+      // promise before startRun; waiting on /api/conversations/status or
+      // cloudCreateThread was an 8s first-send stall. Persist in the
+      // background. URL /c/<id> updates from the returned remoteId.
       const remoteId = resolveInitializedRemoteId(threadId);
-      if (await ensureMode()) {
-        const { cloudCreateThread } = await import(
-          "@/lib/conversations/cloud-client"
-        );
-        await cloudCreateThread({ id: remoteId });
-        return { remoteId, externalId: undefined };
-      }
       const threads = loadThreads();
       if (!threads.some((t) => t.remoteId === remoteId)) {
         threads.unshift({ remoteId, status: "regular" });
         saveThreads(threads);
       }
+      void (async () => {
+        if (!(await ensureMode())) return;
+        const { cloudCreateThread } = await import(
+          "@/lib/conversations/cloud-client"
+        );
+        await cloudCreateThread({ id: remoteId });
+      })();
       return { remoteId, externalId: undefined };
     },
 
