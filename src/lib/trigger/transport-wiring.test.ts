@@ -38,6 +38,7 @@ describe("chat transport wiring contract", () => {
     // appendToSessionStream failed: 403 unauthorized access_token.
     assert.doesNotMatch(runtime, /chatId:\s*remoteId/);
     assert.match(runtime, /buildStartSessionRequest/);
+    assert.match(runtime, /transportChatId:\s*chatId/);
     assert.match(runtime, /parseMintedAccessToken/);
     assert.match(runtime, /parseStartSessionResult/);
     assert.match(
@@ -71,6 +72,7 @@ describe("chat transport wiring contract", () => {
       "utf8",
     );
     assert.match(route, /sessionSafeChatClientData/);
+    assert.match(route, /parseStartSessionResult/);
     assert.doesNotMatch(route, /drizzle|getDb\(|sql`/);
   });
 

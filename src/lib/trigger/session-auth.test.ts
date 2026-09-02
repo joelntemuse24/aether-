@@ -120,9 +120,12 @@ describe("new-thread remoteId alignment", () => {
     );
   });
 
-  it("falls back to the latest bound durable id when the local id is not yet keyed", () => {
+  it("does not alias an unbound __LOCALID_ thread onto another chat's durable id", () => {
     resetDurableChatIdBindings();
-    bindDurableChatId("durable-fallback");
-    assert.equal(resolveInitializedRemoteId("__LOCALID_unknown"), "durable-fallback");
+    bindDurableChatId("durable-thread-a", "__LOCALID_a");
+    const b = resolveInitializedRemoteId("__LOCALID_b");
+    assert.notEqual(b, "durable-thread-a");
+    assert.notEqual(b, "__LOCALID_b");
+    assert.equal(resolveInitializedRemoteId("__LOCALID_a"), "durable-thread-a");
   });
 });

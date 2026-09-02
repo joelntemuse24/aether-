@@ -124,9 +124,13 @@ export async function POST(req: Request) {
     chatId,
     clientData: sessionSafeChatClientData(clientData),
   });
-  const { publicAccessToken } = parseStartSessionResult(started);
-  if (started && typeof started === "object") {
-    return NextResponse.json({ ...started, publicAccessToken });
+  try {
+    const { publicAccessToken } = parseStartSessionResult(started);
+    if (started && typeof started === "object") {
+      return NextResponse.json({ ...started, publicAccessToken });
+    }
+    return NextResponse.json({ publicAccessToken });
+  } catch {
+    return NextResponse.json({ error: "Could not start chat." }, { status: 502 });
   }
-  return NextResponse.json({ publicAccessToken });
 }

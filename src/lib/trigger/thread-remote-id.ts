@@ -1,22 +1,22 @@
 /**
  * Bind the durable useChat id to assistant-ui's optimistic `__LOCALID_`
  * thread so initialize() does not mint a second UUID.
+ *
+ * Only the Map is used for alignment. A process-wide fallback would alias
+ * an unbound new thread onto whatever chat last called bindDurableChatId.
  */
 
 const durableIdsByLocalThread = new Map<string, string>();
-let fallbackDurableChatId: string | undefined;
 
 export function resetDurableChatIdBindings() {
   durableIdsByLocalThread.clear();
-  fallbackDurableChatId = undefined;
 }
 
 export function bindDurableChatId(durableId: string, localThreadId?: string) {
   const id = durableId.trim();
-  if (!id) return;
-  fallbackDurableChatId = id;
   const local = localThreadId?.trim();
-  if (local) durableIdsByLocalThread.set(local, id);
+  if (!id || !local) return;
+  durableIdsByLocalThread.set(local, id);
 }
 
 export function resolveInitializedRemoteId(assistantThreadId: string): string {
@@ -25,7 +25,6 @@ export function resolveInitializedRemoteId(assistantThreadId: string): string {
   }
   return (
     durableIdsByLocalThread.get(assistantThreadId) ??
-    fallbackDurableChatId ??
     (typeof crypto !== "undefined" && crypto.randomUUID
       ? crypto.randomUUID()
       : `chat-${Date.now()}`)

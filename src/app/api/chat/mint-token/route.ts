@@ -35,8 +35,12 @@ export async function POST(req: Request) {
 
   console.info("[chat/mint-token]", { chatId });
 
-  return new NextResponse(publicTokenToJwt(token), {
-    status: 200,
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
-  });
+  try {
+    return new NextResponse(publicTokenToJwt(token), {
+      status: 200,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  } catch {
+    return NextResponse.json({ error: "Could not start chat." }, { status: 502 });
+  }
 }
