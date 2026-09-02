@@ -55,4 +55,14 @@ describe("chat transport wiring contract", () => {
     assert.match(route, /sessionSafeChatClientData/);
     assert.doesNotMatch(route, /drizzle|getDb\(|sql`/);
   });
+
+  it("does not list the SDK in both transpilePackages and serverExternalPackages", () => {
+    const config = readFileSync(
+      new URL("../../../next.config.ts", import.meta.url),
+      "utf8",
+    );
+    const transpile = /transpilePackages:\s*\[[^\]]*@trigger\.dev\/sdk/.test(config);
+    const external = /serverExternalPackages:\s*\[[^\]]*@trigger\.dev\/sdk/.test(config);
+    assert.equal(transpile && external, false);
+  });
 });
