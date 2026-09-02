@@ -70,7 +70,12 @@ import {
 } from "@/lib/speech";
 import { looksLikeTimeoutCopy } from "@/lib/chat-continue";
 import { parseTimeBudgetFromText } from "@/lib/harness/time-budget";
-import { waitForChatHistoryReady } from "@/lib/chat-history-gate";
+import { isChatHistoryReady, waitForChatHistoryReady } from "@/lib/chat-history-gate";
+import {
+  HISTORY_WAIT_BEFORE_SEND_MS,
+  shouldAwaitHistoryBeforeSend,
+  shouldAwaitThreadInitializeBeforeSend,
+} from "@/lib/chat-first-send";
 
 /**
  * True only for a settled empty chat. Avoid welcome flash while history is
@@ -453,14 +458,29 @@ const Composer: FC = () => {
     skipClassify?: boolean;
   }) => {
     if (!hasKey || isRunning || classifying || resumeBusy) return;
-    await waitForChatHistoryReady();
+    let listState: { remoteId?: string } = {};
     try {
-      const listState = aui.threadListItem().getState();
-      if (!listState.remoteId) {
-        await aui.threadListItem().initialize();
+      listState = aui.threadListItem().getState();
+    } catch {
+      listState = {};
+    }
+    const pathnameHasThread = !!readThreadIdFromLocation();
+    if (
+      shouldAwaitHistoryBeforeSend({
+        pathnameHasThread,
+        hasRemoteId: !!listState.remoteId,
+        storedCount: pathnameHasThread || listState.remoteId ? 1 : 0,
+        historyReady: isChatHistoryReady(),
+      })
+    ) {
+      await waitForChatHistoryReady(HISTORY_WAIT_BEFORE_SEND_MS);
+    }
+    try {
+      if (!listState.remoteId && !shouldAwaitThreadInitializeBeforeSend()) {
+        void aui.threadListItem().initialize();
       }
     } catch {
-      // send still proceeds — transport prepareSend also mints the id
+      // send still proceeds — URL / remoteId update in the background
     }
     const state = composerRuntime.getState();
     let text = (opts?.text ?? state.text).trim();

@@ -4,23 +4,19 @@
  * Default hosted + BYOK path. Hermes is opt-in only (`HERMES_ENABLED=1`).
  */
 
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAI } from "@ai-sdk/openai";
+import { resolveTurnLanguageModel } from "@/lib/chat-language-model";
 import {
   convertToModelMessages,
   InvalidToolInputError,
   NoSuchToolError,
   stepCountIs,
   streamText,
-  type LanguageModel,
   type ModelMessage,
   type ToolSet,
   type UIMessage,
 } from "ai";
 import { repairToolCallInputJson } from "@/lib/repair-tool-json";
 import { friendlyChatError } from "@/lib/chat-errors";
-import { listHostedCandidates } from "@/lib/hosted/client";
-import { createFailoverLanguageModel } from "@/lib/hosted/failover";
 import { messageMentionsGitHubRepo } from "@/lib/connectors/github";
 import {
   collectMessageText,
@@ -37,46 +33,6 @@ import type { ToolApprovalMode } from "@/lib/hermes/tool-approval";
 import { ensureDurableToolStubs } from "@/lib/chat-tool-transcript";
 
 export type LegacyProviderId = "openrouter" | "openai" | "anthropic" | "custom";
-
-function resolveModel(provider: LegacyProviderId, model: string): string {
-  if (provider === "anthropic") {
-    return model.replace(/^anthropic\//, "");
-  }
-  if (provider === "openai") {
-    return model.replace(/^openai\//, "");
-  }
-  return model;
-}
-
-function buildByokModel(input: {
-  provider: LegacyProviderId;
-  apiKey: string;
-  baseURL: string;
-  modelId: string;
-  origin?: string | null;
-}): LanguageModel {
-  if (input.provider === "anthropic") {
-    return createAnthropic({ apiKey: input.apiKey })(input.modelId);
-  }
-  const openai = createOpenAI({
-    apiKey: input.apiKey,
-    baseURL:
-      input.baseURL ||
-      (input.provider === "openrouter"
-        ? "https://openrouter.ai/api/v1"
-        : input.provider === "openai"
-          ? "https://api.openai.com/v1"
-          : input.baseURL),
-    headers:
-      input.provider === "openrouter"
-        ? {
-            "HTTP-Referer": input.origin ?? "http://localhost:3000",
-            "X-Title": "Aether",
-          }
-        : undefined,
-  });
-  return openai.chat(input.modelId);
-}
 
 export type LegacyLocalStreamArgs = {
   hosted: boolean;
@@ -112,30 +68,23 @@ export type LegacyLocalStreamArgs = {
 };
 
 export async function runLegacyLocalChat(args: LegacyLocalStreamArgs) {
-  let model: LanguageModel;
-  if (args.hosted) {
-    const candidates = listHostedCandidates(
-      args.requestedModel,
-      args.origin ?? null,
+  const model = resolveTurnLanguageModel({
+    hosted: args.hosted,
+    provider: args.provider,
+    apiKey: args.apiKey,
+    baseURL: args.baseURL,
+    modelId: args.requestedModel,
+    origin: args.origin ?? null,
+  });
+  if (!model) {
+    return new Response(
+      JSON.stringify({
+        error: args.hosted
+          ? "That model is not available on Aether Cloud right now. Pick another model or use Bring your own key."
+          : "Missing API key. Open Settings and add an OpenRouter (or other provider) key.",
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
     );
-    if (candidates.length === 0) {
-      return new Response(
-        JSON.stringify({
-          error:
-            "That model is not available on Aether Cloud right now. Pick another model or use Bring your own key.",
-        }),
-        { status: 503, headers: { "Content-Type": "application/json" } },
-      );
-    }
-    model = createFailoverLanguageModel(candidates);
-  } else {
-    model = buildByokModel({
-      provider: args.provider,
-      apiKey: args.apiKey,
-      baseURL: args.baseURL,
-      modelId: resolveModel(args.provider, args.requestedModel),
-      origin: args.origin ?? null,
-    });
   }
 
   const availableToolNames = args.toolsEnabled

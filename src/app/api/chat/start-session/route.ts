@@ -1,12 +1,5 @@
 import { NextResponse } from "next/server";
 import { chat } from "@trigger.dev/sdk/ai";
-import { auth } from "@/auth";
-import { isCloudDbConfigured } from "@/lib/db";
-import { getValidDriveAccessToken } from "@/lib/drive-session";
-import { getValidGitHubAccessToken } from "@/lib/github-session";
-import { readDriveCookie } from "@/lib/drive-session";
-import { readGitHubCookie } from "@/lib/github-session";
-import { getAuthSecretString } from "@/lib/auth-secret";
 import { isHostedChatAvailable } from "@/lib/hosted/availability";
 import { isHostedConfigured } from "@/lib/hosted/config";
 import { CHAT_AGENT_TASK_ID, isTriggerChatConfigured } from "@/lib/trigger/config";
@@ -15,9 +8,7 @@ import {
   redactChatClientData,
   sessionSafeChatClientData,
 } from "@/lib/trigger/client-data";
-import { mergeStartSessionClientData } from "@/lib/trigger/start-session";
-import { signAgentContextToken } from "@/lib/trigger/context-token";
-import { parseToolApprovalMode } from "@/lib/hermes/tool-approval";
+import { attachAgentContextToClientData } from "@/lib/trigger/session-context";
 import { parseStartSessionResult } from "@/lib/trigger/session-auth";
 
 export const runtime = "nodejs";
@@ -26,6 +17,7 @@ export const runtime = "nodejs";
  * Thin: auth + mint a durable chat session token.
  * BYOK keys are validated here then stripped from the sticky session payload.
  * Per-turn transport clientData still carries the key for that turn only.
+ * First send uses Head Start and skips this route.
  */
 export async function POST(req: Request) {
   if (!isTriggerChatConfigured()) {
@@ -49,8 +41,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
-  const session = await auth();
-  const userId = session?.user?.id || session?.user?.email || null;
   const hosted = parsed.data.accessMode !== "byok";
 
   if (hosted) {
@@ -73,39 +63,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const hasDrive = userId ? !!(await getValidDriveAccessToken(userId)) : false;
-  const hasGitHub = userId ? !!(await getValidGitHubAccessToken(userId)) : false;
-  const drive = userId ? await readDriveCookie() : null;
-  const github = userId ? await readGitHubCookie() : null;
-  const contextToken = await signAgentContextToken(
-    {
-      userId,
-      conversationId: parsed.data.conversationId || chatId,
-      projectId: parsed.data.projectId ?? null,
-      approvalMode: parseToolApprovalMode(parsed.data.approvalMode),
-      hasMemory: !!(userId && isCloudDbConfigured()),
-      hasDrive,
-      hasGitHub,
-      driveAccessToken:
-        drive && drive.userId === userId ? drive.accessToken : undefined,
-      driveRefreshToken:
-        drive && drive.userId === userId ? drive.refreshToken : undefined,
-      driveExpiresAt:
-        drive && drive.userId === userId ? drive.expiresAt : undefined,
-      githubAccessToken:
-        github && github.userId === userId ? github.accessToken : undefined,
-    },
-    getAuthSecretString(),
-  );
-
-  const clientData = mergeStartSessionClientData({
+  const clientData = await attachAgentContextToClientData({
+    chatId,
     clientData: parsed.data,
-    userId,
-    conversationId: parsed.data.conversationId || chatId,
-    contextToken,
-    hasDrive,
-    hasGitHub,
-    hasMemory: !!(userId && isCloudDbConfigured()),
   });
 
   console.info(

@@ -24,6 +24,7 @@ import {
   parseStartSessionResult,
 } from "@/lib/trigger/session-auth";
 import { bindDurableChatId } from "@/lib/trigger/thread-remote-id";
+import { DURABLE_HEAD_START_PATH } from "@/lib/trigger/head-start";
 import {
   createAetherThreadListAdapter,
   ACTIVE_THREAD_KEY,
@@ -239,13 +240,33 @@ function useChatThreadRuntime() {
   const auiRef = useRef(aui);
   auiRef.current = aui;
 
+  const [durableChatId] = useState(() => {
+    const id =
+      readThreadStorageKey(aui) ??
+      readThreadIdFromLocation() ??
+      (typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `chat-${Date.now()}`);
+    try {
+      bindDurableChatId(id, aui.threadListItem().getState().id);
+    } catch {
+      bindDurableChatId(id);
+    }
+    return id;
+  });
+  try {
+    bindDurableChatId(durableChatId, aui.threadListItem().getState().id);
+  } catch {
+    bindDurableChatId(durableChatId);
+  }
+
   const durableClientData = buildBrowserChatClientData({
     settings,
     origin: typeof window !== "undefined" ? window.location.origin : undefined,
     harness: peekHarnessRef.current() ?? lastHarnessRef.current,
     memoryContext: localMemoryContextForChat() || undefined,
     projectId: projectIdRef.current,
-    conversationId: threadIdRef.current,
+    conversationId: threadIdRef.current || durableChatId,
     continueSegment: continueSegmentRef.current,
     attachments: buildTurnBody().attachments,
     textPrefix: buildTurnBody().textPrefix,
@@ -254,6 +275,7 @@ function useChatThreadRuntime() {
 
   const triggerTransport = useTriggerChatTransport({
     task: CHAT_AGENT_TASK_ID,
+    headStart: DURABLE_HEAD_START_PATH,
     accessToken: async ({ chatId }) => {
       const res = await fetch("/api/chat/mint-token", {
         method: "POST",
@@ -273,12 +295,14 @@ function useChatThreadRuntime() {
         bindDurableChatId(chatId);
       }
       if (!threadIdRef.current) {
-        try {
-          const initialized = await currentAui.threadListItem().initialize();
-          threadIdRef.current = initialized.remoteId || chatId;
-        } catch {
-          threadIdRef.current = readThreadIdFromLocation() || chatId;
-        }
+        threadIdRef.current = readThreadIdFromLocation() || chatId;
+        void currentAui
+          .threadListItem()
+          .initialize()
+          .then((initialized) => {
+            threadIdRef.current = initialized.remoteId || threadIdRef.current;
+          })
+          .catch(() => {});
       }
       const conversationId = threadIdRef.current || chatId;
       const turn = buildTurnBodyRef.current();
@@ -397,21 +421,6 @@ function useChatThreadRuntime() {
 
     return true;
   }, [emitContinueStatus]);
-
-  const [durableChatId] = useState(() => {
-    const id =
-      readThreadStorageKey(aui) ??
-      readThreadIdFromLocation() ??
-      (typeof crypto !== "undefined" && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `chat-${Date.now()}`);
-    try {
-      bindDurableChatId(id, aui.threadListItem().getState().id);
-    } catch {
-      bindDurableChatId(id);
-    }
-    return id;
-  });
 
   const chat = useChat({
     id: chatTransport === "durable" ? durableChatId : undefined,

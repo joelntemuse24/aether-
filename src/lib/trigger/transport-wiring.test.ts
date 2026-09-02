@@ -25,7 +25,21 @@ describe("chat transport wiring contract", () => {
     assert.match(runtime, /chatTransport/);
     assert.match(runtime, /\/api\/chat\/start-session/);
     assert.match(runtime, /\/api\/chat\/mint-token/);
-    assert.doesNotMatch(runtime, /headStart|Head Start|chat\.headStart/);
+    assert.match(runtime, /headStart:\s*DURABLE_HEAD_START_PATH/);
+    assert.match(runtime, /DURABLE_HEAD_START_PATH/);
+  });
+
+  it("does not call start-session or mint-token on the first-send path", () => {
+    const runtime = readFileSync(
+      new URL("../../providers/runtime-provider.tsx", import.meta.url),
+      "utf8",
+    );
+    // First turn POSTs headStart. start-session/mint-token stay for turn 2+.
+    assert.match(runtime, /headStart:\s*DURABLE_HEAD_START_PATH/);
+    assert.doesNotMatch(
+      runtime,
+      /await currentAui\.threadListItem\(\)\.initialize\(\)/,
+    );
   });
 
   it("starts and mints against the transport chatId, not a remapped thread remoteId", () => {
@@ -57,13 +71,14 @@ describe("chat transport wiring contract", () => {
     assert.doesNotMatch(userFacing, /["'`][^"'`]*\b(Trigger|Hermes|Buzz|Railway|OpenRouter|Vercel)\b/);
   });
 
-  it("does not use Head Start on the durable agent", () => {
+  it("keeps the durable agent as step 2+ owner (no Head Start import in the worker)", () => {
     const agent = readFileSync(
       new URL("../../trigger/chat.ts", import.meta.url),
       "utf8",
     );
     assert.match(agent, /chat\.agent/);
     assert.doesNotMatch(agent, /headStart|Head Start|chat\.headStart/);
+    assert.doesNotMatch(agent, /@trigger\.dev\/sdk\/chat-server/);
   });
 
   it("keeps POST /api/chat/start-session from persisting BYOK keys on the session", () => {
@@ -96,5 +111,20 @@ describe("chat transport wiring contract", () => {
       adapter,
       /const remoteId = threadId\.startsWith\("__LOCALID_"\)\s*\n\s*\? crypto\.randomUUID\(\)/,
     );
+  });
+
+  it("returns initialize remoteId without awaiting conversation create", () => {
+    const adapter = readFileSync(
+      new URL("../local-thread-adapter.tsx", import.meta.url),
+      "utf8",
+    );
+    const start = adapter.indexOf("async initialize(threadId");
+    const end = adapter.indexOf("async rename(");
+    assert.ok(start >= 0 && end > start);
+    const initialize = adapter.slice(start, end);
+    assert.doesNotMatch(initialize, /if \(await ensureMode\(\)\)/);
+    assert.doesNotMatch(initialize, /await cloudCreateThread\(\{ id: remoteId \}\);\s*\n\s*return \{ remoteId/);
+    assert.match(initialize, /void \(async \(\) => \{/);
+    assert.match(initialize, /return \{ remoteId, externalId: undefined \}/);
   });
 });

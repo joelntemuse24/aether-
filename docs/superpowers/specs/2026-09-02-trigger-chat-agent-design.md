@@ -9,7 +9,7 @@ Hosted Cloud and BYOK chat turns run as a Trigger.dev `chat.agent` (`id: chat.ag
 
 ## Non-goals
 
-- Trigger Head Start (first tokens on Next) — explicitly out.
+- Preload (speculative idle billing). Head Start for first turn is in `2026-09-02-hosted-chat-ttfb-design.md`.
 - Deleting Railway / Hermes files — they stay unused.
 - Inventing a Trigger project ref — `TRIGGER_PROJECT_ID` comes from the operator’s dashboard.
 - Showing the words Trigger, Vercel, Hermes, Buzz, Railway, or OpenRouter in product UI.
@@ -36,8 +36,9 @@ Helpers:
 
 ## Session routes (thin)
 
-- `POST /api/chat/start-session` — Auth.js optional, validate hosted vs BYOK, mint a signed Aether context JWT, call `chat.createStartSessionAction("chat.agent")`, return `{ publicAccessToken }`.
-- `POST /api/chat/mint-token` — mint a session-scoped Trigger PAT (`read` + `write` sessions:{chatId}).
+- `POST /api/chat/head-start` — first durable turn. `chat.headStart` creates the session, triggers the agent with `handover-prepare`, and runs step 1 `streamText` on this process. Mint-token is not on this path.
+- `POST /api/chat/start-session` — Auth.js optional, validate hosted vs BYOK, mint a signed Aether context JWT, call `chat.createStartSessionAction("chat.agent")`, return `{ publicAccessToken }`. Used when Head Start is not taken (turn 2+ missing session / request fallback).
+- `POST /api/chat/mint-token` — mint a session-scoped Trigger PAT (`read` + `write` sessions:{chatId}). Refresh only; not first send.
 
 Guests can chat (same as today). Do not persist BYOK keys.
 
@@ -48,7 +49,7 @@ The context JWT (`purpose: aether-agent-context`) carries user/conversation ids,
 `src/trigger/chat.ts` — `chat.agent({ id: "chat.agent" })`.
 
 - `run` reuses `runLegacyLocalChat` / hosted `streamText` (playbooks, durable stubs, depth budgets). Spread `chat.toStreamTextOptions({ tools })` first.
-- No Head Start. No short turn `maxDuration`.
+- First turn uses Head Start (`POST /api/chat/head-start`, `maxDuration` 60) so step 1 runs on warm Next while this agent boots. Tool execution and later turns stay here. See `2026-09-02-hosted-chat-ttfb-design.md`.
 - `idleTimeoutInSeconds: 30` so idle chats suspend.
 - Aether-owned tools (memory, artifacts, Drive/GitHub, confirm cards) `fetch` existing `/api/hermes/aether-tools` with the context JWT. Confirm cards stay on `/api/harness/confirm` + current UIMessage parts (not a Trigger HITL rewrite).
 

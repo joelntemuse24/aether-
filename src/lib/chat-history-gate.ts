@@ -13,7 +13,7 @@ export function setChatHistoryReady(next: boolean): void {
   for (const listener of listeners) listener();
 }
 
-export function waitForChatHistoryReady(timeoutMs = 8000): Promise<void> {
+export function waitForChatHistoryReady(timeoutMs = 250): Promise<void> {
   if (ready) return Promise.resolve();
   return new Promise((resolve) => {
     const onReady = () => {
