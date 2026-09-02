@@ -7,6 +7,8 @@ export const DURABLE_HEAD_START_PATH = "/api/chat/head-start";
 /**
  * First-turn SSE stays open through tool handover. Long loops stay on the
  * durable agent — do not use the 300s request-path cap.
+ * Route files must copy this as a numeric literal (`export const maxDuration = 60`):
+ * Next.js segment config cannot be an imported identifier.
  */
 export const HEAD_START_MAX_DURATION_SECONDS = 60;
 

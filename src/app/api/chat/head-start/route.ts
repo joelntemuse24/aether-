@@ -15,7 +15,6 @@ import { attachAgentContextToClientData } from "@/lib/trigger/session-context";
 import { prepareDurableChatTurn } from "@/lib/trigger/prepare-turn";
 import {
   applyHeadStartWireMetadata,
-  HEAD_START_MAX_DURATION_SECONDS,
   splitHeadStartClientData,
 } from "@/lib/trigger/head-start";
 import { buildHeadStartToolSchemas } from "@/lib/harness/tool-schemas";
@@ -23,7 +22,8 @@ import { resolveTurnLanguageModel } from "@/lib/chat-language-model";
 import { enrichModelMessagesWithAttachments } from "@/lib/chat-turn";
 
 export const runtime = "nodejs";
-export const maxDuration = HEAD_START_MAX_DURATION_SECONDS;
+/** Literal: Next.js segment config cannot be an imported identifier. */
+export const maxDuration = 60;
 
 const turnStore = new AsyncLocalStorage<ChatClientData>();
 
