@@ -22,23 +22,14 @@ import {
 import { runWebSearch } from "@/lib/web-search";
 import { isCloudDbConfigured } from "@/lib/db";
 import {
-  driveReadTextForUser,
-  driveSearchForUser,
   fetchUrlText,
 } from "@/lib/connectors/web-and-drive";
-import {
-  githubGetRepoForUser,
-  githubListContentsForUser,
-  githubReadFileForUser,
-} from "@/lib/connectors/github";
 import { browserAct, browserNavigate } from "@/lib/connectors/browser";
-import { createConfirmationRequest } from "@/lib/harness/confirmation";
 import {
   runVerifyChecklist,
   verifyChecklistInput,
 } from "@/lib/harness/verify";
 import type { AgentLoopController } from "@/lib/harness/loop-efficiency";
-import { executeAetherTool } from "@/lib/hermes/aether-tools";
 import {
   DEFAULT_TOOL_APPROVAL_MODE,
   type ToolApprovalMode,
@@ -50,9 +41,15 @@ export type ToolRegistryContext = {
   projectId?: string | null;
   hasDrive?: boolean;
   hasGitHub?: boolean;
+  hasMemory?: boolean;
   approvalMode?: ToolApprovalMode;
   /** Optional per-turn loop controller (quotas, deferred discovery). */
   loop?: AgentLoopController;
+  /**
+   * When set (durable agent), Aether-owned tools callback into Vercel
+   * instead of reading Drive/GitHub cookies in-process.
+   */
+  executeAetherOwned?: (name: string, args: unknown) => Promise<unknown>;
 };
 
 /** Capability-gated tool names for this request (before building the ToolSet). */
@@ -60,6 +57,7 @@ export function resolveAvailableToolNames(ctx: {
   userId?: string | null;
   hasDrive?: boolean;
   hasGitHub?: boolean;
+  hasMemory?: boolean;
 }): string[] {
   const names: string[] = [
     TOOL_NAMES.executePython,
@@ -71,7 +69,8 @@ export function resolveAvailableToolNames(ctx: {
     TOOL_NAMES.browserNavigate,
     TOOL_NAMES.browserAct,
   ];
-  const hasMemory = !!(ctx.userId && isCloudDbConfigured());
+  const hasMemory =
+    ctx.hasMemory ?? !!(ctx.userId && isCloudDbConfigured());
   const hasDrive = !!(ctx.userId && ctx.hasDrive);
   const hasGitHub = !!(ctx.userId && ctx.hasGitHub);
   if (hasMemory) {
@@ -95,6 +94,21 @@ export function resolveAvailableToolNames(ctx: {
 
 /** Build the tool set for this request (capabilities depend on auth/Drive/GitHub/DB). */
 export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
+  const aetherCtx = {
+    userId: ctx.userId,
+    conversationId: ctx.conversationId,
+    projectId: ctx.projectId,
+    approvalMode: ctx.approvalMode ?? DEFAULT_TOOL_APPROVAL_MODE,
+    hasMemory: ctx.hasMemory ?? !!(ctx.userId && isCloudDbConfigured()),
+    hasDrive: !!ctx.hasDrive,
+    hasGitHub: !!ctx.hasGitHub,
+  };
+  const runAether = async (name: string, args: unknown) => {
+    if (ctx.executeAetherOwned) return ctx.executeAetherOwned(name, args);
+    const { executeAetherTool } = await import("@/lib/hermes/aether-tools");
+    return executeAetherTool({ name, args, ctx: aetherCtx });
+  };
+
   const tools: ToolSet = {
     [TOOL_NAMES.executePython]: tool({
       description:
@@ -128,18 +142,11 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
           content?: string;
         }
       > => {
-        const result = await executeAetherTool({
-          name: TOOL_NAMES.createArtifact,
-          args: { kind, title, language, content },
-          ctx: {
-            userId: ctx.userId,
-            conversationId: ctx.conversationId,
-            projectId: ctx.projectId,
-            approvalMode: ctx.approvalMode ?? DEFAULT_TOOL_APPROVAL_MODE,
-            hasMemory: !!(ctx.userId && isCloudDbConfigured()),
-            hasDrive: !!ctx.hasDrive,
-            hasGitHub: !!ctx.hasGitHub,
-          },
+        const result = await runAether(TOOL_NAMES.createArtifact, {
+          kind,
+          title,
+          language,
+          content,
         });
         return result as CreateArtifactOutput & {
           id?: string;
@@ -165,16 +172,7 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
         "Request user approval before any side effect (submit form, send message, upload, irreversible action). Returns needs_confirmation — do not claim the action completed until the user approves.",
       inputSchema: requestConfirmationInput,
       execute: async (input) =>
-        createConfirmationRequest(
-          {
-            action: input.action,
-            title: input.title,
-            preview: input.preview,
-            target: input.target,
-          },
-          ctx.userId,
-          { conversationId: ctx.conversationId },
-        ),
+        runAether(TOOL_NAMES.requestConfirmation, input),
     }),
     [TOOL_NAMES.browserNavigate]: tool({
       description:
@@ -198,44 +196,19 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     }),
   };
 
-  if (ctx.userId && isCloudDbConfigured()) {
+  if (ctx.userId && aetherCtx.hasMemory) {
     tools[TOOL_NAMES.memorySearch] = tool({
       description:
         "Search the user's curated long-term memory (preferences, people, projects, constraints). Use before assuming you know lasting facts about them. Discover via tool_search first if not already unlocked.",
       inputSchema: memorySearchInput,
       execute: async ({ query }) =>
-        executeAetherTool({
-          name: TOOL_NAMES.memorySearch,
-          args: { query },
-          ctx: {
-            userId: ctx.userId,
-            conversationId: ctx.conversationId,
-            projectId: ctx.projectId,
-            approvalMode: ctx.approvalMode ?? DEFAULT_TOOL_APPROVAL_MODE,
-            hasMemory: true,
-            hasDrive: !!ctx.hasDrive,
-            hasGitHub: !!ctx.hasGitHub,
-          },
-        }),
+        runAether(TOOL_NAMES.memorySearch, { query }),
     });
     tools[TOOL_NAMES.memoryWrite] = tool({
       description:
         "Write or update a lasting memory about the user (preference, person, project, constraint, writing_voice, belief_or_practice, open_question, note). Only store durable facts they would want remembered across chats. Discover via tool_search first if not already unlocked.",
       inputSchema: memoryWriteInput,
-      execute: async (input) =>
-        executeAetherTool({
-          name: TOOL_NAMES.memoryWrite,
-          args: input,
-          ctx: {
-            userId: ctx.userId,
-            conversationId: ctx.conversationId,
-            projectId: ctx.projectId,
-            approvalMode: ctx.approvalMode ?? DEFAULT_TOOL_APPROVAL_MODE,
-            hasMemory: true,
-            hasDrive: !!ctx.hasDrive,
-            hasGitHub: !!ctx.hasGitHub,
-          },
-        }),
+      execute: async (input) => runAether(TOOL_NAMES.memoryWrite, input),
     });
   }
 
@@ -244,13 +217,15 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
       description:
         "Search the user's Google Drive by file name. Returns file ids for drive_read. Discover via tool_search first if not already unlocked.",
       inputSchema: driveSearchInput,
-      execute: async ({ query }) => driveSearchForUser(ctx.userId!, query),
+      execute: async ({ query }) =>
+        runAether(TOOL_NAMES.driveSearch, { query }),
     });
     tools[TOOL_NAMES.driveRead] = tool({
       description:
         "Read a Google Drive file as text (Docs/Sheets export or text-like files). Pass a file id from drive_search. Discover via tool_search first if not already unlocked.",
       inputSchema: driveReadInput,
-      execute: async ({ fileId }) => driveReadTextForUser(ctx.userId!, fileId),
+      execute: async ({ fileId }) =>
+        runAether(TOOL_NAMES.driveRead, { fileId }),
     });
   }
 
@@ -259,21 +234,22 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
       description:
         "Get metadata for a GitHub repository the signed-in user can access. Pass owner/repo or a github.com URL. Prefer this over fetch_url/web_search for repos.",
       inputSchema: githubGetRepoInput,
-      execute: async ({ repo }) => githubGetRepoForUser(ctx.userId!, repo),
+      execute: async ({ repo }) =>
+        runAether(TOOL_NAMES.githubGetRepo, { repo }),
     });
     tools[TOOL_NAMES.githubListContents] = tool({
       description:
         "List files and folders at a path in a GitHub repository. Pass owner/repo (or URL), optional path and ref.",
       inputSchema: githubListContentsInput,
       execute: async ({ repo, path, ref }) =>
-        githubListContentsForUser(ctx.userId!, repo, path, ref),
+        runAether(TOOL_NAMES.githubListContents, { repo, path, ref }),
     });
     tools[TOOL_NAMES.githubReadFile] = tool({
       description:
         "Read one text file from a GitHub repository by path (README, source, config). Pass owner/repo (or URL), a single path, optional ref. For multiple files, call this tool multiple times in parallel — never put two JSON objects in one call.",
       inputSchema: githubReadFileInput,
       execute: async ({ repo, path, ref }) =>
-        githubReadFileForUser(ctx.userId!, repo, path, ref),
+        runAether(TOOL_NAMES.githubReadFile, { repo, path, ref }),
     });
   }
 

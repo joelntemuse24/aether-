@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { authorizeAetherToolsCallback } from "@/lib/hermes/callback-auth";
 import { executeAetherTool, isAetherOwnedToolName } from "@/lib/hermes/aether-tools";
 import {
   getAetherToolSession,
@@ -8,17 +7,20 @@ import {
 import { parseToolApprovalMode } from "@/lib/hermes/tool-approval";
 import { isCloudDbConfigured } from "@/lib/db";
 import { ensureConfirmationRepository } from "@/lib/harness/confirmation-store";
+import { resolveToolCallbackAuth } from "@/lib/trigger/tool-callback-auth";
+import { driveAccessFromAgentContext } from "@/lib/trigger/connector-from-context";
 
 export const runtime = "nodejs";
 
 /**
  * Remote-host callback: execute an Aether-owned tool with the user's
- * session. The browser never calls this; the host never receives Drive/GitHub
- * tokens — those stay in the short-lived Aether session registered by /api/chat.
+ * session. The browser never calls this. Durable agents send a signed
+ * context JWT; Drive/GitHub cookies stay on this server.
  */
 export async function POST(req: Request) {
   ensureConfirmationRepository();
-  if (!authorizeAetherToolsCallback(req.headers)) {
+  const authz = await resolveToolCallbackAuth(req.headers);
+  if (!authz.ok) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
@@ -36,6 +38,27 @@ export async function POST(req: Request) {
       { error: "Unknown Aether tool." },
       { status: 400 },
     );
+  }
+
+  if (authz.kind === "jwt") {
+    const driveAccessToken = await driveAccessFromAgentContext(authz.ctx);
+    const result = await executeAetherTool({
+      name,
+      args: body.arguments ?? body.args ?? {},
+      ctx: {
+        userId: authz.ctx.userId,
+        conversationId: authz.ctx.conversationId,
+        projectId: authz.ctx.projectId ?? null,
+        runId: authz.ctx.runId ?? null,
+        approvalMode: authz.ctx.approvalMode,
+        hasMemory: authz.ctx.hasMemory,
+        hasDrive: authz.ctx.hasDrive,
+        hasGitHub: authz.ctx.hasGitHub,
+        driveAccessToken,
+        githubAccessToken: authz.ctx.githubAccessToken,
+      },
+    });
+    return NextResponse.json(result);
   }
 
   const sessionKey =
