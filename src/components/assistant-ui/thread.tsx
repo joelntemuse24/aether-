@@ -13,9 +13,13 @@ import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ToolCallPart, type ToolPartLike } from "@/components/assistant-ui/tool-ui";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { ThreadHeader } from "@/components/assistant-ui/thread-header";
-import { AgentStatusStrip } from "@/components/assistant-ui/agent-status-strip";
+import {
+  AgentStatusStrip,
+  MessageSourceCards,
+  MessageAgentActivity,
+} from "@/components/assistant-ui/agent-status-strip";
+import "@/components/assistant-ui/agent-activity.css";
 import { ModelPicker } from "@/components/model-picker";
-import { ToolApprovalToggle } from "@/components/assistant-ui/tool-approval-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/providers/settings-provider";
@@ -846,6 +850,64 @@ const GitHubGlyph: FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
+const SendStopControl: FC<{
+  classifying: boolean;
+  harnessBlocked: boolean;
+  onSend: () => void;
+}> = ({ classifying, harnessBlocked, onSend }) => {
+  const isRunning = useAuiState((s) => s.thread.isRunning);
+  const sendDisabled = classifying || harnessBlocked;
+
+  return (
+    <div
+      className="aether-send-stop"
+      data-disabled={!isRunning && sendDisabled ? "true" : "false"}
+    >
+      <span className="aether-send-stop__face" aria-hidden>
+        <span
+          className="aether-send-stop__glyph"
+          data-active={!isRunning && !classifying ? "true" : "false"}
+          data-nudge="send"
+        >
+          <ArrowUpIcon className="size-4" strokeWidth={2.5} />
+        </span>
+        <span
+          className="aether-send-stop__glyph"
+          data-active={!isRunning && classifying ? "true" : "false"}
+        >
+          <Loader2Icon className="size-4 animate-spin" />
+        </span>
+        <span
+          className="aether-send-stop__glyph"
+          data-active={isRunning ? "true" : "false"}
+        >
+          <SquareIcon className="size-3 fill-current" />
+        </span>
+      </span>
+      {isRunning ? (
+        <ComposerPrimitive.Cancel asChild>
+          <button
+            type="button"
+            className="aether-send-stop__hit"
+            aria-label="Stop generating"
+            title="Stop"
+          />
+        </ComposerPrimitive.Cancel>
+      ) : (
+        <button
+          type="button"
+          className="aether-send-stop__hit"
+          onClick={onSend}
+          disabled={sendDisabled}
+          aria-label="Send message"
+          title="Send"
+          aria-busy={classifying}
+        />
+      )}
+    </div>
+  );
+};
+
 const ComposerAction: FC<{
   onAttachClick: () => void;
   attachOpen: boolean;
@@ -973,7 +1035,6 @@ const ComposerAction: FC<{
         </div>
 
         <ModelPicker />
-        <ToolApprovalToggle />
       </div>
 
       <div className="flex items-center gap-1.5">
@@ -999,34 +1060,11 @@ const ComposerAction: FC<{
           )}
         </button>
 
-        <AuiIf condition={(s) => !s.thread.isRunning}>
-          <button
-            type="button"
-            onClick={onHarnessSend}
-            disabled={!!classifying || !!harnessBlocked}
-            className="flex size-8 items-center justify-center rounded-full bg-[var(--accent)] text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
-            aria-label={classifying ? "Planning…" : "Send message"}
-            title={classifying ? "Planning…" : "Send"}
-          >
-            {classifying ? (
-              <Loader2Icon className="size-4 animate-spin" />
-            ) : (
-              <ArrowUpIcon className="size-4" strokeWidth={2.5} />
-            )}
-          </button>
-        </AuiIf>
-        <AuiIf condition={(s) => s.thread.isRunning}>
-          <ComposerPrimitive.Cancel asChild>
-            <button
-              type="button"
-              className="flex h-8 items-center gap-2 rounded-full bg-[var(--text)] px-3 text-[var(--canvas)] transition-opacity hover:opacity-80"
-              aria-label="Stop generating"
-            >
-              <SquareIcon className="size-3 fill-current" />
-              <span className="text-[13px] font-medium">Stop</span>
-            </button>
-          </ComposerPrimitive.Cancel>
-        </AuiIf>
+        <SendStopControl
+          classifying={!!classifying}
+          harnessBlocked={!!harnessBlocked}
+          onSend={onHarnessSend}
+        />
       </div>
     </div>
   );
@@ -1113,6 +1151,7 @@ const AssistantMessage: FC = () => {
           "[&_.prose-aether]:font-[family-name:var(--font-serif)]",
         )}
       >
+        <MessageAgentActivity />
         <MessagePrimitive.Parts>
           {({ part }) => {
             if (part.type === "text") return <MarkdownText />;
@@ -1121,19 +1160,7 @@ const AssistantMessage: FC = () => {
             return null;
           }}
         </MessagePrimitive.Parts>
-        <AuiIf
-          condition={(s) =>
-            s.message.status?.type === "running" && s.message.parts.length === 0
-          }
-        >
-          <span
-            className="inline-flex items-center gap-2 text-[15px] text-[var(--muted)]"
-            aria-label="Generating"
-          >
-            <span className="size-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
-            Working…
-          </span>
-        </AuiIf>
+        <MessageSourceCards />
         <MessageError />
       </div>
 

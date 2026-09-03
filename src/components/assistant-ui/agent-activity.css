@@ -1,0 +1,393 @@
+/*
+ * Aether activity chrome.
+ * Narration: honest named work (Grok-inspired).
+ * Motion: interruptible ChatGPT / Claude / GLM swaps (interfaces.dev).
+ * Look: cream canvas, Inter, terracotta / wine. Not Grok’s chevron language.
+ */
+
+@keyframes aether-line-enter {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.aether-activity {
+  font-family: var(--font-ui), Inter, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  -webkit-font-smoothing: antialiased;
+}
+
+.aether-activity__line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 1.25rem;
+}
+
+.aether-activity__words {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.aether-activity__ticks {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  color: var(--accent);
+}
+
+.aether-activity__summary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 0;
+  /* 4px pad + 8px radius sits concentrically on the 16px composer. */
+  padding: 4px 8px 4px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  text-align: start;
+  cursor: pointer;
+  transition-property: color, background-color;
+  transition-duration: 160ms;
+  transition-timing-function: ease-out;
+}
+
+.aether-activity__summary-btn:hover {
+  color: var(--text-secondary);
+  background: var(--hover-overlay);
+}
+
+.aether-activity__caret {
+  display: block;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--accent);
+  opacity: 0.85;
+  /* Optical hang next to Inter 12px. */
+  transform: translateY(0.5px);
+  transition-property: transform, opacity;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+}
+
+.aether-activity__summary-btn[aria-expanded="true"] .aether-activity__caret {
+  transform: translateY(0.5px) rotate(180deg);
+}
+
+.aether-activity__named,
+.aether-activity__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aether-activity__named-item,
+.aether-activity__chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.aether-activity__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--elevated);
+  font-size: 11px;
+}
+
+.aether-activity__summary-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Completed tool receipts — cream Inter, not GPT grey chips. */
+.aether-tool-trace {
+  font-family: var(--font-ui), Inter, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  margin: 0.35rem 0 0.15rem;
+  -webkit-font-smoothing: antialiased;
+}
+
+.aether-tool-trace--live {
+  margin: 0.15rem 0;
+}
+
+.aether-tool-trace__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 8px 4px 6px;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+  transition-property: color, background-color;
+  transition-duration: 160ms;
+  transition-timing-function: ease-out;
+}
+
+.aether-tool-trace__summary::-webkit-details-marker {
+  display: none;
+}
+
+.aether-tool-trace__summary::marker {
+  content: "";
+}
+
+.aether-tool-trace__summary:hover {
+  color: var(--text-secondary);
+  background: var(--hover-overlay);
+}
+
+.aether-tool-trace__summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.aether-tool-trace__details[open] .aether-activity__caret {
+  transform: translateY(0.5px) rotate(180deg);
+}
+
+.aether-tool-trace__body {
+  margin: 8px 0 0;
+  padding: 0 6px;
+}
+
+.aether-tool-trace__action {
+  display: inline-flex;
+  margin: 0 0 4px;
+}
+
+.aether-tool-trace__action button {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--accent);
+  background: transparent;
+}
+
+.aether-tool-trace__error {
+  margin: 0 0 6px;
+  color: var(--error-text);
+}
+
+.aether-inline-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0.7rem 0 0.15rem;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-ui), Inter, system-ui, sans-serif;
+  font-size: 11px;
+  line-height: 1.3;
+  -webkit-font-smoothing: antialiased;
+}
+
+.aether-inline-source {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--elevated);
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.aether-inline-source__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.aether-inline-source__host {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.aether-inline-source:hover .aether-inline-source__title {
+  text-decoration: underline;
+}
+
+/* Send ↔ Stop: one terracotta circle, icon cross-fade. */
+.aether-send-stop {
+  position: relative;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+
+.aether-send-stop__face {
+  position: relative;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  pointer-events: none;
+  transition-property: background-color, transform;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+}
+
+.aether-send-stop:hover .aether-send-stop__face {
+  background: var(--accent-hover);
+}
+
+.aether-send-stop:active .aether-send-stop__face {
+  transform: scale(0.97);
+}
+
+.aether-send-stop[data-disabled="true"] .aether-send-stop__face {
+  opacity: 0.4;
+}
+
+.aether-send-stop__hit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+}
+
+.aether-send-stop__hit:disabled {
+  cursor: default;
+}
+
+.aether-send-stop__hit:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.aether-send-stop__glyph {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transition-property: opacity, transform, filter;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+}
+
+.aether-send-stop__glyph[data-active="false"] {
+  opacity: 0;
+  transform: scale(0.25);
+  filter: blur(4px);
+}
+
+.aether-send-stop__glyph[data-active="true"] {
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0);
+}
+
+.aether-send-stop__glyph[data-nudge="send"] svg {
+  /* Optical center for the up-arrow in a 32px circle. */
+  transform: translateY(0.5px);
+}
+
+@media (hover: none) {
+  .aether-send-stop:hover .aether-send-stop__face {
+    background: var(--accent);
+  }
+
+  .aether-activity__summary-btn:hover,
+  .aether-tool-trace__summary:hover {
+    background: transparent;
+    color: var(--muted);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .aether-activity--enter {
+    animation: aether-line-enter 180ms ease-out both;
+  }
+
+  .aether-activity__named-item,
+  .aether-activity__chip {
+    animation: aether-line-enter 180ms ease-out both;
+  }
+
+  .aether-activity__named-item:nth-child(2),
+  .aether-activity__chip:nth-child(2) {
+    animation-delay: 30ms;
+  }
+
+  .aether-activity__named-item:nth-child(3),
+  .aether-activity__chip:nth-child(3) {
+    animation-delay: 60ms;
+  }
+
+  .aether-activity__named-item:nth-child(4),
+  .aether-activity__chip:nth-child(4) {
+    animation-delay: 90ms;
+  }
+
+  .aether-activity__named-item:nth-child(n + 5),
+  .aether-activity__chip:nth-child(n + 5) {
+    animation-delay: 120ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aether-activity--enter,
+  .aether-activity__named-item,
+  .aether-activity__chip {
+    animation: none;
+  }
+
+  .aether-activity__summary-btn,
+  .aether-activity__caret,
+  .aether-tool-trace__summary,
+  .aether-send-stop__face,
+  .aether-send-stop__glyph {
+    transition-property: none;
+    transition-duration: 0s;
+  }
+
+  .aether-send-stop__glyph[data-active="false"] {
+    transform: none;
+    filter: none;
+  }
+
+  .aether-send-stop:active .aether-send-stop__face {
+    transform: none;
+  }
+}

@@ -3,30 +3,17 @@
 import { useEffect, useRef, useState, type FC } from "react";
 import { useAuiState } from "@assistant-ui/react";
 import {
-  AlertTriangleIcon,
-  BrainIcon,
-  CheckIcon,
   ChevronDownIcon,
   ExternalLinkIcon,
   FileIcon,
-  GlobeIcon,
-  FolderGit2Icon,
-  HardDriveIcon,
-  Loader2Icon,
   PanelRightOpenIcon,
-  SearchIcon,
-  SparklesIcon,
-  TerminalIcon,
-  WrenchIcon,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { ToolApprovalToggle } from "@/components/assistant-ui/tool-approval-toggle";
 import { confirmActionCopy } from "@/lib/hermes/confirm-copy";
 import { useArtifact, type Artifact } from "@/providers/artifact-provider";
+import "@/components/assistant-ui/agent-activity.css";
 import "@/components/assistant-ui/tool-approval.css";
 import {
   TOOL_NAMES,
-  getToolDisplay,
   type ArtifactKind,
   type CreateArtifactInput,
   type CreateArtifactOutput,
@@ -75,7 +62,7 @@ type ConfirmExecution = {
   persisted?: boolean;
 };
 
-/** Shared confirm / Cancel + Ask|Auto chrome. Talks only to /api/harness/confirm. */
+/** HITL confirm / Cancel. Talks only to /api/harness/confirm. */
 function ConfirmCardActions({
   confirmationId,
   active,
@@ -194,7 +181,6 @@ function ConfirmCardActions({
       >
         {copy.cancel}
       </button>
-      <ToolApprovalToggle />
     </div>
   );
 }
@@ -274,24 +260,33 @@ function extractPartialJsonString(
   return out;
 }
 
-const ICONS: Record<string, FC<{ className?: string }>> = {
-  [TOOL_NAMES.executePython]: TerminalIcon,
-  [TOOL_NAMES.webSearch]: SearchIcon,
-  [TOOL_NAMES.createArtifact]: SparklesIcon,
-  [TOOL_NAMES.memorySearch]: BrainIcon,
-  [TOOL_NAMES.memoryWrite]: BrainIcon,
-  [TOOL_NAMES.driveSearch]: HardDriveIcon,
-  [TOOL_NAMES.driveRead]: HardDriveIcon,
-  [TOOL_NAMES.githubGetRepo]: FolderGit2Icon,
-  [TOOL_NAMES.githubListContents]: FolderGit2Icon,
-  [TOOL_NAMES.githubReadFile]: FolderGit2Icon,
-  [TOOL_NAMES.fetchUrl]: GlobeIcon,
-  [TOOL_NAMES.toolSearch]: WrenchIcon,
-  [TOOL_NAMES.verifyChecklist]: CheckIcon,
-  [TOOL_NAMES.requestConfirmation]: AlertTriangleIcon,
-  [TOOL_NAMES.browserNavigate]: GlobeIcon,
-  [TOOL_NAMES.browserAct]: GlobeIcon,
-};
+/** Receipt label for completed work — a noun, not a GPT “Web search” chip. */
+function toolTraceNoun(name: string): string {
+  switch (name) {
+    case TOOL_NAMES.webSearch:
+      return "Sources";
+    case TOOL_NAMES.executePython:
+      return "Output";
+    case TOOL_NAMES.createArtifact:
+      return "Preview";
+    case TOOL_NAMES.memorySearch:
+    case TOOL_NAMES.memoryWrite:
+      return "Memory";
+    case TOOL_NAMES.driveSearch:
+    case TOOL_NAMES.driveRead:
+      return "Drive";
+    case TOOL_NAMES.githubGetRepo:
+    case TOOL_NAMES.githubListContents:
+    case TOOL_NAMES.githubReadFile:
+      return "Repository";
+    case TOOL_NAMES.fetchUrl:
+    case TOOL_NAMES.browserNavigate:
+    case TOOL_NAMES.browserAct:
+      return "Page";
+    default:
+      return "Result";
+  }
+}
 
 const ToolShell: FC<{
   name: string;
@@ -301,114 +296,59 @@ const ToolShell: FC<{
   children?: React.ReactNode;
   headerAction?: React.ReactNode;
   /**
-   * When true, expand while the tool is still constructing (streaming args /
-   * body). Collapses again when the run finishes so traces stay quiet.
+   * Kept for callers. Live work no longer uses a chip, so construction
+   * bodies render directly while the mutating activity line is the status.
    */
   expandWhileRunning?: boolean;
-  /** Keep the body open (pending approval). Wins over the post-run collapse. */
+  /** Confirm / approval card — render the body, never a status chip. */
   stayOpen?: boolean;
-}> = ({
-  name,
-  running,
-  error,
-  subtitle,
-  children,
-  headerAction,
-  expandWhileRunning,
-  stayOpen,
-}) => {
-  // Collapsed by default; progressive construction can open while running.
-  const [open, setOpen] = useState(false);
-  const userToggled = useRef(false);
-  const display = getToolDisplay(name);
-  const Icon = ICONS[name] ?? WrenchIcon;
+  /** Search hits and similar receipts sit inline as cards, not behind a chip. */
+  surface?: "details" | "inline";
+}> = ({ name, running, error, children, headerAction, stayOpen, surface }) => {
   const hasBody = !!children;
 
-  useEffect(() => {
-    if (userToggled.current) return;
-    if (stayOpen && hasBody) {
-      setOpen(true);
-      return;
-    }
-    if (expandWhileRunning && running && hasBody) {
-      setOpen(true);
-    } else if (expandWhileRunning && !running) {
-      setOpen(false);
-    }
-  }, [expandWhileRunning, running, hasBody, stayOpen]);
+  if (running && !stayOpen) {
+    return hasBody ? (
+      <div className="aether-tool-trace aether-tool-trace--live">{children}</div>
+    ) : null;
+  }
+
+  if (stayOpen) {
+    return (
+      <div className="aether-tool-trace aether-tool-trace--confirm">
+        {headerAction ? (
+          <div className="aether-tool-trace__action">{headerAction}</div>
+        ) : null}
+        {children}
+      </div>
+    );
+  }
+
+  if (!hasBody && !headerAction && !error) return null;
+
+  const inline = surface === "inline";
 
   return (
-    <div
-      className={cn(
-        // Thin chip — not a heavy engineering card.
-        "my-0.5 overflow-hidden rounded-md font-[family-name:var(--font-sans)] text-[12px]",
-        "transition-opacity duration-150 ease-out",
-        running
-          ? "bg-[color-mix(in_oklab,var(--elevated)_70%,transparent)]"
-          : "bg-transparent",
-      )}
-    >
-      <div className="flex items-center gap-1.5 px-1.5 py-0.5">
-        <button
-          type="button"
-          onClick={() => {
-            userToggled.current = true;
-            setOpen((v) => !v);
-          }}
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-          aria-expanded={open}
-        >
-          <span
-            className={cn(
-              "flex size-4 shrink-0 items-center justify-center",
-              error
-                ? "text-[var(--error-text)]"
-                : running
-                  ? "text-[var(--accent)]"
-                  : "text-[var(--muted-soft)]",
-            )}
-          >
-            {running ? (
-              <Loader2Icon className="size-3 animate-spin" />
-            ) : error ? (
-              <AlertTriangleIcon className="size-3" />
-            ) : (
-              <Icon className="size-3 opacity-80" />
-            )}
-          </span>
-          <span className="min-w-0 flex-1 truncate">
-            <span
-              className={cn(
-                running ? "text-[var(--text-secondary)]" : "text-[var(--muted)]",
-              )}
-            >
-              {running ? display.runningLabel : display.label}
-            </span>
-            {subtitle && (
-              <span className="ml-1.5 text-[var(--muted-soft)]">
-                {subtitle}
-              </span>
-            )}
-          </span>
-          {!running && !error && (
-            <CheckIcon className="size-3 shrink-0 text-[var(--muted-soft)] opacity-60" />
-          )}
-          {!!children && (
-            <ChevronDownIcon
-              className={cn(
-                "size-3 shrink-0 text-[var(--muted-soft)] transition-transform duration-150",
-                open && "rotate-180",
-              )}
-            />
-          )}
-        </button>
-        {headerAction}
-      </div>
-      {open && children && (
-        <div className="border-t border-[var(--border-subtle)] px-2 py-1.5">
-          {children}
-        </div>
-      )}
+    <div className="aether-tool-trace">
+      {error ? (
+        <p className="aether-tool-trace__error" role="status">
+          This step failed
+        </p>
+      ) : null}
+      {headerAction ? (
+        <div className="aether-tool-trace__action">{headerAction}</div>
+      ) : null}
+      {hasBody && inline ? (
+        <div className="aether-tool-trace__body">{children}</div>
+      ) : hasBody ? (
+        <details className="aether-tool-trace__details">
+          <summary className="aether-tool-trace__summary">
+            <span>{toolTraceNoun(name)}</span>
+            <ChevronDownIcon className="aether-activity__caret" aria-hidden />
+          </summary>
+          <div className="aether-tool-trace__body">{children}</div>
+        </details>
+      ) : null}
     </div>
   );
 };
@@ -479,25 +419,15 @@ const PythonToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 
 const WebSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const running = usePartRunning(part);
-  const input = part.args as { query?: string } | undefined;
   const output = part.result as WebSearchOutput | undefined;
   const error = output ? !output.ok : part.isError;
-  const resultCount = output?.results?.length ?? 0;
-  const query =
-    input?.query || extractPartialJsonString(part.argsText, "query");
 
   return (
     <ToolShell
       name={TOOL_NAMES.webSearch}
       running={running}
       error={error}
-      subtitle={
-        query
-          ? resultCount > 0
-            ? `${query} · ${resultCount} hit${resultCount === 1 ? "" : "s"}`
-            : query
-          : undefined
-      }
+      surface="inline"
     >
       {output?.error && (
         <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
@@ -507,36 +437,6 @@ const WebSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       {output?.warning && (
         <div className="mb-2 rounded-lg border border-[var(--border)] bg-[var(--elevated)] p-2.5 text-[12px] text-[var(--muted)]">
           {output.warning}
-        </div>
-      )}
-      {output?.results && output.results.length > 0 && (
-        <ul className="space-y-2.5">
-          {output.results.map((r, i) => (
-            <li key={i} className="text-[13px]">
-              {r.url ? (
-                <a
-                  href={r.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 font-medium text-[var(--accent)] hover:underline"
-                >
-                  {r.title}
-                  <ExternalLinkIcon className="size-3" />
-                </a>
-              ) : (
-                <span className="font-medium text-[var(--text)]">{r.title}</span>
-              )}
-              <p className="mt-0.5 text-[var(--muted)]">{r.snippet}</p>
-            </li>
-          ))}
-        </ul>
-      )}
-      {!running && output?.ok && resultCount === 0 && !output.error && (
-        <p className="text-[12px] text-[var(--muted)]">No results returned.</p>
-      )}
-      {output?.source && (
-        <div className="mt-2 text-[11px] text-[var(--muted-soft)]">
-          Source: {output.source}
         </div>
       )}
     </ToolShell>

@@ -73,6 +73,29 @@ describe("executeAetherTool", () => {
     assert.equal(gated.payload?.tool, "memory_write");
   });
 
+  it("creates an ordinary artifact in Ask without a confirm card", async () => {
+    const result = await executeAetherTool({
+      name: "create_artifact",
+      args: {
+        kind: "data",
+        title: "Q3 costs",
+        content: "item,amount\nrent,1200",
+      },
+      ctx: baseCtx({
+        approvalMode: "ask",
+        userId: null,
+        deps: {
+          createConfirmation: async () => {
+            throw new Error("create_artifact must not pause in Ask");
+          },
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.needs_confirmation, undefined);
+    assert.equal((result as { title?: string }).title, "Q3 costs");
+  });
+
   it("writes memory in Auto without a card", async () => {
     const result = await executeAetherTool({
       name: "memory_write",

@@ -1,105 +1,32 @@
 "use client";
 
-import { useEffect, useState, type FC } from "react";
+import { useEffect, useRef, useState, type FC } from "react";
+import { ChevronDownIcon } from "lucide-react";
 import { useAuiState } from "@assistant-ui/react";
 import { useHarness } from "@/providers/harness-provider";
 import { MAX_AUTO_CONTINUES } from "@/lib/chat-continue";
-import { getToolDisplay } from "@/lib/tools";
-
-type ToolishPart = {
-  type?: string;
-  toolName?: string;
-  result?: unknown;
-  status?: { type?: string };
-};
+import {
+  closeActivityClock,
+  collectWebSearchHits,
+  deriveAgentActivity,
+  formatActivityElapsed,
+  recalledActivityElapsed,
+  syncActivityClock,
+  type ActivityMessage,
+  type ActivityView,
+  type ContinuePhase,
+} from "@/lib/agent-activity";
+import { cn } from "@/lib/utils";
+import "@/components/assistant-ui/agent-activity.css";
 
 type ContinueStatusDetail = {
-  phase: "idle" | "continuing" | "needs-continue";
+  phase: ContinuePhase;
   segment?: number;
   max?: number;
   reason?: string;
 };
 
-const THINKING_PHRASES = [
-  "Thinking…",
-  "Gathering context…",
-  "Working on it…",
-  "Shaping a reply…",
-];
-
-function toolNameFromPart(part: ToolishPart): string | null {
-  if (typeof part.toolName === "string" && part.toolName) return part.toolName;
-  if (typeof part.type === "string" && part.type.startsWith("tool-")) {
-    const name = part.type.slice("tool-".length);
-    return name || null;
-  }
-  if (part.type === "tool-call" && part.toolName) return part.toolName;
-  return null;
-}
-
-function partLooksRunning(part: ToolishPart): boolean {
-  if (part.result !== undefined) return false;
-  const t = part.status?.type;
-  if (t === "complete" || t === "incomplete" || t === "cancelled") return false;
-  // Caller only invokes this while thread.isRunning — undefined status is ok then.
-  return t === "running" || t === "requires-action" || t === undefined;
-}
-
-function latestRunningToolLabel(
-  messages: Array<{ role: string; parts?: ToolishPart[] }>,
-): string | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if (m.role !== "assistant") continue;
-    for (let j = (m.parts?.length ?? 0) - 1; j >= 0; j--) {
-      const part = m.parts![j]!;
-      const name = toolNameFromPart(part);
-      if (!name) continue;
-      if (partLooksRunning(part)) {
-        return getToolDisplay(name).runningLabel;
-      }
-    }
-    // Only inspect latest assistant message.
-    break;
-  }
-  return null;
-}
-
-function formatElapsed(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}m ${s.toString().padStart(2, "0")}s`;
-}
-
-/**
- * Calm composer-adjacent status while the model works — elapsed time, active
- * tool label, or a soft thinking phrase. Also surfaces continue-segment progress.
- */
-export const AgentStatusStrip: FC = () => {
-  const { classifying } = useHarness();
-  const isRunning = useAuiState((s) => s.thread.isRunning);
-  const activeToolLabel = useAuiState((s) => {
-    if (!s.thread.isRunning) return null;
-    return latestRunningToolLabel(
-      s.thread.messages as unknown as Array<{
-        role: string;
-        parts?: ToolishPart[];
-      }>,
-    );
-  });
-  const isStreamingText = useAuiState((s) => {
-    if (!s.thread.isRunning) return false;
-    const messages = s.thread.messages;
-    const last = messages[messages.length - 1];
-    if (!last || last.role !== "assistant") return false;
-    return (last.parts ?? []).some(
-      (p) => p.type === "text" && typeof (p as { text?: string }).text === "string",
-    );
-  });
-
-  const [phraseIndex, setPhraseIndex] = useState(0);
-  const [elapsed, setElapsed] = useState(0);
+function useContinueStatus(): ContinueStatusDetail {
   const [continueStatus, setContinueStatus] = useState<ContinueStatusDetail>({
     phase: "idle",
   });
@@ -114,99 +41,260 @@ export const AgentStatusStrip: FC = () => {
     return () => window.removeEventListener("aether:continue-status", onStatus);
   }, []);
 
+  return continueStatus;
+}
+
+function useThreadActivityElapsed(isRunning: boolean, messageId?: string) {
+  const [elapsed, setElapsed] = useState(() =>
+    isRunning ? 0 : recalledActivityElapsed(messageId),
+  );
+  const wasRunningRef = useRef(isRunning);
+
   useEffect(() => {
     if (!isRunning) {
-      setElapsed(0);
+      if (wasRunningRef.current) {
+        setElapsed(closeActivityClock(messageId));
+      } else {
+        setElapsed(recalledActivityElapsed(messageId));
+      }
+      wasRunningRef.current = false;
       return;
     }
-    setElapsed(0);
+    wasRunningRef.current = true;
+    syncActivityClock(true);
+    setElapsed(syncActivityClock(true));
     const timer = window.setInterval(() => {
-      setElapsed((s) => s + 1);
-    }, 1000);
+      setElapsed(syncActivityClock(true));
+    }, 250);
     return () => window.clearInterval(timer);
-  }, [isRunning]);
+  }, [isRunning, messageId]);
 
-  useEffect(() => {
-    if (
-      !isRunning ||
-      classifying ||
-      activeToolLabel ||
-      isStreamingText ||
-      continueStatus.phase === "continuing"
-    ) {
-      return;
-    }
-    setPhraseIndex(0);
-    const timer = window.setInterval(() => {
-      setPhraseIndex((i) => (i + 1) % THINKING_PHRASES.length);
-    }, 3200);
-    return () => window.clearInterval(timer);
-  }, [
-    isRunning,
-    classifying,
-    activeToolLabel,
-    isStreamingText,
-    continueStatus.phase,
-  ]);
+  return elapsed;
+}
 
-  if (
-    continueStatus.phase === "continuing" &&
-    typeof continueStatus.segment === "number"
-  ) {
-    const max = continueStatus.max ?? MAX_AUTO_CONTINUES;
-    return (
-      <StatusRow
-        label={`Continuing… ${continueStatus.segment}/${max}`}
-        elapsed={null}
-        pulse
-      />
-    );
-  }
-
-  if (classifying) {
-    return <StatusRow label="Planning the approach…" elapsed={null} pulse />;
-  }
-
-  if (!isRunning) return null;
-
-  const label = activeToolLabel
-    ? activeToolLabel
-    : isStreamingText
-      ? "Writing…"
-      : THINKING_PHRASES[phraseIndex];
-
-  return <StatusRow label={label} elapsed={elapsed} pulse />;
-};
-
-function StatusRow({
-  label,
-  elapsed,
-  pulse,
+function ElapsedTicks({
+  seconds,
+  prefix,
 }: {
-  label: string;
-  elapsed: number | null;
-  pulse?: boolean;
+  seconds: number;
+  prefix: "Working for" | "Worked for";
 }) {
+  if (seconds <= 0) return null;
+  return (
+    <span>
+      {prefix}{" "}
+      <span className="tabular-nums">{formatActivityElapsed(seconds)}</span>
+    </span>
+  );
+}
+
+function MutatingLine({
+  view,
+  className,
+}: {
+  view: ActivityView;
+  className?: string;
+}) {
+  const working = view.mode === "elapsed";
+  const words = working ? "Working" : view.liveLine;
+
+  if (!words) return null;
+
+  const showTicks =
+    view.elapsedSeconds > 0 &&
+    (view.mode === "live" || view.mode === "elapsed");
+
   return (
     <div
-      className="mb-1.5 flex items-center gap-2 px-2.5 text-[12px] tracking-wide text-[var(--muted)] transition-opacity duration-300"
+      className={cn(
+        "aether-activity aether-activity--enter aether-activity__line",
+        className,
+      )}
       role="status"
       aria-live="polite"
     >
       <span
-        className={
-          pulse
-            ? "size-1.5 shrink-0 animate-pulse rounded-full bg-[var(--accent)]"
-            : "size-1.5 shrink-0 rounded-full bg-[var(--muted-soft)]"
-        }
-        aria-hidden
-      />
-      <span className="min-w-0 truncate">{label}</span>
-      {elapsed != null && elapsed > 0 ? (
-        <span className="ml-auto shrink-0 tabular-nums text-[var(--muted-soft)]">
-          {formatElapsed(elapsed)}
+        key={view.lineKey ?? words}
+        className="aether-activity__words aether-activity--enter"
+      >
+        {words}
+      </span>
+      {showTicks ? (
+        <span className="aether-activity__ticks">
+          {formatActivityElapsed(view.elapsedSeconds)}
         </span>
       ) : null}
     </div>
   );
 }
+
+export function AgentActivityPanel({
+  view,
+  className,
+}: {
+  view: ActivityView;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (!view.visible) return null;
+
+  if (view.mode === "collapsed") {
+    return (
+      <div
+        className={cn("aether-activity aether-activity--enter", className)}
+        role="status"
+        aria-live="polite"
+      >
+        <button
+          type="button"
+          className="aether-activity__summary-btn"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {view.summaryLabel?.startsWith("Worked for ") ? (
+            <ElapsedTicks seconds={view.elapsedSeconds} prefix="Worked for" />
+          ) : (
+            <span>{view.summaryLabel}</span>
+          )}
+          <ChevronDownIcon className="aether-activity__caret" aria-hidden />
+        </button>
+        {open ? (
+          <ol className="aether-activity__chips" aria-label="Work in this turn">
+            {view.steps.map((step) => (
+              <li
+                key={step.id}
+                className="aether-activity__chip"
+                title={step.label}
+              >
+                {step.label}
+              </li>
+            ))}
+          </ol>
+        ) : null}
+      </div>
+    );
+  }
+
+  return <MutatingLine view={view} className={className} />;
+}
+
+function threadMessagesFromState(messages: unknown): ActivityMessage[] {
+  return messages as ActivityMessage[];
+}
+
+/**
+ * Composer-adjacent live clock before the assistant message mounts.
+ * Classifying is not a status line.
+ */
+export const AgentStatusStrip: FC = () => {
+  const { classifying } = useHarness();
+  const isRunning = useAuiState((s) => s.thread.isRunning);
+  const lastAssistantId = useAuiState((s) => {
+    const messages = s.thread.messages;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]?.role === "assistant") return messages[i]!.id;
+    }
+    return undefined;
+  });
+  const hasLiveAssistant = useAuiState((s) => {
+    if (!s.thread.isRunning) return false;
+    const last = s.thread.messages[s.thread.messages.length - 1];
+    return !!last && last.role === "assistant";
+  });
+  const messages = useAuiState((s) =>
+    threadMessagesFromState(s.thread.messages),
+  );
+  const continueStatus = useContinueStatus();
+  const elapsed = useThreadActivityElapsed(isRunning, lastAssistantId);
+
+  const view = deriveAgentActivity({
+    messages,
+    isRunning,
+    elapsedSeconds: elapsed,
+    classifying,
+    continuePhase: continueStatus.phase,
+    continueSegment: continueStatus.segment,
+    continueMax: continueStatus.max ?? MAX_AUTO_CONTINUES,
+  });
+
+  if (hasLiveAssistant) return null;
+  if (view.mode === "collapsed") return null;
+
+  return <AgentActivityPanel view={view} className="mb-1.5 px-2.5" />;
+};
+
+function hostLabel(url?: string): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./, "") || null;
+  } catch {
+    return null;
+  }
+}
+
+export const MessageSourceCards: FC = () => {
+  const parts = useAuiState((s) => s.message.parts as ActivityMessage["parts"]);
+  const hits = collectWebSearchHits(parts);
+  if (hits.length === 0) return null;
+
+  return (
+    <ul className="aether-inline-sources" aria-label="Sources">
+      {hits.map((hit, i) => {
+        const host = hostLabel(hit.url);
+        const inner = (
+          <>
+            <span className="aether-inline-source__title">{hit.title}</span>
+            {host ? (
+              <span className="aether-inline-source__host">{host}</span>
+            ) : null}
+          </>
+        );
+        return (
+          <li key={`${hit.url ?? hit.title}:${i}`}>
+            {hit.url ? (
+              <a
+                href={hit.url}
+                target="_blank"
+                rel="noreferrer"
+                className="aether-inline-source"
+              >
+                {inner}
+              </a>
+            ) : (
+              <span className="aether-inline-source">{inner}</span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+};
+
+export const MessageAgentActivity: FC = () => {
+  const isRunning = useAuiState((s) => s.message.status?.type === "running");
+  const messageId = useAuiState((s) => s.message.id);
+  const parts = useAuiState((s) => s.message.parts as ActivityMessage["parts"]);
+  const elapsed = useThreadActivityElapsed(isRunning, messageId);
+  const continueStatus = useContinueStatus();
+
+  const view = deriveAgentActivity({
+    messages: [{ id: messageId, role: "assistant", parts }],
+    isRunning,
+    elapsedSeconds: isRunning
+      ? elapsed
+      : elapsed || recalledActivityElapsed(messageId),
+    continuePhase: isRunning ? continueStatus.phase : "idle",
+    continueSegment: continueStatus.segment,
+    continueMax: continueStatus.max ?? MAX_AUTO_CONTINUES,
+  });
+
+  if (!view.visible) return null;
+
+  return (
+    <AgentActivityPanel
+      view={view}
+      className="mb-2 font-[family-name:var(--font-sans)]"
+    />
+  );
+};

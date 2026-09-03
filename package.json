@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test --test-force-exit src/lib/**/*.test.ts"
+    "test": "tsx --test --test-force-exit src/lib/*.test.ts src/lib/**/*.test.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.18",
