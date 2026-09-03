@@ -51,6 +51,7 @@ describe("deriveAgentActivity — honesty", () => {
 
     assert.equal(view.visible, true);
     assert.equal(view.mode, "live");
+    assert.equal(view.liveLine, "Searching");
     assert.equal(view.steps.length, 1);
     assert.equal(view.steps[0]?.kind, "tool");
     assert.equal(view.steps[0]?.toolName, "web_search");
@@ -80,6 +81,7 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(view.steps.length, 1);
     assert.equal(view.steps[0]?.toolName, "create_artifact");
     assert.equal(view.steps[0]?.label, "Creating table");
+    assert.equal(view.liveLine, "Creating table");
   });
 
   it("does not show a fake tool stack on an empty or token-only turn", () => {
@@ -91,6 +93,7 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(empty.steps.filter((s) => s.kind === "tool").length, 0);
     assert.equal(empty.mode, "elapsed");
     assert.equal(empty.elapsedLabel, "Working for 5s");
+    assert.equal(empty.liveLine, "Working for 5s");
     assert.doesNotMatch(JSON.stringify(empty), /search|Planning|Thinking/i);
 
     const tokensOnScreen = deriveAgentActivity({
@@ -121,7 +124,7 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(finishedTextOnly.steps.length, 0);
   });
 
-  it("greys completed tools and keeps the live one in focus", () => {
+  it("mutates one live line to the current real step, keeping others for collapse", () => {
     const view = deriveAgentActivity({
       messages: [
         {
@@ -153,6 +156,8 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(view.steps[1]?.state, "running");
     assert.equal(view.steps[1]?.label, "Creating table");
     assert.equal(view.liveStepId, view.steps[1]?.id);
+    assert.equal(view.liveLine, "Creating table");
+    assert.doesNotMatch(view.liveLine ?? "", /Thinking|Planning/i);
   });
 
   it("collapses to Worked for Ns when the turn with tools is done", () => {
@@ -219,5 +224,14 @@ describe("thread / composer copy stays honest", () => {
       assert.doesNotMatch(src, /Gathering context/, file.pathname);
       assert.doesNotMatch(src, /THINKING_PHRASES/, file.pathname);
     }
+    const thread = readFileSync(
+      new URL("../components/assistant-ui/thread.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(
+      thread,
+      /bg-\[var\(--text\)\] px-3 text-\[var\(--canvas\)\]/,
+    );
+    assert.match(thread, /aether-send-stop/);
   });
 });

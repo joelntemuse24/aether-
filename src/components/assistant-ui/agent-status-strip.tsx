@@ -86,38 +86,51 @@ function ElapsedTicks({
   );
 }
 
-function ActivityStepList({
+function MutatingLine({
   view,
+  className,
 }: {
   view: ActivityView;
+  className?: string;
 }) {
+  const words =
+    view.liveLine?.startsWith("Working for ") ? (
+      <ElapsedTicks seconds={view.elapsedSeconds} prefix="Working for" />
+    ) : (
+      view.liveLine
+    );
+
+  if (!words) return null;
+
   return (
-    <ol className="aether-activity__steps" aria-label="Work in this turn">
-      {view.steps.map((step) => (
-        <li
-          key={step.id}
-          className="aether-activity__step"
-          data-state={step.state}
-          data-live={step.id === view.liveStepId ? "true" : "false"}
-        >
-          <span className="aether-activity__mark" aria-hidden />
-          <span className="aether-activity__label">{step.label}</span>
-        </li>
-      ))}
-    </ol>
+    <div
+      className={cn(
+        "aether-activity aether-activity--enter aether-activity__line",
+        className,
+      )}
+      role="status"
+      aria-live="polite"
+    >
+      <span key={view.liveLine ?? ""} className="aether-activity__words">
+        {words}
+      </span>
+      {view.mode === "live" && view.elapsedSeconds > 0 ? (
+        <span className="aether-activity__ticks">
+          {formatActivityElapsed(view.elapsedSeconds)}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
 export function AgentActivityPanel({
   view,
   className,
-  defaultExpanded = false,
 }: {
   view: ActivityView;
   className?: string;
-  defaultExpanded?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultExpanded);
+  const [open, setOpen] = useState(false);
 
   if (!view.visible) return null;
 
@@ -144,52 +157,19 @@ export function AgentActivityPanel({
           </span>
         </button>
         {open ? (
-          <div className="aether-activity__expanded">
-            <ActivityStepList view={view} />
-          </div>
+          <ol className="aether-activity__named" aria-label="Work in this turn">
+            {view.steps.map((step) => (
+              <li key={step.id} className="aether-activity__named-item">
+                {step.label}
+              </li>
+            ))}
+          </ol>
         ) : null}
       </div>
     );
   }
 
-  if (view.mode === "elapsed") {
-    return (
-      <div
-        className={cn(
-          "aether-activity aether-activity--enter aether-activity__row",
-          className,
-        )}
-        role="status"
-        aria-live="polite"
-      >
-        {view.elapsedLabel?.startsWith("Working for ") ? (
-          <ElapsedTicks seconds={view.elapsedSeconds} prefix="Working for" />
-        ) : (
-          <span>{view.elapsedLabel}</span>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={cn(
-        "aether-activity aether-activity--enter aether-activity__row",
-        className,
-      )}
-      role="status"
-      aria-live="polite"
-    >
-      <ActivityStepList view={view} />
-      {view.elapsedSeconds > 0 ? (
-        <span className="aether-activity__elapsed">
-          {formatActivityElapsed(view.elapsedSeconds)}
-        </span>
-      ) : view.elapsedLabel ? (
-        <span className="aether-activity__elapsed">{view.elapsedLabel}</span>
-      ) : null}
-    </div>
-  );
+  return <MutatingLine view={view} className={className} />;
 }
 
 function threadMessagesFromState(messages: unknown): ActivityMessage[] {
@@ -197,8 +177,8 @@ function threadMessagesFromState(messages: unknown): ActivityMessage[] {
 }
 
 /**
- * Composer-adjacent live clock. Collapsed history lives on the assistant
- * message. Classifying is not a status line.
+ * Composer-adjacent live clock before the assistant message mounts.
+ * Classifying is not a status line.
  */
 export const AgentStatusStrip: FC = () => {
   const { classifying } = useHarness();
@@ -231,9 +211,7 @@ export const AgentStatusStrip: FC = () => {
     continueMax: continueStatus.max ?? MAX_AUTO_CONTINUES,
   });
 
-  // The generating assistant message owns the live stack so we don't double it.
   if (hasLiveAssistant) return null;
-
   if (view.mode === "collapsed") return null;
 
   return <AgentActivityPanel view={view} className="mb-1.5 px-2.5" />;
@@ -263,7 +241,6 @@ export const MessageAgentActivity: FC = () => {
     <AgentActivityPanel
       view={view}
       className="mb-2 font-[family-name:var(--font-sans)]"
-      defaultExpanded={view.mode === "live"}
     />
   );
 };

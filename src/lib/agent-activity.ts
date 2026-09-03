@@ -38,6 +38,8 @@ export type ActivityView = {
   mode: ActivityMode;
   steps: ActivityStep[];
   liveStepId: string | null;
+  /** Single mutating line while live. Never a stacked costume. */
+  liveLine: string | null;
   elapsedSeconds: number;
   elapsedLabel: string | null;
   summaryLabel: string | null;
@@ -62,6 +64,7 @@ function hidden(elapsedSeconds = 0): ActivityView {
     mode: "hidden",
     steps: [],
     liveStepId: null,
+    liveLine: null,
     elapsedSeconds,
     elapsedLabel: null,
     summaryLabel: null,
@@ -257,6 +260,10 @@ export function deriveAgentActivity(
       mode: steps.length > 0 ? "live" : "elapsed",
       steps,
       liveStepId: live?.id ?? null,
+      liveLine:
+        live?.label ??
+        steps[steps.length - 1]?.label ??
+        continueLabel,
       elapsedSeconds: elapsed,
       elapsedLabel: continueLabel,
       summaryLabel: null,
@@ -265,11 +272,14 @@ export function deriveAgentActivity(
 
   if (steps.length > 0) {
     if (input.isRunning) {
+      const current =
+        live?.label ?? steps[steps.length - 1]?.label ?? null;
       return {
         visible: true,
         mode: "live",
         steps,
         liveStepId: live?.id ?? steps[steps.length - 1]!.id,
+        liveLine: current,
         elapsedSeconds: elapsed,
         elapsedLabel: elapsedText,
         summaryLabel: null,
@@ -280,6 +290,7 @@ export function deriveAgentActivity(
       mode: "collapsed",
       steps,
       liveStepId: null,
+      liveLine: null,
       elapsedSeconds: elapsed,
       elapsedLabel: null,
       summaryLabel: elapsedText
@@ -292,13 +303,15 @@ export function deriveAgentActivity(
     if (hasVisibleText(assistant?.parts)) {
       return hidden(elapsed);
     }
+    const working = elapsedText ? `Working for ${elapsedText}` : null;
     return {
       visible: elapsed > 0,
       mode: "elapsed",
       steps: [],
       liveStepId: null,
+      liveLine: working,
       elapsedSeconds: elapsed,
-      elapsedLabel: elapsedText ? `Working for ${elapsedText}` : null,
+      elapsedLabel: working,
       summaryLabel: null,
     };
   }

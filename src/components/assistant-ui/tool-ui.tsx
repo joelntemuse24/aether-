@@ -337,15 +337,18 @@ const ToolShell: FC<{
     }
   }, [expandWhileRunning, running, hasBody, stayOpen]);
 
+  if (running && !stayOpen) {
+    // Live status is the one mutating activity line — no GPT grey search row.
+    return children ? (
+      <div className="my-0.5 font-[family-name:var(--font-sans)]">{children}</div>
+    ) : null;
+  }
+
   return (
     <div
       className={cn(
-        // Thin chip — not a heavy engineering card.
-        "my-0.5 overflow-hidden rounded-md font-[family-name:var(--font-sans)] text-[12px]",
+        "my-0.5 overflow-hidden rounded-lg font-[family-name:var(--font-sans)] text-[12px]",
         "transition-opacity duration-150 ease-out",
-        running
-          ? "bg-[color-mix(in_oklab,var(--elevated)_70%,transparent)]"
-          : "bg-transparent",
       )}
     >
       <div className="flex items-center gap-1.5 px-1.5 py-0.5">

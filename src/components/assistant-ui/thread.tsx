@@ -17,6 +17,7 @@ import {
   AgentStatusStrip,
   MessageAgentActivity,
 } from "@/components/assistant-ui/agent-status-strip";
+import "@/components/assistant-ui/agent-activity.css";
 import { ModelPicker } from "@/components/model-picker";
 import { ToolApprovalToggle } from "@/components/assistant-ui/tool-approval-toggle";
 import { Button } from "@/components/ui/button";
@@ -1002,35 +1003,40 @@ const ComposerAction: FC<{
           )}
         </button>
 
-        <AuiIf condition={(s) => !s.thread.isRunning}>
-          <button
-            type="button"
-            onClick={onHarnessSend}
-            disabled={!!classifying || !!harnessBlocked}
-            className="flex size-8 items-center justify-center rounded-full bg-[var(--accent)] text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
-            aria-label="Send message"
-            title="Send"
-            aria-busy={!!classifying}
-          >
-            {classifying ? (
-              <Loader2Icon className="size-4 animate-spin" />
-            ) : (
-              <ArrowUpIcon className="size-4" strokeWidth={2.5} />
-            )}
-          </button>
-        </AuiIf>
-        <AuiIf condition={(s) => s.thread.isRunning}>
-          <ComposerPrimitive.Cancel asChild>
+        <div className="aether-send-stop">
+          <AuiIf condition={(s) => !s.thread.isRunning}>
             <button
               type="button"
-              className="flex h-8 items-center gap-2 rounded-full bg-[var(--text)] px-3 text-[var(--canvas)] transition-opacity hover:opacity-80"
-              aria-label="Stop generating"
+              onClick={onHarnessSend}
+              disabled={!!classifying || !!harnessBlocked}
+              className="aether-send-stop__btn"
+              aria-label="Send message"
+              title="Send"
+              aria-busy={!!classifying}
             >
-              <SquareIcon className="size-3 fill-current" />
-              <span className="text-[13px] font-medium">Stop</span>
+              {classifying ? (
+                <Loader2Icon className="aether-send-stop__icon size-4 animate-spin" />
+              ) : (
+                <ArrowUpIcon
+                  className="aether-send-stop__icon size-4"
+                  strokeWidth={2.5}
+                />
+              )}
             </button>
-          </ComposerPrimitive.Cancel>
-        </AuiIf>
+          </AuiIf>
+          <AuiIf condition={(s) => s.thread.isRunning}>
+            <ComposerPrimitive.Cancel asChild>
+              <button
+                type="button"
+                className="aether-send-stop__btn"
+                aria-label="Stop generating"
+                title="Stop"
+              >
+                <SquareIcon className="aether-send-stop__icon size-3 fill-current" />
+              </button>
+            </ComposerPrimitive.Cancel>
+          </AuiIf>
+        </div>
       </div>
     </div>
   );

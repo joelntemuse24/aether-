@@ -1,6 +1,7 @@
-/* Quiet Grok-like activity — opacity + a few pixels, named transitions only. */
+/* Aether activity — cream, Inter, terracotta. GLM: one mutating line.
+   Grok: named real steps only after collapse. Not ChatGPT grey search rows. */
 
-@keyframes aether-activity-in {
+@keyframes aether-line-in {
   from {
     opacity: 0;
     transform: translateY(3px);
@@ -11,116 +12,63 @@
   }
 }
 
-@keyframes aether-activity-focus {
+@keyframes aether-icon-in {
   from {
-    opacity: 0.7;
-    transform: translateY(2px);
+    opacity: 0;
+    transform: scale(0.86);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: scale(1);
   }
 }
 
 .aether-activity {
   font-family: var(--font-ui), Inter, system-ui, sans-serif;
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.4;
   letter-spacing: 0.01em;
   color: var(--muted);
 }
 
-.aether-activity__stack,
-.aether-activity__summary {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.aether-activity__row {
+.aether-activity__line {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 10px;
   min-height: 1.25rem;
 }
 
-.aether-activity__steps {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  flex: 1;
-}
-
-.aether-activity__step {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-height: 1.2rem;
-  transition-property: opacity, color, transform;
-  transition-duration: 180ms;
-  transition-timing-function: ease-out;
-}
-
-.aether-activity__step[data-state="complete"] {
-  color: var(--muted-soft);
-  opacity: 0.72;
-}
-
-.aether-activity__step[data-state="running"] {
-  color: var(--text-secondary);
-  opacity: 1;
-}
-
-.aether-activity__mark {
-  display: inline-flex;
-  width: 6px;
-  height: 6px;
-  margin-top: 0.35em;
-  flex-shrink: 0;
-  border-radius: 999px;
-  /* Optical hang so glyphs share one left edge with the summary. */
-  margin-left: 1px;
-}
-
-.aether-activity__step[data-state="complete"] .aether-activity__mark {
-  background: var(--muted-soft);
-  opacity: 0.45;
-}
-
-.aether-activity__step[data-state="running"] .aether-activity__mark {
-  background: var(--accent);
-  opacity: 1;
-}
-
-.aether-activity__label {
+.aether-activity__words {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-secondary);
 }
 
-.aether-activity__elapsed {
+.aether-activity__ticks {
   margin-left: auto;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
-  color: var(--muted-soft);
+  color: var(--accent);
+  opacity: 0.82;
 }
 
 .aether-activity__summary-btn {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  width: 100%;
+  width: fit-content;
+  max-width: 100%;
   margin: 0;
-  padding: 1px 0;
+  padding: 1px 2px 1px 0;
   border: 0;
+  border-radius: 8px;
   background: transparent;
   color: var(--muted);
   text-align: left;
   cursor: pointer;
-  border-radius: 6px;
-  transition-property: opacity, color;
+  transition-property: color, opacity;
   transition-duration: 160ms;
   transition-timing-function: ease-out;
 }
@@ -131,11 +79,12 @@
 
 .aether-activity__chevron {
   display: inline-block;
-  font-size: 11px;
+  color: var(--accent);
+  opacity: 0.75;
+  font-size: 12px;
   line-height: 1;
-  color: var(--muted-soft);
   transform: translateY(-0.5px);
-  transition-property: transform;
+  transition-property: transform, opacity;
   transition-duration: 160ms;
   transition-timing-function: ease-out;
 }
@@ -144,30 +93,77 @@
   transform: rotate(90deg) translateY(-0.5px);
 }
 
-.aether-activity__expanded {
-  margin-top: 2px;
-  padding-left: 0;
+.aether-activity__named {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aether-activity__named-item {
+  color: var(--muted);
+  padding: 1px 0;
+}
+
+/* Send ↔ Stop: same terracotta circle, icon morphs. Not a ChatGPT black pill. */
+.aether-send-stop {
+  position: relative;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+}
+
+.aether-send-stop__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition-property: background-color, opacity;
+  transition-duration: 160ms;
+  transition-timing-function: ease-out;
+}
+
+.aether-send-stop__btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.aether-send-stop__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.aether-send-stop__icon {
+  display: block;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .aether-activity--enter {
-    animation: aether-activity-in 180ms ease-out both;
+  .aether-activity--enter,
+  .aether-activity__words {
+    animation: aether-line-in 180ms ease-out both;
   }
 
-  .aether-activity__step[data-state="running"] {
-    animation: aether-activity-focus 180ms ease-out both;
+  .aether-send-stop__icon {
+    animation: aether-icon-in 160ms ease-out both;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .aether-activity--enter,
-  .aether-activity__step[data-state="running"] {
+  .aether-activity__words,
+  .aether-send-stop__icon {
     animation: none;
   }
 
-  .aether-activity__step,
   .aether-activity__summary-btn,
-  .aether-activity__chevron {
+  .aether-activity__chevron,
+  .aether-send-stop__btn {
     transition-property: none;
     transition-duration: 0s;
   }
