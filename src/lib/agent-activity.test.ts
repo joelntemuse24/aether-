@@ -157,6 +157,7 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(view.steps[1]?.label, "Creating table");
     assert.equal(view.liveStepId, view.steps[1]?.id);
     assert.equal(view.liveLine, "Creating table");
+    assert.equal(view.lineKey, view.steps[1]?.id);
     assert.doesNotMatch(view.liveLine ?? "", /Thinking|Planning/i);
   });
 
@@ -254,5 +255,25 @@ describe("thread / composer copy stays honest", () => {
       "utf8",
     );
     assert.doesNotMatch(activity, /›/);
+  });
+
+  it("keeps Aether chrome: named transitions, no Grok ›, no GPT chips", () => {
+    const css = readFileSync(
+      new URL("../components/assistant-ui/agent-activity.css", import.meta.url),
+      "utf8",
+    );
+    const toolUi = readFileSync(
+      new URL("../components/assistant-ui/tool-ui.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(css, /›/);
+    assert.doesNotMatch(css, /transition:\s*all/);
+    assert.match(css, /tabular-nums/);
+    assert.match(css, /prefers-reduced-motion/);
+    assert.match(css, /transition-property:/);
+    assert.match(toolUi, /aether-tool-trace/);
+    assert.doesNotMatch(toolUi, /const ICONS/);
+    assert.doesNotMatch(toolUi, /display\.runningLabel/);
+    assert.doesNotMatch(toolUi, /Searching the web…/);
   });
 });

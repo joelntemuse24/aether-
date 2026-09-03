@@ -112,7 +112,10 @@ function MutatingLine({
       role="status"
       aria-live="polite"
     >
-      <span key={view.lineKey ?? words} className="aether-activity__words">
+      <span
+        key={view.lineKey ?? words}
+        className="aether-activity__words aether-activity--enter"
+      >
         {words}
       </span>
       {showTicks ? (

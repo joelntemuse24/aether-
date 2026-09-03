@@ -106,6 +106,85 @@
   text-overflow: ellipsis;
 }
 
+.aether-activity__summary-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Completed tool receipts — cream Inter, not GPT grey chips. */
+.aether-tool-trace {
+  font-family: var(--font-ui), Inter, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  margin: 0.35rem 0 0.15rem;
+  -webkit-font-smoothing: antialiased;
+}
+
+.aether-tool-trace--live {
+  margin: 0.15rem 0;
+}
+
+.aether-tool-trace__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 8px 4px 6px;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+  transition-property: color, background-color;
+  transition-duration: 160ms;
+  transition-timing-function: ease-out;
+}
+
+.aether-tool-trace__summary::-webkit-details-marker {
+  display: none;
+}
+
+.aether-tool-trace__summary::marker {
+  content: "";
+}
+
+.aether-tool-trace__summary:hover {
+  color: var(--text-secondary);
+  background: var(--hover-overlay);
+}
+
+.aether-tool-trace__summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.aether-tool-trace__details[open] .aether-activity__caret {
+  transform: translateY(0.5px) rotate(180deg);
+}
+
+.aether-tool-trace__body {
+  margin: 8px 0 0;
+  padding: 0 6px;
+}
+
+.aether-tool-trace__action {
+  display: inline-flex;
+  margin: 0 0 4px;
+}
+
+.aether-tool-trace__action button {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--accent);
+  background: transparent;
+}
+
+.aether-tool-trace__error {
+  margin: 0 0 6px;
+  color: var(--error-text);
+}
+
 /* Send ↔ Stop: one terracotta circle, icon cross-fade. */
 .aether-send-stop {
   position: relative;
@@ -158,6 +237,11 @@
   cursor: default;
 }
 
+.aether-send-stop__hit:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .aether-send-stop__glyph {
   position: absolute;
   inset: 0;
@@ -190,7 +274,8 @@
     background: var(--accent);
   }
 
-  .aether-activity__summary-btn:hover {
+  .aether-activity__summary-btn:hover,
+  .aether-tool-trace__summary:hover {
     background: transparent;
     color: var(--muted);
   }
@@ -230,6 +315,7 @@
 
   .aether-activity__summary-btn,
   .aether-activity__caret,
+  .aether-tool-trace__summary,
   .aether-send-stop__face,
   .aether-send-stop__glyph {
     transition-property: none;
