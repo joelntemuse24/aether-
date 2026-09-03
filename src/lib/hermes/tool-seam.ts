@@ -65,7 +65,7 @@ export function hermesAetherToolSeamAddendum(
   const mode =
     ctx.approvalMode === "auto"
       ? "The user chose Auto: routine non-destructive Aether tools may run without a tap. Still always request confirmation for destructive actions, spends, third-party submits, deletes, or writes to someone else's Drive/GitHub."
-      : "The user chose Ask (default): mutations wait on a confirm card. Safe reads may run immediately.";
+      : "The user chose Ask (default): memory writes and similar mutations wait on a confirm card. create_artifact for a file, table, or document they asked for runs immediately. Safe reads may run immediately.";
 
   const lines = [
     "## Aether context (this turn)",

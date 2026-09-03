@@ -2,6 +2,7 @@
  * Ask vs Auto approval policy for Aether-owned tools.
  *
  * Ask (default): mutations wait on a confirm card. Safe reads stay live.
+ * create_artifact for a file/table/doc the user asked for lands immediately.
  * Auto: routine / non-destructive Aether tools run without a tap.
  * Always confirm: destructive, spend, third-party submit, delete,
  * or writes to someone else's Drive/GitHub.
@@ -27,10 +28,10 @@ const SAFE_READ_TOOLS = new Set<string>([
   TOOL_NAMES.githubReadFile,
 ]);
 
-const ROUTINE_MUTATION_TOOLS = new Set<string>([
-  TOOL_NAMES.memoryWrite,
-  TOOL_NAMES.createArtifact,
-]);
+const ROUTINE_MUTATION_TOOLS = new Set<string>([TOOL_NAMES.memoryWrite]);
+
+/** Files / tables / docs the user just asked for — land, don't pause. */
+const USER_DELIVERABLE_TOOLS = new Set<string>([TOOL_NAMES.createArtifact]);
 
 const DESTRUCTIVE_ACTIONS = new Set<string>([
   "submit_form",
@@ -53,6 +54,10 @@ export function isSafeReadAetherTool(name: string): boolean {
 
 export function isRoutineMutationAetherTool(name: string): boolean {
   return ROUTINE_MUTATION_TOOLS.has(name);
+}
+
+export function isUserDeliverableAetherTool(name: string): boolean {
+  return USER_DELIVERABLE_TOOLS.has(name);
 }
 
 function actionOf(args: Record<string, unknown> | undefined): string {
@@ -80,7 +85,10 @@ export function isAlwaysConfirmAetherCall(
 }
 
 export type ApprovalDecision =
-  | { confirm: false; reason: "safe_read" | "auto_routine" | "skip_gate" }
+  | {
+      confirm: false;
+      reason: "safe_read" | "auto_routine" | "skip_gate" | "user_deliverable";
+    }
   | { confirm: true; reason: "always" | "ask_mutation" };
 
 /**
@@ -101,6 +109,9 @@ export function approvalDecisionForAetherTool(input: {
   }
   if (isSafeReadAetherTool(input.name)) {
     return { confirm: false, reason: "safe_read" };
+  }
+  if (isUserDeliverableAetherTool(input.name)) {
+    return { confirm: false, reason: "user_deliverable" };
   }
   if (isRoutineMutationAetherTool(input.name)) {
     if (input.mode === "auto") {

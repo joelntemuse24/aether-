@@ -43,16 +43,35 @@ describe("Ask vs Auto policy", () => {
       true,
     );
     assert.equal(
+      shouldConfirmAetherTool({ name: "memory_write", mode: "auto" }),
+      false,
+    );
+  });
+
+  it("does not pause ordinary create_artifact in Ask or Auto", () => {
+    assert.equal(
       shouldConfirmAetherTool({ name: "create_artifact", mode: "ask" }),
-      true,
+      false,
     );
     assert.equal(
-      shouldConfirmAetherTool({ name: "memory_write", mode: "auto" }),
+      shouldConfirmAetherTool({
+        name: "create_artifact",
+        mode: "ask",
+        args: { kind: "data", title: "Q3 costs" },
+      }),
       false,
     );
     assert.equal(
       shouldConfirmAetherTool({ name: "create_artifact", mode: "auto" }),
       false,
+    );
+    assert.equal(
+      shouldConfirmAetherTool({
+        name: "create_artifact",
+        mode: "ask",
+        args: { foreignOwner: true },
+      }),
+      true,
     );
   });
 
