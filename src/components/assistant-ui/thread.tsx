@@ -20,7 +20,6 @@ import {
 } from "@/components/assistant-ui/agent-status-strip";
 import "@/components/assistant-ui/agent-activity.css";
 import { ModelPicker } from "@/components/model-picker";
-import { ToolApprovalToggle } from "@/components/assistant-ui/tool-approval-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/providers/settings-provider";
@@ -1036,7 +1035,6 @@ const ComposerAction: FC<{
         </div>
 
         <ModelPicker />
-        <ToolApprovalToggle />
       </div>
 
       <div className="flex items-center gap-1.5">

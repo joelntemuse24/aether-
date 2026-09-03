@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FC } from "react";
-import { ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 import { useAuiState } from "@assistant-ui/react";
 import { useHarness } from "@/providers/harness-provider";
 import { MAX_AUTO_CONTINUES } from "@/lib/chat-continue";
@@ -160,11 +160,11 @@ export function AgentActivityPanel({
           <ChevronDownIcon className="aether-activity__caret" aria-hidden />
         </button>
         {open ? (
-          <ol className="aether-activity__named" aria-label="Work in this turn">
+          <ol className="aether-activity__chips" aria-label="Work in this turn">
             {view.steps.map((step) => (
               <li
                 key={step.id}
-                className="aether-activity__named-item"
+                className="aether-activity__chip"
                 title={step.label}
               >
                 {step.label}
@@ -224,37 +224,50 @@ export const AgentStatusStrip: FC = () => {
   return <AgentActivityPanel view={view} className="mb-1.5 px-2.5" />;
 };
 
+function hostLabel(url?: string): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./, "") || null;
+  } catch {
+    return null;
+  }
+}
+
 export const MessageSourceCards: FC = () => {
   const parts = useAuiState((s) => s.message.parts as ActivityMessage["parts"]);
   const hits = collectWebSearchHits(parts);
   if (hits.length === 0) return null;
 
   return (
-    <div className="aether-source-deck">
-      <p className="aether-source-deck__label">Sources</p>
-      <ul className="aether-source-cards" aria-label="Sources">
-        {hits.map((hit, i) => (
-          <li key={`${hit.url ?? hit.title}:${i}`} className="aether-source-card">
+    <ul className="aether-inline-sources" aria-label="Sources">
+      {hits.map((hit, i) => {
+        const host = hostLabel(hit.url);
+        const inner = (
+          <>
+            <span className="aether-inline-source__title">{hit.title}</span>
+            {host ? (
+              <span className="aether-inline-source__host">{host}</span>
+            ) : null}
+          </>
+        );
+        return (
+          <li key={`${hit.url ?? hit.title}:${i}`}>
             {hit.url ? (
               <a
                 href={hit.url}
                 target="_blank"
                 rel="noreferrer"
-                className="aether-source-card__title"
+                className="aether-inline-source"
               >
-                {hit.title}
-                <ExternalLinkIcon className="size-3" aria-hidden />
+                {inner}
               </a>
             ) : (
-              <span className="aether-source-card__title">{hit.title}</span>
+              <span className="aether-inline-source">{inner}</span>
             )}
-            {hit.snippet ? (
-              <p className="aether-source-card__snippet">{hit.snippet}</p>
-            ) : null}
           </li>
-        ))}
-      </ul>
-    </div>
+        );
+      })}
+    </ul>
   );
 };
 

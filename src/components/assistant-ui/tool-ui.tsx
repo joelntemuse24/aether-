@@ -8,7 +8,6 @@ import {
   FileIcon,
   PanelRightOpenIcon,
 } from "lucide-react";
-import { ToolApprovalToggle } from "@/components/assistant-ui/tool-approval-toggle";
 import { confirmActionCopy } from "@/lib/hermes/confirm-copy";
 import { useArtifact, type Artifact } from "@/providers/artifact-provider";
 import "@/components/assistant-ui/agent-activity.css";
@@ -63,7 +62,7 @@ type ConfirmExecution = {
   persisted?: boolean;
 };
 
-/** Shared confirm / Cancel + Ask|Auto chrome. Talks only to /api/harness/confirm. */
+/** HITL confirm / Cancel. Talks only to /api/harness/confirm. */
 function ConfirmCardActions({
   confirmationId,
   active,
@@ -182,7 +181,6 @@ function ConfirmCardActions({
       >
         {copy.cancel}
       </button>
-      <ToolApprovalToggle />
     </div>
   );
 }
