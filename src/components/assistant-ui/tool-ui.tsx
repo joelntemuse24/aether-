@@ -421,12 +421,8 @@ const PythonToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 
 const WebSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const running = usePartRunning(part);
-  const input = part.args as { query?: string } | undefined;
   const output = part.result as WebSearchOutput | undefined;
   const error = output ? !output.ok : part.isError;
-  const resultCount = output?.results?.length ?? 0;
-  const query =
-    input?.query || extractPartialJsonString(part.argsText, "query");
 
   return (
     <ToolShell
@@ -434,13 +430,6 @@ const WebSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       running={running}
       error={error}
       surface="inline"
-      subtitle={
-        query
-          ? resultCount > 0
-            ? `${query} · ${resultCount} hit${resultCount === 1 ? "" : "s"}`
-            : query
-          : undefined
-      }
     >
       {output?.error && (
         <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
@@ -451,33 +440,6 @@ const WebSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
         <div className="mb-2 rounded-lg border border-[var(--border)] bg-[var(--elevated)] p-2.5 text-[12px] text-[var(--muted)]">
           {output.warning}
         </div>
-      )}
-      {output?.results && output.results.length > 0 && (
-        <ul className="aether-source-cards">
-          {output.results.map((r, i) => (
-            <li key={i} className="aether-source-card">
-              {r.url ? (
-                <a
-                  href={r.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="aether-source-card__title"
-                >
-                  {r.title}
-                  <ExternalLinkIcon className="size-3" aria-hidden />
-                </a>
-              ) : (
-                <span className="aether-source-card__title">{r.title}</span>
-              )}
-              {r.snippet ? (
-                <p className="aether-source-card__snippet">{r.snippet}</p>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      )}
-      {!running && output?.ok && resultCount === 0 && !output.error && (
-        <p className="text-[12px] text-[var(--muted)]">No results returned.</p>
       )}
     </ToolShell>
   );

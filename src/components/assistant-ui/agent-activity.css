@@ -184,6 +184,20 @@
   color: var(--error-text);
 }
 
+.aether-source-deck {
+  margin: 1.1rem 0 0.2rem;
+  font-family: var(--font-ui), Inter, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+.aether-source-deck__label {
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+
 .aether-source-cards {
   display: flex;
   flex-direction: column;
@@ -191,6 +205,9 @@
   margin: 0;
   padding: 0;
   list-style: none;
+  font-family: var(--font-ui), Inter, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .aether-source-card {

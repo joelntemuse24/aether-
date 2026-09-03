@@ -15,6 +15,7 @@ import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button
 import { ThreadHeader } from "@/components/assistant-ui/thread-header";
 import {
   AgentStatusStrip,
+  MessageSourceCards,
   MessageAgentActivity,
 } from "@/components/assistant-ui/agent-status-strip";
 import "@/components/assistant-ui/agent-activity.css";
@@ -1161,6 +1162,7 @@ const AssistantMessage: FC = () => {
             return null;
           }}
         </MessagePrimitive.Parts>
+        <MessageSourceCards />
         <MessageError />
       </div>
 

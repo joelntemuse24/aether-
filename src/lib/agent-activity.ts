@@ -145,7 +145,7 @@ function artifactObject(args: Record<string, unknown>): string {
   return "file";
 }
 
-function clipPhrase(value: unknown, max = 64): string | null {
+function clipPhrase(value: unknown, max = 88): string | null {
   if (typeof value !== "string") return null;
   const clipped = value.replace(/\s+/g, " ").trim();
   if (!clipped) return null;
@@ -347,21 +347,50 @@ export function deriveAgentActivity(
     if (hasVisibleText(assistant?.parts)) {
       return hidden(elapsed);
     }
-    const working = elapsedText ? `Working for ${elapsedText}` : null;
+    // Honest gerund while the model is actually generating — not a costume stack.
     return {
-      visible: elapsed > 0,
+      visible: true,
       mode: "elapsed",
       steps: [],
       liveStepId: null,
-      liveLine: working,
+      liveLine: "Working",
       lineKey: "elapsed",
       elapsedSeconds: elapsed,
-      elapsedLabel: working,
+      elapsedLabel: elapsedText ? `Working ${elapsedText}` : "Working",
       summaryLabel: null,
     };
   }
 
   return hidden(elapsed);
+}
+
+export type ActivitySearchHit = {
+  title: string;
+  url?: string;
+  snippet?: string;
+};
+
+/** Completed web_search hits — rendered as cards after the answer, not as a chip. */
+export function collectWebSearchHits(
+  parts: ActivityPart[] | undefined,
+): ActivitySearchHit[] {
+  const hits: ActivitySearchHit[] = [];
+  for (const part of parts ?? []) {
+    if (toolNameFromActivityPart(part) !== "web_search") continue;
+    const results = asRecord(part.result).results;
+    if (!Array.isArray(results)) continue;
+    for (const raw of results) {
+      const row = asRecord(raw);
+      const title = typeof row.title === "string" ? row.title.trim() : "";
+      if (!title) continue;
+      hits.push({
+        title,
+        url: typeof row.url === "string" ? row.url : undefined,
+        snippet: typeof row.snippet === "string" ? row.snippet : undefined,
+      });
+    }
+  }
+  return hits;
 }
 
 /** Session-local elapsed clock so completed turns can say "Worked for Ns". */

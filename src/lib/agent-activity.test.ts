@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
+  collectWebSearchHits,
   deriveAgentActivity,
   formatActivityElapsed,
 } from "./agent-activity";
@@ -95,9 +96,9 @@ describe("deriveAgentActivity — honesty", () => {
     });
     assert.equal(empty.steps.filter((s) => s.kind === "tool").length, 0);
     assert.equal(empty.mode, "elapsed");
-    assert.equal(empty.elapsedLabel, "Working for 5s");
-    assert.equal(empty.liveLine, "Working for 5s");
-    assert.doesNotMatch(JSON.stringify(empty), /search|Planning|Thinking/i);
+    assert.equal(empty.liveLine, "Working");
+    assert.equal(empty.elapsedLabel, "Working 5s");
+    assert.doesNotMatch(JSON.stringify(empty), /search|Planning|Thinking|Mulling|Untangling/i);
 
     const tokensOnScreen = deriveAgentActivity({
       messages: [
@@ -244,8 +245,72 @@ describe("deriveAgentActivity — honesty", () => {
     const b = deriveAgentActivity({ ...base, elapsedSeconds: 5 });
     assert.equal(a.lineKey, "elapsed");
     assert.equal(a.lineKey, b.lineKey);
-    assert.equal(a.liveLine, "Working for 4s");
-    assert.equal(b.liveLine, "Working for 5s");
+    assert.equal(a.liveLine, "Working");
+    assert.equal(b.liveLine, "Working");
+  });
+
+  it("shows the gerund immediately — no empty first second, no fake steps", () => {
+    const view = deriveAgentActivity({
+      messages: [{ role: "assistant", parts: [] }],
+      isRunning: true,
+      elapsedSeconds: 0,
+    });
+    assert.equal(view.visible, true);
+    assert.equal(view.mode, "elapsed");
+    assert.equal(view.liveLine, "Working");
+    assert.equal(view.steps.length, 0);
+    assert.doesNotMatch(JSON.stringify(view), /Mulling|Untangling|Searching/i);
+  });
+
+  it("uses the real search query on the live line", () => {
+    const query = "Dublin's current time zone and daylight saving status";
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-call",
+              toolName: "web_search",
+              args: { query },
+              status: { type: "running" },
+            },
+          ],
+        },
+      ],
+      isRunning: true,
+      elapsedSeconds: 8,
+    });
+    assert.equal(view.mode, "live");
+    assert.equal(view.liveLine, `Searching ${query}`);
+    assert.equal(view.elapsedSeconds, 8);
+  });
+
+  it("collects web search hits for source cards, and nothing when no search ran", () => {
+    assert.deepEqual(
+      collectWebSearchHits([{ type: "text", text: "Hi" }]),
+      [],
+    );
+    const hits = collectWebSearchHits([
+      {
+        type: "tool-call",
+        toolName: "web_search",
+        args: { query: "Dublin time zone" },
+        result: {
+          ok: true,
+          results: [
+            {
+              title: "Time in Dublin",
+              url: "https://example.com/dublin",
+              snippet: "Ireland uses IST in summer.",
+            },
+          ],
+        },
+      },
+    ]);
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0]?.title, "Time in Dublin");
+    assert.equal(hits[0]?.url, "https://example.com/dublin");
   });
 });
 
@@ -302,16 +367,31 @@ describe("thread / composer copy stays honest", () => {
       new URL("../components/assistant-ui/tool-ui.tsx", import.meta.url),
       "utf8",
     );
+    const strip = readFileSync(
+      new URL(
+        "../components/assistant-ui/agent-status-strip.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const thread = readFileSync(
+      new URL("../components/assistant-ui/thread.tsx", import.meta.url),
+      "utf8",
+    );
     assert.doesNotMatch(css, /›/);
     assert.doesNotMatch(css, /transition:\s*all/);
     assert.match(css, /tabular-nums/);
     assert.match(css, /prefers-reduced-motion/);
     assert.match(css, /transition-property:/);
+    assert.match(css, /aether-source-deck/);
     assert.match(toolUi, /aether-tool-trace/);
-    assert.match(toolUi, /aether-source-card/);
     assert.doesNotMatch(toolUi, /const ICONS/);
     assert.doesNotMatch(toolUi, /display\.runningLabel/);
     assert.doesNotMatch(toolUi, /Searching the web…/);
     assert.doesNotMatch(toolUi, /Mulling|Untangling/);
+    assert.match(strip, /aether-source-card/);
+    assert.match(strip, /MessageSourceCards/);
+    assert.match(thread, /MessageSourceCards/);
+    assert.doesNotMatch(strip, /Mulling|Untangling/);
   });
 });

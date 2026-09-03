@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, type FC } from "react";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
 import { useAuiState } from "@assistant-ui/react";
 import { useHarness } from "@/providers/harness-provider";
 import { MAX_AUTO_CONTINUES } from "@/lib/chat-continue";
 import {
   closeActivityClock,
+  collectWebSearchHits,
   deriveAgentActivity,
   formatActivityElapsed,
   recalledActivityElapsed,
@@ -95,7 +96,7 @@ function MutatingLine({
   className?: string;
 }) {
   const working = view.mode === "elapsed";
-  const words = working ? "Working for" : view.liveLine;
+  const words = working ? "Working" : view.liveLine;
 
   if (!words) return null;
 
@@ -154,14 +155,7 @@ export function AgentActivityPanel({
           {view.summaryLabel?.startsWith("Worked for ") ? (
             <ElapsedTicks seconds={view.elapsedSeconds} prefix="Worked for" />
           ) : (
-            <>
-              <span>{view.summaryLabel}</span>
-              {view.elapsedSeconds > 0 ? (
-                <span className="aether-activity__ticks">
-                  {formatActivityElapsed(view.elapsedSeconds)}
-                </span>
-              ) : null}
-            </>
+            <span>{view.summaryLabel}</span>
           )}
           <ChevronDownIcon className="aether-activity__caret" aria-hidden />
         </button>
@@ -228,6 +222,40 @@ export const AgentStatusStrip: FC = () => {
   if (view.mode === "collapsed") return null;
 
   return <AgentActivityPanel view={view} className="mb-1.5 px-2.5" />;
+};
+
+export const MessageSourceCards: FC = () => {
+  const parts = useAuiState((s) => s.message.parts as ActivityMessage["parts"]);
+  const hits = collectWebSearchHits(parts);
+  if (hits.length === 0) return null;
+
+  return (
+    <div className="aether-source-deck">
+      <p className="aether-source-deck__label">Sources</p>
+      <ul className="aether-source-cards" aria-label="Sources">
+        {hits.map((hit, i) => (
+          <li key={`${hit.url ?? hit.title}:${i}`} className="aether-source-card">
+            {hit.url ? (
+              <a
+                href={hit.url}
+                target="_blank"
+                rel="noreferrer"
+                className="aether-source-card__title"
+              >
+                {hit.title}
+                <ExternalLinkIcon className="size-3" aria-hidden />
+              </a>
+            ) : (
+              <span className="aether-source-card__title">{hit.title}</span>
+            )}
+            {hit.snippet ? (
+              <p className="aether-source-card__snippet">{hit.snippet}</p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 };
 
 export const MessageAgentActivity: FC = () => {
