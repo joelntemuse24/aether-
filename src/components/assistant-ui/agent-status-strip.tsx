@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FC } from "react";
+import { ChevronDownIcon } from "lucide-react";
 import { useAuiState } from "@assistant-ui/react";
 import { useHarness } from "@/providers/harness-provider";
 import { MAX_AUTO_CONTINUES } from "@/lib/chat-continue";
@@ -93,14 +94,14 @@ function MutatingLine({
   view: ActivityView;
   className?: string;
 }) {
-  const words =
-    view.liveLine?.startsWith("Working for ") ? (
-      <ElapsedTicks seconds={view.elapsedSeconds} prefix="Working for" />
-    ) : (
-      view.liveLine
-    );
+  const working = view.mode === "elapsed";
+  const words = working ? "Working for" : view.liveLine;
 
   if (!words) return null;
+
+  const showTicks =
+    view.elapsedSeconds > 0 &&
+    (view.mode === "live" || view.mode === "elapsed");
 
   return (
     <div
@@ -111,10 +112,10 @@ function MutatingLine({
       role="status"
       aria-live="polite"
     >
-      <span key={view.liveLine ?? ""} className="aether-activity__words">
+      <span key={view.lineKey ?? words} className="aether-activity__words">
         {words}
       </span>
-      {view.mode === "live" && view.elapsedSeconds > 0 ? (
+      {showTicks ? (
         <span className="aether-activity__ticks">
           {formatActivityElapsed(view.elapsedSeconds)}
         </span>
@@ -152,14 +153,16 @@ export function AgentActivityPanel({
           ) : (
             <span>{view.summaryLabel}</span>
           )}
-          <span className="aether-activity__chevron" aria-hidden>
-            ›
-          </span>
+          <ChevronDownIcon className="aether-activity__caret" aria-hidden />
         </button>
         {open ? (
           <ol className="aether-activity__named" aria-label="Work in this turn">
             {view.steps.map((step) => (
-              <li key={step.id} className="aether-activity__named-item">
+              <li
+                key={step.id}
+                className="aether-activity__named-item"
+                title={step.label}
+              >
                 {step.label}
               </li>
             ))}

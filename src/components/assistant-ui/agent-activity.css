@@ -1,7 +1,11 @@
-/* Aether activity — cream, Inter, terracotta. GLM: one mutating line.
-   Grok: named real steps only after collapse. Not ChatGPT grey search rows. */
+/*
+ * Aether activity chrome.
+ * Narration: honest named work (Grok-inspired).
+ * Motion: interruptible ChatGPT / Claude / GLM swaps (interfaces.dev).
+ * Look: cream canvas, Inter, terracotta / wine. Not Grok’s › language.
+ */
 
-@keyframes aether-line-in {
+@keyframes aether-line-enter {
   from {
     opacity: 0;
     transform: translateY(3px);
@@ -12,23 +16,13 @@
   }
 }
 
-@keyframes aether-icon-in {
-  from {
-    opacity: 0;
-    transform: scale(0.86);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
 .aether-activity {
   font-family: var(--font-ui), Inter, system-ui, sans-serif;
   font-size: 12px;
   line-height: 1.4;
   letter-spacing: 0.01em;
   color: var(--muted);
+  -webkit-font-smoothing: antialiased;
 }
 
 .aether-activity__line {
@@ -47,124 +41,207 @@
 }
 
 .aether-activity__ticks {
-  margin-left: auto;
+  margin-inline-start: auto;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
   color: var(--accent);
-  opacity: 0.82;
 }
 
 .aether-activity__summary-btn {
-  display: flex;
-  align-items: baseline;
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-  width: fit-content;
   max-width: 100%;
   margin: 0;
-  padding: 1px 2px 1px 0;
+  /* 4px pad + 8px radius sits concentrically on the 16px composer. */
+  padding: 4px 8px 4px 6px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: var(--muted);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
-  transition-property: color, opacity;
+  transition-property: color, background-color;
   transition-duration: 160ms;
   transition-timing-function: ease-out;
 }
 
 .aether-activity__summary-btn:hover {
   color: var(--text-secondary);
+  background: var(--hover-overlay);
 }
 
-.aether-activity__chevron {
-  display: inline-block;
+.aether-activity__caret {
+  display: block;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
   color: var(--accent);
-  opacity: 0.75;
-  font-size: 12px;
-  line-height: 1;
-  transform: translateY(-0.5px);
+  opacity: 0.85;
+  /* Optical hang next to Inter 12px. */
+  transform: translateY(0.5px);
   transition-property: transform, opacity;
-  transition-duration: 160ms;
+  transition-duration: 200ms;
   transition-timing-function: ease-out;
 }
 
-.aether-activity__summary-btn[aria-expanded="true"] .aether-activity__chevron {
-  transform: rotate(90deg) translateY(-0.5px);
+.aether-activity__summary-btn[aria-expanded="true"] .aether-activity__caret {
+  transform: translateY(0.5px) rotate(180deg);
 }
 
 .aether-activity__named {
-  margin: 4px 0 0;
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0 6px;
   list-style: none;
 }
 
 .aether-activity__named-item {
   color: var(--muted);
-  padding: 1px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Send ↔ Stop: same terracotta circle, icon morphs. Not a ChatGPT black pill. */
+/* Send ↔ Stop: one terracotta circle, icon cross-fade. */
 .aether-send-stop {
+  position: relative;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+
+.aether-send-stop__face {
   position: relative;
   width: 2rem;
   height: 2rem;
-  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  pointer-events: none;
+  transition-property: background-color, transform;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
 }
 
-.aether-send-stop__btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
+.aether-send-stop:hover .aether-send-stop__face {
+  background: var(--accent-hover);
+}
+
+.aether-send-stop:active .aether-send-stop__face {
+  transform: scale(0.97);
+}
+
+.aether-send-stop[data-disabled="true"] .aether-send-stop__face {
+  opacity: 0.4;
+}
+
+.aether-send-stop__hit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   margin: 0;
   padding: 0;
   border: 0;
   border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
+  background: transparent;
+  color: transparent;
   cursor: pointer;
-  transition-property: background-color, opacity;
-  transition-duration: 160ms;
-  transition-timing-function: ease-out;
 }
 
-.aether-send-stop__btn:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.aether-send-stop__btn:disabled {
-  opacity: 0.4;
+.aether-send-stop__hit:disabled {
   cursor: default;
 }
 
-.aether-send-stop__icon {
-  display: block;
+.aether-send-stop__glyph {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transition-property: opacity, transform, filter;
+  transition-duration: 200ms;
+  transition-timing-function: ease-out;
+}
+
+.aether-send-stop__glyph[data-active="false"] {
+  opacity: 0;
+  transform: scale(0.25);
+  filter: blur(4px);
+}
+
+.aether-send-stop__glyph[data-active="true"] {
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0);
+}
+
+.aether-send-stop__glyph[data-nudge="send"] svg {
+  /* Optical center for the up-arrow in a 32px circle. */
+  transform: translateY(0.5px);
+}
+
+@media (hover: none) {
+  .aether-send-stop:hover .aether-send-stop__face {
+    background: var(--accent);
+  }
+
+  .aether-activity__summary-btn:hover {
+    background: transparent;
+    color: var(--muted);
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .aether-activity--enter,
-  .aether-activity__words {
-    animation: aether-line-in 180ms ease-out both;
+  .aether-activity--enter {
+    animation: aether-line-enter 180ms ease-out both;
   }
 
-  .aether-send-stop__icon {
-    animation: aether-icon-in 160ms ease-out both;
+  .aether-activity__named-item {
+    animation: aether-line-enter 180ms ease-out both;
+  }
+
+  .aether-activity__named-item:nth-child(2) {
+    animation-delay: 30ms;
+  }
+
+  .aether-activity__named-item:nth-child(3) {
+    animation-delay: 60ms;
+  }
+
+  .aether-activity__named-item:nth-child(4) {
+    animation-delay: 90ms;
+  }
+
+  .aether-activity__named-item:nth-child(n + 5) {
+    animation-delay: 120ms;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .aether-activity--enter,
-  .aether-activity__words,
-  .aether-send-stop__icon {
+  .aether-activity__named-item {
     animation: none;
   }
 
   .aether-activity__summary-btn,
-  .aether-activity__chevron,
-  .aether-send-stop__btn {
+  .aether-activity__caret,
+  .aether-send-stop__face,
+  .aether-send-stop__glyph {
     transition-property: none;
     transition-duration: 0s;
+  }
+
+  .aether-send-stop__glyph[data-active="false"] {
+    transform: none;
+    filter: none;
+  }
+
+  .aether-send-stop:active .aether-send-stop__face {
+    transform: none;
   }
 }

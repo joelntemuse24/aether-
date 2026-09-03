@@ -40,6 +40,8 @@ export type ActivityView = {
   liveStepId: string | null;
   /** Single mutating line while live. Never a stacked costume. */
   liveLine: string | null;
+  /** Stable across ticking seconds so the line does not re-enter every second. */
+  lineKey: string | null;
   elapsedSeconds: number;
   elapsedLabel: string | null;
   summaryLabel: string | null;
@@ -65,6 +67,7 @@ function hidden(elapsedSeconds = 0): ActivityView {
     steps: [],
     liveStepId: null,
     liveLine: null,
+    lineKey: null,
     elapsedSeconds,
     elapsedLabel: null,
     summaryLabel: null,
@@ -264,6 +267,7 @@ export function deriveAgentActivity(
         live?.label ??
         steps[steps.length - 1]?.label ??
         continueLabel,
+      lineKey: live?.id ?? "continue",
       elapsedSeconds: elapsed,
       elapsedLabel: continueLabel,
       summaryLabel: null,
@@ -280,6 +284,7 @@ export function deriveAgentActivity(
         steps,
         liveStepId: live?.id ?? steps[steps.length - 1]!.id,
         liveLine: current,
+        lineKey: live?.id ?? steps[steps.length - 1]!.id,
         elapsedSeconds: elapsed,
         elapsedLabel: elapsedText,
         summaryLabel: null,
@@ -291,6 +296,7 @@ export function deriveAgentActivity(
       steps,
       liveStepId: null,
       liveLine: null,
+      lineKey: "collapsed",
       elapsedSeconds: elapsed,
       elapsedLabel: null,
       summaryLabel: elapsedText
@@ -310,6 +316,7 @@ export function deriveAgentActivity(
       steps: [],
       liveStepId: null,
       liveLine: working,
+      lineKey: "elapsed",
       elapsedSeconds: elapsed,
       elapsedLabel: working,
       summaryLabel: null,

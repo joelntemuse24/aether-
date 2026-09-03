@@ -197,6 +197,19 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(view.visible, false);
     assert.doesNotMatch(JSON.stringify(view), /Planning|Thinking|Working/i);
   });
+
+  it("keeps lineKey stable while elapsed seconds tick", () => {
+    const base = {
+      messages: [{ role: "assistant" as const, parts: [] }],
+      isRunning: true,
+    };
+    const a = deriveAgentActivity({ ...base, elapsedSeconds: 4 });
+    const b = deriveAgentActivity({ ...base, elapsedSeconds: 5 });
+    assert.equal(a.lineKey, "elapsed");
+    assert.equal(a.lineKey, b.lineKey);
+    assert.equal(a.liveLine, "Working for 4s");
+    assert.equal(b.liveLine, "Working for 5s");
+  });
 });
 
 describe("formatActivityElapsed", () => {
@@ -233,5 +246,13 @@ describe("thread / composer copy stays honest", () => {
       /bg-\[var\(--text\)\] px-3 text-\[var\(--canvas\)\]/,
     );
     assert.match(thread, /aether-send-stop/);
+    const activity = readFileSync(
+      new URL(
+        "../components/assistant-ui/agent-status-strip.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    assert.doesNotMatch(activity, /›/);
   });
 });

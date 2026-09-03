@@ -850,6 +850,64 @@ const GitHubGlyph: FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
+const SendStopControl: FC<{
+  classifying: boolean;
+  harnessBlocked: boolean;
+  onSend: () => void;
+}> = ({ classifying, harnessBlocked, onSend }) => {
+  const isRunning = useAuiState((s) => s.thread.isRunning);
+  const sendDisabled = classifying || harnessBlocked;
+
+  return (
+    <div
+      className="aether-send-stop"
+      data-disabled={!isRunning && sendDisabled ? "true" : "false"}
+    >
+      <span className="aether-send-stop__face" aria-hidden>
+        <span
+          className="aether-send-stop__glyph"
+          data-active={!isRunning && !classifying ? "true" : "false"}
+          data-nudge="send"
+        >
+          <ArrowUpIcon className="size-4" strokeWidth={2.5} />
+        </span>
+        <span
+          className="aether-send-stop__glyph"
+          data-active={!isRunning && classifying ? "true" : "false"}
+        >
+          <Loader2Icon className="size-4 animate-spin" />
+        </span>
+        <span
+          className="aether-send-stop__glyph"
+          data-active={isRunning ? "true" : "false"}
+        >
+          <SquareIcon className="size-3 fill-current" />
+        </span>
+      </span>
+      {isRunning ? (
+        <ComposerPrimitive.Cancel asChild>
+          <button
+            type="button"
+            className="aether-send-stop__hit"
+            aria-label="Stop generating"
+            title="Stop"
+          />
+        </ComposerPrimitive.Cancel>
+      ) : (
+        <button
+          type="button"
+          className="aether-send-stop__hit"
+          onClick={onSend}
+          disabled={sendDisabled}
+          aria-label="Send message"
+          title="Send"
+          aria-busy={classifying}
+        />
+      )}
+    </div>
+  );
+};
+
 const ComposerAction: FC<{
   onAttachClick: () => void;
   attachOpen: boolean;
@@ -1003,40 +1061,11 @@ const ComposerAction: FC<{
           )}
         </button>
 
-        <div className="aether-send-stop">
-          <AuiIf condition={(s) => !s.thread.isRunning}>
-            <button
-              type="button"
-              onClick={onHarnessSend}
-              disabled={!!classifying || !!harnessBlocked}
-              className="aether-send-stop__btn"
-              aria-label="Send message"
-              title="Send"
-              aria-busy={!!classifying}
-            >
-              {classifying ? (
-                <Loader2Icon className="aether-send-stop__icon size-4 animate-spin" />
-              ) : (
-                <ArrowUpIcon
-                  className="aether-send-stop__icon size-4"
-                  strokeWidth={2.5}
-                />
-              )}
-            </button>
-          </AuiIf>
-          <AuiIf condition={(s) => s.thread.isRunning}>
-            <ComposerPrimitive.Cancel asChild>
-              <button
-                type="button"
-                className="aether-send-stop__btn"
-                aria-label="Stop generating"
-                title="Stop"
-              >
-                <SquareIcon className="aether-send-stop__icon size-3 fill-current" />
-              </button>
-            </ComposerPrimitive.Cancel>
-          </AuiIf>
-        </div>
+        <SendStopControl
+          classifying={!!classifying}
+          harnessBlocked={!!harnessBlocked}
+          onSend={onHarnessSend}
+        />
       </div>
     </div>
   );
