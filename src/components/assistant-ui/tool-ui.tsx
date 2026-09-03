@@ -304,7 +304,9 @@ const ToolShell: FC<{
   expandWhileRunning?: boolean;
   /** Confirm / approval card — render the body, never a status chip. */
   stayOpen?: boolean;
-}> = ({ name, running, error, children, headerAction, stayOpen }) => {
+  /** Search hits and similar receipts sit inline as cards, not behind a chip. */
+  surface?: "details" | "inline";
+}> = ({ name, running, error, children, headerAction, stayOpen, surface }) => {
   const hasBody = !!children;
 
   if (running && !stayOpen) {
@@ -326,6 +328,8 @@ const ToolShell: FC<{
 
   if (!hasBody && !headerAction && !error) return null;
 
+  const inline = surface === "inline";
+
   return (
     <div className="aether-tool-trace">
       {error ? (
@@ -336,7 +340,9 @@ const ToolShell: FC<{
       {headerAction ? (
         <div className="aether-tool-trace__action">{headerAction}</div>
       ) : null}
-      {hasBody ? (
+      {hasBody && inline ? (
+        <div className="aether-tool-trace__body">{children}</div>
+      ) : hasBody ? (
         <details className="aether-tool-trace__details">
           <summary className="aether-tool-trace__summary">
             <span>{toolTraceNoun(name)}</span>
@@ -427,6 +433,7 @@ const WebSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       name={TOOL_NAMES.webSearch}
       running={running}
       error={error}
+      surface="inline"
       subtitle={
         query
           ? resultCount > 0
@@ -446,34 +453,31 @@ const WebSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
         </div>
       )}
       {output?.results && output.results.length > 0 && (
-        <ul className="space-y-2.5">
+        <ul className="aether-source-cards">
           {output.results.map((r, i) => (
-            <li key={i} className="text-[13px]">
+            <li key={i} className="aether-source-card">
               {r.url ? (
                 <a
                   href={r.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 font-medium text-[var(--accent)] hover:underline"
+                  className="aether-source-card__title"
                 >
                   {r.title}
-                  <ExternalLinkIcon className="size-3" />
+                  <ExternalLinkIcon className="size-3" aria-hidden />
                 </a>
               ) : (
-                <span className="font-medium text-[var(--text)]">{r.title}</span>
+                <span className="aether-source-card__title">{r.title}</span>
               )}
-              <p className="mt-0.5 text-[var(--muted)]">{r.snippet}</p>
+              {r.snippet ? (
+                <p className="aether-source-card__snippet">{r.snippet}</p>
+              ) : null}
             </li>
           ))}
         </ul>
       )}
       {!running && output?.ok && resultCount === 0 && !output.error && (
         <p className="text-[12px] text-[var(--muted)]">No results returned.</p>
-      )}
-      {output?.source && (
-        <div className="mt-2 text-[11px] text-[var(--muted-soft)]">
-          Source: {output.source}
-        </div>
       )}
     </ToolShell>
   );

@@ -145,37 +145,72 @@ function artifactObject(args: Record<string, unknown>): string {
   return "file";
 }
 
+function clipPhrase(value: unknown, max = 64): string | null {
+  if (typeof value !== "string") return null;
+  const clipped = value.replace(/\s+/g, " ").trim();
+  if (!clipped) return null;
+  if (clipped.length <= max) return clipped;
+  return `${clipped.slice(0, Math.max(1, max - 1)).trimEnd()}…`;
+}
+
+function hostFromUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const host = new URL(value).hostname.replace(/^www\./, "");
+    return host || null;
+  } catch {
+    return clipPhrase(value, 32);
+  }
+}
+
 export function activityLabelForTool(
   toolName: string,
   args: Record<string, unknown>,
   running: boolean,
 ): string {
   switch (toolName) {
-    case "web_search":
-      return running ? "Searching" : "Ran 1 search";
-    case "memory_search":
-      return running ? "Searching memory" : "Searched memory";
-    case "drive_search":
-      return running ? "Searching Drive" : "Searched Drive";
+    case "web_search": {
+      const query = clipPhrase(args.query);
+      if (running) return query ? `Searching ${query}` : "Searching";
+      return "Searched the web";
+    }
+    case "memory_search": {
+      const query = clipPhrase(args.query);
+      if (running) return query ? `Searching memory for ${query}` : "Searching memory";
+      return "Searched memory";
+    }
+    case "drive_search": {
+      const query = clipPhrase(args.query);
+      if (running) return query ? `Searching Drive for ${query}` : "Searching Drive";
+      return "Searched Drive";
+    }
     case "drive_read":
       return running ? "Reading Drive file" : "Read Drive file";
     case "fetch_url":
-    case "browser_navigate":
-      return running ? "Reading page" : "Read page";
+    case "browser_navigate": {
+      const host = hostFromUrl(args.url);
+      if (running) return host ? `Reading ${host}` : "Reading page";
+      return host ? `Read ${host}` : "Read page";
+    }
     case "browser_act":
       return running ? "Working on page" : "Worked on page";
     case "create_artifact": {
+      const title = clipPhrase(args.title);
       const object = artifactObject(args);
       if (object === "document") {
-        return running ? "Writing document" : "Wrote document";
+        if (running) return title ? `Writing ${title}` : "Writing document";
+        return "Wrote document";
       }
       if (object === "table") {
-        return running ? "Creating table" : "Created table";
+        if (running) return title ? `Creating ${title}` : "Creating table";
+        return "Created table";
       }
       if (object === "image") {
-        return running ? "Creating image" : "Created image";
+        if (running) return title ? `Creating ${title}` : "Creating image";
+        return "Created image";
       }
-      return running ? "Creating file" : "Created file";
+      if (running) return title ? `Creating ${title}` : "Creating file";
+      return "Created file";
     }
     case "execute_python":
       return running ? "Running Python" : "Ran Python";
@@ -298,10 +333,13 @@ export function deriveAgentActivity(
       liveLine: null,
       lineKey: "collapsed",
       elapsedSeconds: elapsed,
-      elapsedLabel: null,
-      summaryLabel: elapsedText
-        ? `Worked for ${elapsedText}`
-        : (steps[0]?.label ?? null),
+      elapsedLabel: elapsedText,
+      summaryLabel:
+        steps.length === 1
+          ? (steps[0]?.label ?? null)
+          : elapsedText
+            ? `Worked for ${elapsedText}`
+            : (steps[0]?.label ?? null),
     };
   }
 

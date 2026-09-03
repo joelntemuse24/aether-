@@ -154,7 +154,14 @@ export function AgentActivityPanel({
           {view.summaryLabel?.startsWith("Worked for ") ? (
             <ElapsedTicks seconds={view.elapsedSeconds} prefix="Worked for" />
           ) : (
-            <span>{view.summaryLabel}</span>
+            <>
+              <span>{view.summaryLabel}</span>
+              {view.elapsedSeconds > 0 ? (
+                <span className="aether-activity__ticks">
+                  {formatActivityElapsed(view.elapsedSeconds)}
+                </span>
+              ) : null}
+            </>
           )}
           <ChevronDownIcon className="aether-activity__caret" aria-hidden />
         </button>

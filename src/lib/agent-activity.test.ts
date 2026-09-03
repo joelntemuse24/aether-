@@ -27,7 +27,10 @@ describe("deriveAgentActivity — honesty", () => {
       view.steps.filter((s) => s.kind === "tool").length,
       0,
     );
-    assert.doesNotMatch(JSON.stringify(view), /Thinking|Planning|Gathering context/i);
+    assert.doesNotMatch(
+      JSON.stringify(view),
+      /Thinking|Planning|Gathering context|Mulling|Untangling/i,
+    );
   });
 
   it("shows a tool step when a tool part exists", () => {
@@ -51,7 +54,7 @@ describe("deriveAgentActivity — honesty", () => {
 
     assert.equal(view.visible, true);
     assert.equal(view.mode, "live");
-    assert.equal(view.liveLine, "Searching");
+    assert.equal(view.liveLine, "Searching aether cream ui");
     assert.equal(view.steps.length, 1);
     assert.equal(view.steps[0]?.kind, "tool");
     assert.equal(view.steps[0]?.toolName, "web_search");
@@ -80,8 +83,8 @@ describe("deriveAgentActivity — honesty", () => {
 
     assert.equal(view.steps.length, 1);
     assert.equal(view.steps[0]?.toolName, "create_artifact");
-    assert.equal(view.steps[0]?.label, "Creating table");
-    assert.equal(view.liveLine, "Creating table");
+    assert.equal(view.steps[0]?.label, "Creating Q3 costs");
+    assert.equal(view.liveLine, "Creating Q3 costs");
   });
 
   it("does not show a fake tool stack on an empty or token-only turn", () => {
@@ -152,16 +155,16 @@ describe("deriveAgentActivity — honesty", () => {
 
     assert.equal(view.steps.length, 2);
     assert.equal(view.steps[0]?.state, "complete");
-    assert.equal(view.steps[0]?.label, "Ran 1 search");
+    assert.equal(view.steps[0]?.label, "Searched the web");
     assert.equal(view.steps[1]?.state, "running");
-    assert.equal(view.steps[1]?.label, "Creating table");
+    assert.equal(view.steps[1]?.label, "Creating Grid");
     assert.equal(view.liveStepId, view.steps[1]?.id);
-    assert.equal(view.liveLine, "Creating table");
+    assert.equal(view.liveLine, "Creating Grid");
     assert.equal(view.lineKey, view.steps[1]?.id);
     assert.doesNotMatch(view.liveLine ?? "", /Thinking|Planning/i);
   });
 
-  it("collapses to Worked for Ns when the turn with tools is done", () => {
+  it("collapses a single real step to that work plus elapsed seconds", () => {
     const view = deriveAgentActivity({
       messages: [
         {
@@ -183,9 +186,42 @@ describe("deriveAgentActivity — honesty", () => {
 
     assert.equal(view.visible, true);
     assert.equal(view.mode, "collapsed");
-    assert.equal(view.summaryLabel, "Worked for 12s");
+    assert.equal(view.summaryLabel, "Searched the web");
+    assert.equal(view.elapsedSeconds, 12);
     assert.equal(view.steps.length, 1);
-    assert.equal(view.steps[0]?.label, "Ran 1 search");
+    assert.equal(view.steps[0]?.label, "Searched the web");
+  });
+
+  it("collapses multiple real steps to Worked for Ns", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-call",
+              toolName: "web_search",
+              args: { query: "x" },
+              result: { ok: true },
+              status: { type: "complete" },
+            },
+            {
+              type: "tool-call",
+              toolName: "create_artifact",
+              args: { kind: "data", title: "Grid" },
+              result: { ok: true },
+              status: { type: "complete" },
+            },
+          ],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 12,
+    });
+
+    assert.equal(view.mode, "collapsed");
+    assert.equal(view.summaryLabel, "Worked for 12s");
+    assert.equal(view.steps.length, 2);
   });
 
   it("ignores classifying — no Planning costume", () => {
@@ -272,8 +308,10 @@ describe("thread / composer copy stays honest", () => {
     assert.match(css, /prefers-reduced-motion/);
     assert.match(css, /transition-property:/);
     assert.match(toolUi, /aether-tool-trace/);
+    assert.match(toolUi, /aether-source-card/);
     assert.doesNotMatch(toolUi, /const ICONS/);
     assert.doesNotMatch(toolUi, /display\.runningLabel/);
     assert.doesNotMatch(toolUi, /Searching the web…/);
+    assert.doesNotMatch(toolUi, /Mulling|Untangling/);
   });
 });

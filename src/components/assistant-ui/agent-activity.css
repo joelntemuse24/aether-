@@ -2,7 +2,7 @@
  * Aether activity chrome.
  * Narration: honest named work (Grok-inspired).
  * Motion: interruptible ChatGPT / Claude / GLM swaps (interfaces.dev).
- * Look: cream canvas, Inter, terracotta / wine. Not Grok’s › language.
+ * Look: cream canvas, Inter, terracotta / wine. Not Grok’s chevron language.
  */
 
 @keyframes aether-line-enter {
@@ -41,7 +41,6 @@
 }
 
 .aether-activity__ticks {
-  margin-inline-start: auto;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
@@ -183,6 +182,40 @@
 .aether-tool-trace__error {
   margin: 0 0 6px;
   color: var(--error-text);
+}
+
+.aether-source-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aether-source-card {
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--elevated);
+}
+
+.aether-source-card__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.aether-source-card__title:hover {
+  text-decoration: underline;
+}
+
+.aether-source-card__snippet {
+  margin: 4px 0 0;
+  color: var(--muted);
 }
 
 /* Send ↔ Stop: one terracotta circle, icon cross-fade. */
