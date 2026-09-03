@@ -13,7 +13,10 @@ import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ToolCallPart, type ToolPartLike } from "@/components/assistant-ui/tool-ui";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { ThreadHeader } from "@/components/assistant-ui/thread-header";
-import { AgentStatusStrip } from "@/components/assistant-ui/agent-status-strip";
+import {
+  AgentStatusStrip,
+  MessageAgentActivity,
+} from "@/components/assistant-ui/agent-status-strip";
 import { ModelPicker } from "@/components/model-picker";
 import { ToolApprovalToggle } from "@/components/assistant-ui/tool-approval-toggle";
 import { Button } from "@/components/ui/button";
@@ -1005,8 +1008,9 @@ const ComposerAction: FC<{
             onClick={onHarnessSend}
             disabled={!!classifying || !!harnessBlocked}
             className="flex size-8 items-center justify-center rounded-full bg-[var(--accent)] text-white transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
-            aria-label={classifying ? "Planning…" : "Send message"}
-            title={classifying ? "Planning…" : "Send"}
+            aria-label="Send message"
+            title="Send"
+            aria-busy={!!classifying}
           >
             {classifying ? (
               <Loader2Icon className="size-4 animate-spin" />
@@ -1113,6 +1117,7 @@ const AssistantMessage: FC = () => {
           "[&_.prose-aether]:font-[family-name:var(--font-serif)]",
         )}
       >
+        <MessageAgentActivity />
         <MessagePrimitive.Parts>
           {({ part }) => {
             if (part.type === "text") return <MarkdownText />;
@@ -1121,19 +1126,6 @@ const AssistantMessage: FC = () => {
             return null;
           }}
         </MessagePrimitive.Parts>
-        <AuiIf
-          condition={(s) =>
-            s.message.status?.type === "running" && s.message.parts.length === 0
-          }
-        >
-          <span
-            className="inline-flex items-center gap-2 text-[15px] text-[var(--muted)]"
-            aria-label="Generating"
-          >
-            <span className="size-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
-            Working…
-          </span>
-        </AuiIf>
         <MessageError />
       </div>
 

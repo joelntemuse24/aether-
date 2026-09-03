@@ -14,7 +14,6 @@ export const ThreadHeader: FC = () => {
     (s) => s.threadListItem.title?.trim() || "New conversation",
   );
   const isEmpty = useAuiState((s) => s.thread.messages.length === 0);
-  const isRunning = useAuiState((s) => s.thread.isRunning);
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
@@ -90,11 +89,6 @@ export const ThreadHeader: FC = () => {
               </h2>
               <PencilIcon className="size-3 shrink-0 text-[var(--muted-soft)] opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
-            {isRunning && (
-              <span className="shrink-0 text-[11px] tracking-wide text-[var(--muted)]">
-                Working…
-              </span>
-            )}
           </>
         )}
       </div>

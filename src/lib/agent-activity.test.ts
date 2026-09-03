@@ -1,0 +1,223 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { describe, it } from "node:test";
+import {
+  deriveAgentActivity,
+  formatActivityElapsed,
+} from "./agent-activity";
+
+describe("deriveAgentActivity — honesty", () => {
+  it("does not invent a search line when no search tool ran", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [{ type: "text", text: "Here is a quiet answer." }],
+        },
+      ],
+      isRunning: true,
+      elapsedSeconds: 4,
+    });
+
+    assert.equal(
+      view.steps.some((s) => /search/i.test(s.label)),
+      false,
+    );
+    assert.equal(
+      view.steps.filter((s) => s.kind === "tool").length,
+      0,
+    );
+    assert.doesNotMatch(JSON.stringify(view), /Thinking|Planning|Gathering context/i);
+  });
+
+  it("shows a tool step when a tool part exists", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-call",
+              toolName: "web_search",
+              args: { query: "aether cream ui" },
+              status: { type: "running" },
+            },
+          ],
+        },
+      ],
+      isRunning: true,
+      elapsedSeconds: 3,
+    });
+
+    assert.equal(view.visible, true);
+    assert.equal(view.mode, "live");
+    assert.equal(view.steps.length, 1);
+    assert.equal(view.steps[0]?.kind, "tool");
+    assert.equal(view.steps[0]?.toolName, "web_search");
+    assert.equal(view.steps[0]?.state, "running");
+    assert.match(view.steps[0]?.label ?? "", /search/i);
+    assert.doesNotMatch(view.steps[0]?.label ?? "", /Thinking|Planning/i);
+  });
+
+  it("treats AI SDK tool-* parts as real work", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-create_artifact",
+              args: { kind: "data", title: "Q3 costs" },
+              status: { type: "running" },
+            },
+          ],
+        },
+      ],
+      isRunning: true,
+      elapsedSeconds: 2,
+    });
+
+    assert.equal(view.steps.length, 1);
+    assert.equal(view.steps[0]?.toolName, "create_artifact");
+    assert.equal(view.steps[0]?.label, "Creating table");
+  });
+
+  it("does not show a fake tool stack on an empty or token-only turn", () => {
+    const empty = deriveAgentActivity({
+      messages: [{ role: "assistant", parts: [] }],
+      isRunning: true,
+      elapsedSeconds: 5,
+    });
+    assert.equal(empty.steps.filter((s) => s.kind === "tool").length, 0);
+    assert.equal(empty.mode, "elapsed");
+    assert.equal(empty.elapsedLabel, "Working for 5s");
+    assert.doesNotMatch(JSON.stringify(empty), /search|Planning|Thinking/i);
+
+    const tokensOnScreen = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [{ type: "text", text: "Hello — here is the answer." }],
+        },
+      ],
+      isRunning: true,
+      elapsedSeconds: 5,
+    });
+    assert.equal(tokensOnScreen.visible, false);
+    assert.equal(tokensOnScreen.mode, "hidden");
+    assert.equal(tokensOnScreen.steps.length, 0);
+
+    const finishedTextOnly = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [{ type: "text", text: "Done." }],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 8,
+    });
+    assert.equal(finishedTextOnly.visible, false);
+    assert.equal(finishedTextOnly.steps.length, 0);
+  });
+
+  it("greys completed tools and keeps the live one in focus", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-call",
+              toolName: "web_search",
+              args: { query: "x" },
+              result: { ok: true, results: [] },
+              status: { type: "complete" },
+            },
+            {
+              type: "tool-call",
+              toolName: "create_artifact",
+              args: { kind: "data", title: "Grid" },
+              status: { type: "running" },
+            },
+          ],
+        },
+      ],
+      isRunning: true,
+      elapsedSeconds: 9,
+    });
+
+    assert.equal(view.steps.length, 2);
+    assert.equal(view.steps[0]?.state, "complete");
+    assert.equal(view.steps[0]?.label, "Ran 1 search");
+    assert.equal(view.steps[1]?.state, "running");
+    assert.equal(view.steps[1]?.label, "Creating table");
+    assert.equal(view.liveStepId, view.steps[1]?.id);
+  });
+
+  it("collapses to Worked for Ns when the turn with tools is done", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-call",
+              toolName: "web_search",
+              args: { query: "x" },
+              result: { ok: true },
+              status: { type: "complete" },
+            },
+          ],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 12,
+    });
+
+    assert.equal(view.visible, true);
+    assert.equal(view.mode, "collapsed");
+    assert.equal(view.summaryLabel, "Worked for 12s");
+    assert.equal(view.steps.length, 1);
+    assert.equal(view.steps[0]?.label, "Ran 1 search");
+  });
+
+  it("ignores classifying — no Planning costume", () => {
+    const view = deriveAgentActivity({
+      messages: [],
+      isRunning: false,
+      elapsedSeconds: 0,
+      classifying: true,
+    });
+    assert.equal(view.visible, false);
+    assert.doesNotMatch(JSON.stringify(view), /Planning|Thinking|Working/i);
+  });
+});
+
+describe("formatActivityElapsed", () => {
+  it("uses seconds and minute form without inventing work", () => {
+    assert.equal(formatActivityElapsed(4), "4s");
+    assert.equal(formatActivityElapsed(75), "1m 15s");
+  });
+});
+
+describe("thread / composer copy stays honest", () => {
+  it("does not keep Thinking / Planning / Working costume strings", () => {
+    const files = [
+      new URL("../components/assistant-ui/thread.tsx", import.meta.url),
+      new URL("../components/assistant-ui/thread-header.tsx", import.meta.url),
+      new URL(
+        "../components/assistant-ui/agent-status-strip.tsx",
+        import.meta.url,
+      ),
+    ];
+    for (const file of files) {
+      const src = readFileSync(file, "utf8");
+      assert.doesNotMatch(src, /Thinking…/, file.pathname);
+      assert.doesNotMatch(src, /Planning…/, file.pathname);
+      assert.doesNotMatch(src, /Working…/, file.pathname);
+      assert.doesNotMatch(src, /Gathering context/, file.pathname);
+      assert.doesNotMatch(src, /THINKING_PHRASES/, file.pathname);
+    }
+  });
+});
