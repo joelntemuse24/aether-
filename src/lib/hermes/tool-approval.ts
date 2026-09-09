@@ -75,6 +75,16 @@ export function isAlwaysConfirmAetherCall(
   args?: Record<string, unknown>,
 ): boolean {
   if (ALWAYS_CONFIRM_TOOLS.has(name)) return true;
+  // Artifact creation is a routine deliverable. A generic side-effect label
+  // from a model payload must not turn it into an approval card.
+  if (name === TOOL_NAMES.createArtifact) {
+    return (
+      args?.foreignOwner === true ||
+      args?.someoneElses === true ||
+      args?.targetOwner === "other" ||
+      args?.scope === "foreign"
+    );
+  }
   const action = actionOf(args);
   if (DESTRUCTIVE_ACTIONS.has(action)) return true;
   if (name === TOOL_NAMES.browserAct && action === "submit") return true;

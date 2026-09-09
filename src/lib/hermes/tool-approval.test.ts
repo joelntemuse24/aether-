@@ -73,6 +73,14 @@ describe("Ask vs Auto policy", () => {
       }),
       true,
     );
+    assert.equal(
+      shouldConfirmAetherTool({
+        name: "create_artifact",
+        mode: "ask",
+        args: { action: "other_side_effect", title: "Q3 costs" },
+      }),
+      false,
+    );
   });
 
   it("always confirms destructive / spend / submit / foreign writes", () => {

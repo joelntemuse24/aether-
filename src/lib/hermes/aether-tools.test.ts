@@ -73,6 +73,30 @@ describe("executeAetherTool", () => {
     assert.equal(gated.payload?.tool, "memory_write");
   });
 
+  it("does not gate a durable-style artifact payload in Ask", async () => {
+    const result = await executeAetherTool({
+      name: "create_artifact",
+      args: {
+        action: "other_side_effect",
+        kind: "document",
+        title: "Launch brief",
+        content: "# Launch brief\n\nReady to ship.",
+      },
+      ctx: baseCtx({
+        approvalMode: "ask",
+        userId: null,
+        deps: {
+          createConfirmation: async () => {
+            throw new Error("durable artifact must not pause in Ask");
+          },
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.needs_confirmation, undefined);
+    assert.equal((result as { title?: string }).title, "Launch brief");
+  });
+
   it("creates an ordinary artifact in Ask without a confirm card", async () => {
     const result = await executeAetherTool({
       name: "create_artifact",
