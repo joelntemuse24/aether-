@@ -75,6 +75,26 @@ export async function listDriveFiles(
   return (await res.json()) as DriveListResult;
 }
 
+export async function saveArtifactToDrive(input: {
+  name: string;
+  content: string;
+  mimeType?: string;
+}): Promise<{ id: string; name: string; webViewLink?: string }> {
+  const res = await fetch("/api/drive/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    file?: { id: string; name: string; webViewLink?: string };
+    error?: string;
+  };
+  if (!res.ok || !data.file) {
+    throw new Error(data.error || `Could not save to Drive (${res.status})`);
+  }
+  return data.file;
+}
+
 export async function downloadDriveFile(
   fileId: string,
   name: string,
