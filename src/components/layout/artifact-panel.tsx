@@ -12,13 +12,19 @@ import {
   ImageIcon,
   PencilIcon,
   PlayIcon,
+  SaveIcon,
   TableIcon,
   BarChart3Icon,
   BracesIcon,
   EyeIcon,
+  HardDriveUploadIcon,
+  Maximize2Icon,
+  Minimize2Icon,
   XIcon,
 } from "lucide-react";
 import { useArtifact } from "@/providers/artifact-provider";
+import { useDrive } from "@/providers/drive-provider";
+import { saveArtifactToDrive } from "@/lib/google-drive";
 import { useTheme } from "@/providers/theme-provider";
 import type { ArtifactKind } from "@/lib/tools";
 import { cn } from "@/lib/utils";
@@ -465,8 +471,11 @@ export function ArtifactPanel() {
     persistArtifactContent,
     saveCurrentArtifact,
   } = useArtifact();
+  const { connected: driveConnected } = useDrive();
   const previewTheme = usePreviewTheme();
   const [copied, setCopied] = useState(false);
+  const [driveSaving, setDriveSaving] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [content, setContent] = useState("");
   const [debounced, setDebounced] = useState("");
   const [tab, setTab] = useState<Tab>("code");
@@ -541,6 +550,42 @@ export function ArtifactPanel() {
     await navigator.clipboard.writeText(content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const onSaveToDrive = async () => {
+    if (!driveConnected || driveSaving || !content) return;
+    setDriveSaving(true);
+    try {
+      const mimeType =
+        kind === "document"
+          ? "text/markdown"
+          : kind === "data"
+            ? "application/json"
+            : kind === "svg"
+              ? "image/svg+xml"
+              : "text/plain";
+      const file = await saveArtifactToDrive({
+        name: artifact.title,
+        content,
+        mimeType,
+      });
+      window.dispatchEvent(
+        new CustomEvent("aether:notice", {
+          detail: `Saved ${file.name} to Google Drive.`,
+        }),
+      );
+    } catch (error) {
+      window.dispatchEvent(
+        new CustomEvent("aether:notice", {
+          detail:
+            error instanceof Error
+              ? error.message
+              : "Could not save this artifact to Google Drive.",
+        }),
+      );
+    } finally {
+      setDriveSaving(false);
+    }
   };
 
   const onDownload = () => {
@@ -641,8 +686,11 @@ export function ArtifactPanel() {
   return (
     <aside
       className={cn(
-        "flex h-full w-full max-w-[min(100%,32rem)] shrink-0 flex-col border-l border-[var(--border)] bg-[var(--surface)]",
-        "animate-[slideIn_180ms_ease-out]",
+        "flex h-full w-full shrink-0 flex-col border-l border-[var(--border)] bg-[var(--surface)]",
+        expanded
+          ? "fixed inset-0 z-50 max-w-none border-l-0"
+          : "max-w-[min(100%,32rem)]",
+        "animate-[slideIn_180ms_ease-out] motion-reduce:animate-none",
       )}
     >
       <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2.5">
@@ -682,10 +730,32 @@ export function ArtifactPanel() {
                 } else setSaveState("error");
               });
             }}
-            className="flex h-8 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-[var(--accent)] hover:bg-[var(--elevated)]"
+            className="flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-[background-color,transform,color] hover:bg-[var(--elevated)] hover:text-[var(--text)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
+            aria-label="Save artifact"
             title="Save artifact"
           >
-            Save
+            <SaveIcon className="size-4" />
+          </button>
+          {driveConnected && (
+            <button
+              type="button"
+              onClick={() => void onSaveToDrive()}
+              disabled={driveSaving}
+              className="flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-[background-color,transform,color] hover:bg-[var(--elevated)] hover:text-[var(--text)] active:scale-[0.97] disabled:opacity-50"
+              aria-label="Save to Google Drive"
+              title="Save to Google Drive"
+            >
+              <HardDriveUploadIcon className={cn("size-4", driveSaving && "animate-pulse")} />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="flex size-8 items-center justify-center rounded-lg text-[var(--muted)] transition-[background-color,transform,color] hover:bg-[var(--elevated)] hover:text-[var(--text)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
+            aria-label={expanded ? "Close expanded artifact" : "Expand artifact"}
+            title={expanded ? "Close expanded artifact" : "Expand artifact"}
+          >
+            {expanded ? <Minimize2Icon className="size-4" /> : <Maximize2Icon className="size-4" />}
           </button>
           {kind === "document" && (
             <button
