@@ -303,18 +303,19 @@ export async function githubReadFileForUser(
       return { ok: false, error: "Could not decode file contents as UTF-8." };
     }
   } else if (data.download_url) {
-    // Absolute raw.githubusercontent.com URL — fetch with the same token.
-    const auth = await getValidGitHubAccessToken(userId);
-    if (!auth) return { ok: false, error: "GitHub is not connected." };
+    // Durable callbacks carry the token explicitly because they have no browser cookie.
+    const authToken =
+      accessToken || (await getValidGitHubAccessToken(userId))?.accessToken;
+    if (!authToken) return { ok: false, error: "GitHub is not connected." };
     const raw = await fetch(data.download_url, {
       headers: {
-        Authorization: `Bearer ${auth.accessToken}`,
+        Authorization: `Bearer ${authToken}`,
         "User-Agent": "Aether",
         Accept: "application/vnd.github.raw",
       },
     });
     if (raw.status === 401) {
-      await clearGitHubCookie();
+      if (!accessToken) await clearGitHubCookie();
       return {
         ok: false,
         error: "GitHub authorization expired. Reconnect GitHub in Preferences.",
