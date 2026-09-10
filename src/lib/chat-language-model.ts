@@ -3,6 +3,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import { listHostedCandidates } from "@/lib/hosted/client";
 import { createFailoverLanguageModel } from "@/lib/hosted/failover";
+import type { SpeedTier } from "@/lib/hosted/speed-tiers";
 
 export type ChatLanguageProviderId =
   | "openrouter"
@@ -57,9 +58,14 @@ export function resolveTurnLanguageModel(input: {
   baseURL: string;
   modelId: string;
   origin?: string | null;
+  speedTier?: SpeedTier;
 }): LanguageModel | null {
   if (input.hosted) {
-    const candidates = listHostedCandidates(input.modelId, input.origin ?? null);
+    const candidates = listHostedCandidates(
+      input.modelId,
+      input.origin ?? null,
+      input.speedTier ?? "fast",
+    );
     if (candidates.length === 0) return null;
     return createFailoverLanguageModel(candidates);
   }

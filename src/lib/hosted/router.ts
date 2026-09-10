@@ -7,6 +7,11 @@ import {
 } from "./config";
 import type { HostedModelFamily } from "./catalog";
 import { familyForRankedModel } from "./rank-models";
+import {
+  FAST_MODEL_CASCADE,
+  PAID_FLASH_FALLBACKS,
+  type SpeedTier,
+} from "./speed-tiers";
 
 export type RoutedUpstream = {
   upstream: UpstreamConfig;
@@ -75,8 +80,15 @@ function pushUnique(
 /**
  * Resolve a user-facing model id to primary + failover chain:
  * specialty gateway (BUZZ) → optional relays → OpenRouter.
+ *
+ * `speedTier: "fast"` (the default) reroutes generic requests through the
+ * BUZZ free/cheap cascade first, then paid Flash, then OpenRouter as a
+ * last resort. `"expert"` keeps the premium model on top of its chain.
  */
-export function resolveHostedRoute(modelId: string): HostedRoute | null {
+export function resolveHostedRoute(
+  modelId: string,
+  speedTier: SpeedTier = "fast",
+): HostedRoute | null {
   const trimmed = modelId.trim();
   if (!trimmed) return null;
 
@@ -86,9 +98,9 @@ export function resolveHostedRoute(modelId: string): HostedRoute | null {
   const gpt = getGptUpstream();
   const gatewayId = toGatewayModelId(trimmed);
 
-  const openrouterRoute = (): RoutedUpstream | null =>
+  const openrouterRoute = (id = trimmed): RoutedUpstream | null =>
     openrouter.configured
-      ? { upstream: openrouter, modelId: toOpenRouterModelId(trimmed) }
+      ? { upstream: openrouter, modelId: toOpenRouterModelId(id) }
       : null;
 
   if (family === "claude" || family === "chatgpt") {
@@ -103,18 +115,54 @@ export function resolveHostedRoute(modelId: string): HostedRoute | null {
 
     const chain: RoutedUpstream[] = [];
     const seen = new Set<string>();
-    pushUnique(chain, specialty, seen);
-    for (const relay of relayRoutes(gatewayId)) {
-      pushUnique(chain, relay, seen);
+    if (speedTier === "expert") {
+      // Expert keeps the premium model first, then the standard chain.
+      pushUnique(chain, specialty, seen);
+      for (const relay of relayRoutes(gatewayId)) {
+        pushUnique(chain, relay, seen);
+      }
+      pushUnique(chain, openrouterRoute(), seen);
+    } else {
+      // Fast: free/cheap BUZZ cascade → paid Flash → premium → OpenRouter.
+      const buzz = claude.configured ? claude : gpt.configured ? gpt : null;
+      for (const id of FAST_MODEL_CASCADE) {
+        if (buzz?.configured) pushUnique(chain, { upstream: buzz, modelId: id }, seen);
+      }
+      for (const id of PAID_FLASH_FALLBACKS) {
+        if (buzz?.configured) pushUnique(chain, { upstream: buzz, modelId: id }, seen);
+      }
+      pushUnique(chain, specialty, seen);
+      for (const relay of relayRoutes(gatewayId)) {
+        pushUnique(chain, relay, seen);
+      }
+      pushUnique(chain, openrouterRoute(), seen);
     }
-    pushUnique(chain, openrouterRoute(), seen);
 
     if (chain.length === 0) return null;
     const [primary, ...fallbacks] = chain;
     return { primary, fallbacks };
   }
 
-  // Long-tail: OpenRouter only (relays rarely have the full catalog).
+  // Long-tail: Fast reroutes through the BUZZ cascade too; Expert keeps the
+  // OpenRouter catalog id (relays rarely have the full catalog).
+  if (speedTier === "fast") {
+    const buzz = claude.configured ? claude : gpt.configured ? gpt : null;
+    if (buzz?.configured) {
+      const chain: RoutedUpstream[] = [];
+      const seen = new Set<string>();
+      for (const id of FAST_MODEL_CASCADE) {
+        pushUnique(chain, { upstream: buzz, modelId: id }, seen);
+      }
+      for (const id of PAID_FLASH_FALLBACKS) {
+        pushUnique(chain, { upstream: buzz, modelId: id }, seen);
+      }
+      pushUnique(chain, openrouterRoute(trimmed), seen);
+      if (chain.length > 0) {
+        const [primary, ...fallbacks] = chain;
+        return { primary, fallbacks };
+      }
+    }
+  }
   const primary = openrouterRoute();
   if (!primary) return null;
   return { primary, fallbacks: [] };

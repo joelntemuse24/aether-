@@ -6,6 +6,7 @@
 import type { UIMessage } from "ai";
 import { isCloudDbConfigured } from "@/lib/db";
 import { relevantMemoryPrompt } from "@/lib/memory/store";
+import type { SpeedTier } from "@/lib/hosted/speed-tiers";
 import {
   formatProjectForPrompt,
   getProject,
@@ -33,6 +34,7 @@ export async function prepareDurableChatTurn(input: {
 }): Promise<{
   hosted: boolean;
   requestedModel: string;
+  speedTier: SpeedTier;
   provider: NonNullable<ChatClientData["provider"]>;
   apiKey: string;
   baseURL: string;
@@ -80,6 +82,13 @@ export async function prepareDurableChatTurn(input: {
   const userText = input.userText || lastUserText(messages) || "";
   const parsed = parseHarnessFields(data.harness);
   const timeBudget = resolveTurnTimeBudget(data.harness, userText);
+
+  // Speed tier: Expert for deep reasoning or vision attachments; Fast default.
+  const hasImageAttachment = (data.attachments ?? []).some(
+    (a) => a.mime?.startsWith("image/"),
+  );
+  const speedTier: SpeedTier =
+    parsed.harnessDepth === "deep" || hasImageAttachment ? "expert" : "fast";
 
   let memoryBlock = "";
   let projectBlock = "";
@@ -129,6 +138,7 @@ export async function prepareDurableChatTurn(input: {
   return {
     hosted,
     requestedModel: data.model,
+    speedTier,
     provider: data.provider ?? "openrouter",
     apiKey: hosted ? "" : data.apiKey ?? "",
     baseURL: data.baseURL ?? "",

@@ -205,6 +205,7 @@ export const chatAgent = chat.agent({
     const result = await runLegacyLocalChat({
       hosted: prepared.hosted,
       requestedModel: prepared.requestedModel,
+      speedTier: prepared.speedTier,
       provider: prepared.provider,
       apiKey: prepared.apiKey,
       baseURL: prepared.baseURL,
