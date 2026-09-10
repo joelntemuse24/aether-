@@ -390,8 +390,21 @@ export function collectWebSearchHits(
       });
     }
   }
-  return hits;
+  // De-duplicate by URL (fallback title), keep the first occurrence, and cap
+  // the rendered list so a 30-hit search doesn't paint a wall of pills.
+  const seen = new Set<string>();
+  const unique: ActivitySearchHit[] = [];
+  for (const hit of hits) {
+    const key = hit.url || hit.title.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(hit);
+    if (unique.length >= MAX_RENDERED_SOURCES) break;
+  }
+  return unique;
 }
+
+const MAX_RENDERED_SOURCES = 8;
 
 /** Session-local elapsed clock so completed turns can say "Worked for Ns". */
 let liveStartedAt: number | null = null;
