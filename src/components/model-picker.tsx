@@ -5,7 +5,7 @@ import { useSettings } from "@/providers/settings-provider";
 import { cn } from "@/lib/utils";
 
 const TIERS: Array<{
-  id: AppSettings["speedTier"];
+  id: "fast" | "expert";
   hint: string;
 }> = [
   {
