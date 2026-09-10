@@ -11,7 +11,7 @@
 
 import type { WebSearchResult } from "@/lib/tools";
 
-export type SearchProviderId = "brave" | "exa" | "tavily";
+export type SearchProviderId = "brave" | "exa" | "tavily" | "firecrawl";
 
 export type SearchProviderHit = {
   provider: SearchProviderId;
@@ -38,18 +38,63 @@ export function configuredSearchProviders(): SearchProviderId[] {
   if (process.env.EXA_API_KEY?.trim()) available.push("exa");
   if (process.env.TAVILY_API_KEY?.trim()) available.push("tavily");
   if (process.env.BRAVE_SEARCH_API_KEY?.trim()) available.push("brave");
+  // Firecrawl search uses the key we already provision for page fetching.
+  if (process.env.FIRECRAWL_API_KEY?.trim()) available.push("firecrawl");
 
   if (
     preferred === "exa" ||
     preferred === "tavily" ||
-    preferred === "brave"
+    preferred === "brave" ||
+    preferred === "firecrawl"
   ) {
     const rest = available.filter((p) => p !== preferred);
     if (available.includes(preferred)) return [preferred, ...rest];
   }
-  // Prefer research providers when present, then Brave.
-  const order: SearchProviderId[] = ["exa", "tavily", "brave"];
+  // Prefer research providers when present, then Brave, then Firecrawl.
+  const order: SearchProviderId[] = ["exa", "tavily", "brave", "firecrawl"];
   return order.filter((p) => available.includes(p));
+}
+
+export async function searchFirecrawl(
+  query: string,
+  signal?: AbortSignal,
+): Promise<WebSearchResult[]> {
+  const key = process.env.FIRECRAWL_API_KEY?.trim();
+  if (!key) return [];
+  const res = await fetch("https://api.firecrawl.dev/v2/search", {
+    method: "POST",
+    signal,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+      "User-Agent": SEARCH_UA,
+    },
+    body: JSON.stringify({
+      query,
+      limit: 8,
+      scrapeOptions: { formats: ["markdown"], onlyMainContent: true },
+    }),
+  });
+  if (!res.ok) return [];
+  const parsed = await readJson(res);
+  if (!parsed.ok) return [];
+  const data = parsed.data as {
+    data?: Array<{
+      title?: string;
+      url?: string;
+      markdown?: string;
+      description?: string;
+    }>;
+  };
+  return (data.data ?? [])
+    .filter((r) => r.title || r.url)
+    .map((r) => ({
+      title: r.title || r.url || "Result",
+      // Prefer real page content over a one-line description.
+      snippet: (r.markdown || r.description || "").slice(0, 900),
+      url: r.url,
+    }))
+    .slice(0, 8);
 }
 
 export async function searchBrave(
@@ -177,7 +222,9 @@ export async function runApiSearchProviders(
           ? await searchBrave(query, signal)
           : id === "exa"
             ? await searchExa(query, signal)
-            : await searchTavily(query, signal);
+            : id === "firecrawl"
+              ? await searchFirecrawl(query, signal)
+              : await searchTavily(query, signal);
       if (results.length > 0) return { provider: id, results };
     } catch {
       // try next provider
