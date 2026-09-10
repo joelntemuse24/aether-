@@ -51,6 +51,10 @@ export function resolveAvailableToolNames(ctx: {
     TOOL_NAMES.requestConfirmation,
     TOOL_NAMES.browserNavigate,
     TOOL_NAMES.browserAct,
+    TOOL_NAMES.workspaceExec,
+    TOOL_NAMES.workspaceReadFile,
+    TOOL_NAMES.workspaceWriteFile,
+    TOOL_NAMES.workspaceListFiles,
   ];
   const hasMemory =
     ctx.hasMemory ?? !!(ctx.userId && isCloudDbConfigured());
@@ -143,6 +147,22 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     [TOOL_NAMES.verifyChecklist]: tool({
       ...schemas[TOOL_NAMES.verifyChecklist],
       execute: async (input) => runVerifyChecklist(input),
+    }),
+    [TOOL_NAMES.workspaceExec]: tool({
+      ...schemas[TOOL_NAMES.workspaceExec],
+      execute: async (input) => runAether(TOOL_NAMES.workspaceExec, input),
+    }),
+    [TOOL_NAMES.workspaceReadFile]: tool({
+      ...schemas[TOOL_NAMES.workspaceReadFile],
+      execute: async (input) => runAether(TOOL_NAMES.workspaceReadFile, input),
+    }),
+    [TOOL_NAMES.workspaceWriteFile]: tool({
+      ...schemas[TOOL_NAMES.workspaceWriteFile],
+      execute: async (input) => runAether(TOOL_NAMES.workspaceWriteFile, input),
+    }),
+    [TOOL_NAMES.workspaceListFiles]: tool({
+      ...schemas[TOOL_NAMES.workspaceListFiles],
+      execute: async (input) => runAether(TOOL_NAMES.workspaceListFiles, input),
     }),
     [TOOL_NAMES.requestConfirmation]: tool({
       ...schemas[TOOL_NAMES.requestConfirmation],

@@ -29,6 +29,10 @@ export const TOOL_NAMES = {
   browserNavigate: "browser_navigate",
   /** Extract, preview fill, or request confirm for click/submit. */
   browserAct: "browser_act",
+  workspaceExec: "workspace_exec",
+  workspaceReadFile: "workspace_read_file",
+  workspaceWriteFile: "workspace_write_file",
+  workspaceListFiles: "workspace_list_files",
 } as const;
 
 export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -233,6 +237,25 @@ export const browserNavigateInput = z.object({
   url: z.string().url().describe("Public http(s) URL to open and extract."),
 });
 
+export const workspaceExecInput = z.object({
+  command: z.string().min(1).describe("Shell command to run in the isolated workspace."),
+  timeoutMs: z.number().int().min(1000).max(60000).optional(),
+});
+
+export const workspaceReadFileInput = z.object({
+  path: z.string().min(1).describe("Path relative to the workspace root."),
+});
+
+export const workspaceWriteFileInput = z.object({
+  path: z.string().min(1).describe("Path relative to the workspace root."),
+  content: z.string().describe("Complete file content."),
+});
+
+export const workspaceListFilesInput = z.object({
+  path: z.string().optional().describe("Directory relative to the workspace root."),
+  depth: z.number().int().min(1).max(6).optional(),
+});
+
 export const browserActInput = z.object({
   url: z.string().url().describe("Page URL for the action."),
   action: z
@@ -320,6 +343,22 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Browser",
     runningLabel: "Working on page…",
   },
+  [TOOL_NAMES.workspaceExec]: {
+    label: "Workspace",
+    runningLabel: "Running command…",
+  },
+  [TOOL_NAMES.workspaceReadFile]: {
+    label: "Workspace",
+    runningLabel: "Reading file…",
+  },
+  [TOOL_NAMES.workspaceWriteFile]: {
+    label: "Workspace",
+    runningLabel: "Writing file…",
+  },
+  [TOOL_NAMES.workspaceListFiles]: {
+    label: "Workspace",
+    runningLabel: "Listing files…",
+  },
 };
 
 export function getToolDisplay(name: string): ToolDisplay {
@@ -348,6 +387,8 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 - "request_confirmation": gate any side effect (submit, send, upload) until the user approves. Never claim a side effect completed without approval.
 - "browser_navigate": open a public URL and extract text (fetch or full browser when configured).
 - "browser_act": extract / fill_preview / click / submit on a page. submit always returns needs_confirmation.
+- "workspace_exec": run shell commands in an isolated per-conversation Linux workspace.
+- "workspace_read_file" / "workspace_write_file" / "workspace_list_files": inspect and edit files in that isolated workspace.
 - "tool_search": unlock optional tools (memory, Drive, GitHub) by keyword when needed.
 
 ## Optional tools (via tool_search when the session supports them; GitHub may already be unlocked if the user pasted a repo link)

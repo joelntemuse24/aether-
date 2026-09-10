@@ -22,6 +22,10 @@ import {
   requestConfirmationInput,
   browserNavigateInput,
   browserActInput,
+  workspaceExecInput,
+  workspaceReadFileInput,
+  workspaceWriteFileInput,
+  workspaceListFilesInput,
 } from "@/lib/tools";
 import { verifyChecklistInput } from "@/lib/harness/verify";
 
@@ -67,6 +71,26 @@ export function buildHeadStartToolSchemas(
       description:
         "Request user approval before any side effect (submit form, send message, upload, irreversible action). Returns needs_confirmation — do not claim the action completed until the user approves.",
       inputSchema: requestConfirmationInput,
+    }),
+    [TOOL_NAMES.workspaceExec]: tool({
+      description:
+        "Run a shell command in the conversation's isolated Linux workspace. Use for coding, tests, package installation, data processing, and document generation. Files persist for this conversation.",
+      inputSchema: workspaceExecInput,
+    }),
+    [TOOL_NAMES.workspaceReadFile]: tool({
+      description:
+        "Read a UTF-8 text file from the isolated conversation workspace.",
+      inputSchema: workspaceReadFileInput,
+    }),
+    [TOOL_NAMES.workspaceWriteFile]: tool({
+      description:
+        "Create or replace a text file in the isolated conversation workspace. Ordinary user-requested file creation does not need confirmation.",
+      inputSchema: workspaceWriteFileInput,
+    }),
+    [TOOL_NAMES.workspaceListFiles]: tool({
+      description:
+        "List files and directories in the isolated conversation workspace.",
+      inputSchema: workspaceListFilesInput,
     }),
     [TOOL_NAMES.browserNavigate]: tool({
       description:

@@ -26,12 +26,18 @@ const SAFE_READ_TOOLS = new Set<string>([
   TOOL_NAMES.githubGetRepo,
   TOOL_NAMES.githubListContents,
   TOOL_NAMES.githubReadFile,
+  TOOL_NAMES.workspaceReadFile,
+  TOOL_NAMES.workspaceListFiles,
 ]);
 
 const ROUTINE_MUTATION_TOOLS = new Set<string>([TOOL_NAMES.memoryWrite]);
 
 /** Files / tables / docs the user just asked for — land, don't pause. */
-const USER_DELIVERABLE_TOOLS = new Set<string>([TOOL_NAMES.createArtifact]);
+const USER_DELIVERABLE_TOOLS = new Set<string>([
+  TOOL_NAMES.createArtifact,
+  TOOL_NAMES.workspaceExec,
+  TOOL_NAMES.workspaceWriteFile,
+]);
 
 const DESTRUCTIVE_ACTIONS = new Set<string>([
   "submit_form",

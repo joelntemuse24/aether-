@@ -28,6 +28,8 @@ describe("Ask vs Auto policy", () => {
       "github_get_repo",
       "github_list_contents",
       "github_read_file",
+      "workspace_read_file",
+      "workspace_list_files",
     ]) {
       assert.equal(
         shouldConfirmAetherTool({ name, mode: "ask" }),
@@ -46,6 +48,13 @@ describe("Ask vs Auto policy", () => {
       shouldConfirmAetherTool({ name: "memory_write", mode: "auto" }),
       false,
     );
+  });
+
+  it("does not pause ordinary workspace work", () => {
+    for (const name of ["workspace_exec", "workspace_write_file"]) {
+      assert.equal(shouldConfirmAetherTool({ name, mode: "ask" }), false, name);
+      assert.equal(shouldConfirmAetherTool({ name, mode: "auto" }), false, name);
+    }
   });
 
   it("does not pause ordinary create_artifact in Ask or Auto", () => {

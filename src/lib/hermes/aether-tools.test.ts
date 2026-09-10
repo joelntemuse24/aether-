@@ -168,6 +168,27 @@ describe("executeAetherTool", () => {
     assert.equal(result.needs_confirmation, true);
   });
 
+  it("executes workspace tools without a confirmation card", async () => {
+    const result = await executeAetherTool({
+      name: "workspace_exec",
+      args: { command: "printf hello", timeoutMs: 5000 },
+      ctx: baseCtx({
+        approvalMode: "ask",
+        deps: {
+          workspaceExec: async (identity, input) => {
+            assert.equal(identity.userId, "user-1");
+            assert.equal(identity.conversationId, "c1");
+            assert.equal(input.command, "printf hello");
+            return { ok: true, exitCode: 0, stdout: "hello", stderr: "" };
+          },
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.needs_confirmation, undefined);
+    assert.equal((result as { stdout?: string }).stdout, "hello");
+  });
+
   it("keeps Drive/GitHub unavailable when the connector is off", async () => {
     const drive = await executeAetherTool({
       name: "drive_search",

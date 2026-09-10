@@ -25,6 +25,10 @@ export const CORE_TOOL_ORDER = [
   TOOL_NAMES.requestConfirmation,
   TOOL_NAMES.browserNavigate,
   TOOL_NAMES.browserAct,
+  TOOL_NAMES.workspaceExec,
+  TOOL_NAMES.workspaceReadFile,
+  TOOL_NAMES.workspaceWriteFile,
+  TOOL_NAMES.workspaceListFiles,
   TOOL_NAMES.toolSearch,
 ] as const;
 
