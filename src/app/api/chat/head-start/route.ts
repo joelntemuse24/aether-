@@ -47,6 +47,7 @@ const headStartHandler = chat.headStart({
       baseURL: prepared.baseURL,
       modelId: prepared.requestedModel,
       origin: prepared.origin,
+      speedTier: prepared.speedTier,
     });
     if (!model) {
       throw new Error(

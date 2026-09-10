@@ -2,6 +2,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 import { createFailoverLanguageModel } from "./failover";
 import { resolveHostedRoute, type RoutedUpstream } from "./router";
+import type { SpeedTier } from "./speed-tiers";
 
 function createChatModel(
   route: RoutedUpstream,
@@ -35,12 +36,13 @@ export function createHostedLanguageModel(
   return createFailoverLanguageModel(candidates);
 }
 
-/** Ordered candidates: primary then fallbacks (BUZZ → relays → OpenRouter). */
+/** Ordered candidates: primary then fallbacks (tier-aware, BUZZ → relays → OpenRouter). */
 export function listHostedCandidates(
   modelId: string,
   origin?: string | null,
+  speedTier: SpeedTier = "fast",
 ): Array<{ model: LanguageModel; upstreamId: string; upstreamModelId: string }> {
-  const route = resolveHostedRoute(modelId);
+  const route = resolveHostedRoute(modelId, speedTier);
   if (!route) return [];
   return [route.primary, ...route.fallbacks].map((r) => ({
     model: createChatModel(r, origin),

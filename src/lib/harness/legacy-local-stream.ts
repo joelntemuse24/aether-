@@ -5,6 +5,7 @@
  */
 
 import { resolveTurnLanguageModel } from "@/lib/chat-language-model";
+import type { SpeedTier } from "@/lib/hosted/speed-tiers";
 import {
   convertToModelMessages,
   InvalidToolInputError,
@@ -41,6 +42,7 @@ export type LegacyLocalStreamArgs = {
   apiKey: string;
   baseURL: string;
   origin?: string | null;
+  speedTier?: SpeedTier;
   messages: UIMessage[];
   enrichedMessages: UIMessage[];
   system?: string;
@@ -75,6 +77,7 @@ export async function runLegacyLocalChat(args: LegacyLocalStreamArgs) {
     baseURL: args.baseURL,
     modelId: args.requestedModel,
     origin: args.origin ?? null,
+    speedTier: args.speedTier,
   });
   if (!model) {
     return new Response(
