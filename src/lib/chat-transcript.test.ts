@@ -18,7 +18,7 @@ function assistant(id: string, text: string): UIMessage {
   return { id, role: "assistant", parts: [{ type: "text", text }] };
 }
 
-function installLocalStorage() {
+function installLocalStorage(onDispatch?: (event?: Event) => void) {
   const map = new Map<string, string>();
   const localStorage = {
     getItem: (key: string) => map.get(key) ?? null,
@@ -29,20 +29,28 @@ function installLocalStorage() {
       map.delete(key);
     },
   };
-  const globalWithWindow = globalThis as typeof globalThis & {
-    window?: { localStorage: typeof localStorage; dispatchEvent: (event?: Event) => boolean };
+  const globals = globalThis as typeof globalThis & {
+    window?: {
+      localStorage: typeof localStorage;
+      dispatchEvent: (event?: Event) => boolean;
+    };
+    localStorage?: typeof localStorage;
   };
-  const previous = globalWithWindow.window;
-  globalWithWindow.window = {
+  const previousWindow = globals.window;
+  const previousLocalStorage = globals.localStorage;
+  globals.localStorage = localStorage;
+  globals.window = {
     localStorage,
-    dispatchEvent: () => true,
+    dispatchEvent: (event?: Event) => {
+      onDispatch?.(event);
+      return true;
+    },
   };
   return () => {
-    if (previous === undefined) {
-      delete globalWithWindow.window;
-    } else {
-      globalWithWindow.window = previous;
-    }
+    if (previousWindow === undefined) delete globals.window;
+    else globals.window = previousWindow;
+    if (previousLocalStorage === undefined) delete globals.localStorage;
+    else globals.localStorage = previousLocalStorage;
   };
 }
 
@@ -64,6 +72,32 @@ describe("chat transcript client helpers", () => {
       shouldBlockSend({ historyReady: true, storedCount: 0, liveCount: 0 }),
       false,
     );
+  });
+
+  it("marks every blank-chat transition so stale messages clear immediately", async () => {
+    const events: Event[] = [];
+    const restore = installLocalStorage((event) => {
+      if (event) events.push(event);
+    });
+    try {
+      const { ACTIVE_THREAD_KEY, beginNewChatSession } = await import(
+        "./local-thread-adapter"
+      );
+      window.localStorage.setItem(ACTIVE_THREAD_KEY, "thread-a");
+      beginNewChatSession();
+      beginNewChatSession();
+
+      assert.equal(window.localStorage.getItem(ACTIVE_THREAD_KEY), null);
+      assert.equal(events.length, 2);
+      assert.deepEqual(
+        events.map((event) =>
+          (event as CustomEvent<{ newChat?: boolean }>).detail,
+        ),
+        [{ newChat: true }, { newChat: true }],
+      );
+    } finally {
+      restore();
+    }
   });
 
   it("copies an optimistic draft when remoteId first appears", () => {
