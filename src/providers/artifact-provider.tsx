@@ -52,8 +52,13 @@ type ArtifactContextValue = {
   artifact: Artifact | null;
   open: boolean;
   openArtifact: (artifact: Artifact) => void;
+  /** Update draft content without forcing the panel open (for drafting peek). */
+  stageArtifact: (artifact: Artifact) => void;
   closeArtifact: () => void;
   toggleArtifact: () => void;
+  /** True while create_artifact is streaming and the inspector isn't open yet. */
+  drafting: ArtifactDrafting | null;
+  setDrafting: (next: ArtifactDrafting | null) => void;
   saved: SavedArtifactSummary[];
   savedCloud: boolean;
   refreshSaved: () => Promise<void>;
@@ -64,6 +69,13 @@ type ArtifactContextValue = {
   saveCurrentArtifact: () => Promise<boolean>;
   /** Keep session/local list in sync when a tool creates an artifact. */
   rememberSessionArtifact: (artifact: Artifact) => void;
+};
+
+export type ArtifactDrafting = {
+  id: string;
+  title: string;
+  kind: string;
+  charCount?: number;
 };
 
 const ArtifactContext = createContext<ArtifactContextValue | null>(null);
@@ -83,12 +95,18 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
   const { status } = useSession();
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [open, setOpen] = useState(false);
+  const [drafting, setDrafting] = useState<ArtifactDrafting | null>(null);
   const [saved, setSaved] = useState<SavedArtifactSummary[]>([]);
   const [savedCloud, setSavedCloud] = useState(false);
 
   const openArtifact = useCallback((next: Artifact) => {
     setArtifact(next);
     setOpen(true);
+    setDrafting(null);
+  }, []);
+
+  const stageArtifact = useCallback((next: Artifact) => {
+    setArtifact(next);
   }, []);
 
   const closeArtifact = useCallback(() => {
@@ -363,8 +381,11 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
       artifact,
       open,
       openArtifact,
+      stageArtifact,
       closeArtifact,
       toggleArtifact,
+      drafting,
+      setDrafting,
       saved,
       savedCloud,
       refreshSaved,
@@ -377,8 +398,10 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
       artifact,
       open,
       openArtifact,
+      stageArtifact,
       closeArtifact,
       toggleArtifact,
+      drafting,
       saved,
       savedCloud,
       refreshSaved,

@@ -4,6 +4,7 @@ import {
   confirmationReplayPayload,
   peekConfirmation,
   resolveConfirmation,
+  verifyConfirmationReplaySignature,
 } from "@/lib/harness/confirmation";
 import { ensureConfirmationRepository } from "@/lib/harness/confirmation-store";
 import { executeAetherTool, isAetherOwnedToolName } from "@/lib/hermes/aether-tools";
@@ -31,7 +32,7 @@ export async function GET(req: Request) {
       { status: 404 },
     );
   }
-  if (peek.userId && userId && peek.userId !== userId) {
+  if (peek.userId && peek.userId !== userId) {
     return NextResponse.json(
       { error: "Confirmation belongs to another session." },
       { status: 403 },
@@ -95,6 +96,21 @@ export async function POST(req: Request) {
         { status: 404 },
       );
     }
+    if (
+      !body.payload ||
+      typeof body.payload !== "object" ||
+      Array.isArray(body.payload) ||
+      !verifyConfirmationReplaySignature({
+        confirmationId,
+        payload: body.payload as Record<string, unknown>,
+        userId,
+      })
+    ) {
+      return NextResponse.json(
+        { error: "Confirmation could not be verified. Ask again in chat." },
+        { status: 403 },
+      );
+    }
     const execution = await executeAetherTool({
       name: replay.tool,
       args: replay.args,
@@ -129,6 +145,7 @@ export async function POST(req: Request) {
   const payload =
     confirmationReplayPayload(peek.request.payload) ?? replay;
   if (
+    peek.status === "pending" &&
     result.approved &&
     payload &&
     isAetherOwnedToolName(payload.tool) &&
