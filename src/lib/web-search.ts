@@ -391,7 +391,7 @@ function withCurrencyWarning(
   );
   const warning =
     current && source === "wikipedia" && !hasPrimaryFigures
-      ? "These are encyclopedia summaries — they may lack current figures. Prefer fetch_url on an IR / press URL from results, or configure BRAVE_SEARCH_API_KEY for stronger web search."
+      ? "These are encyclopedia summaries — they may lack current figures. Prefer fetch_url on an IR / press URL from results."
       : undefined;
 
   return {
