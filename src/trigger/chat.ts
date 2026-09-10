@@ -62,6 +62,9 @@ type SessionCtx = {
   userId: string | null;
   hasDrive: boolean;
   hasGitHub: boolean;
+  hasGmail: boolean;
+  hasCalendar: boolean;
+  hasContacts: boolean;
   hasMemory: boolean;
 };
 
@@ -76,6 +79,9 @@ function readSessionCtx(): SessionCtx {
       userId: null,
       hasDrive: false,
       hasGitHub: false,
+      hasGmail: false,
+      hasCalendar: false,
+      hasContacts: false,
       hasMemory: false,
     };
   }
@@ -88,6 +94,9 @@ function hydrateSessionCtx(data: ChatClientData | undefined) {
     userId: data?.userId !== undefined ? data.userId : prev.userId,
     hasDrive: data?.hasDrive === true || prev.hasDrive,
     hasGitHub: data?.hasGitHub === true || prev.hasGitHub,
+    hasGmail: data?.hasGmail === true || prev.hasGmail,
+    hasCalendar: data?.hasCalendar === true || prev.hasCalendar,
+    hasContacts: data?.hasContacts === true || prev.hasContacts,
     hasMemory: data?.hasMemory === true || prev.hasMemory,
   };
   try {
@@ -96,6 +105,9 @@ function hydrateSessionCtx(data: ChatClientData | undefined) {
     sessionCtx.userId = next.userId;
     sessionCtx.hasDrive = next.hasDrive;
     sessionCtx.hasGitHub = next.hasGitHub;
+    sessionCtx.hasGmail = next.hasGmail;
+    sessionCtx.hasCalendar = next.hasCalendar;
+    sessionCtx.hasContacts = next.hasContacts;
     sessionCtx.hasMemory = next.hasMemory;
   } catch {
     sessionCtx.init(next);
@@ -150,6 +162,9 @@ export const chatAgent = chat.agent({
       projectId: data?.projectId ?? null,
       hasDrive: data?.hasDrive === true || stored.hasDrive,
       hasGitHub: data?.hasGitHub === true || stored.hasGitHub,
+      hasGmail: data?.hasGmail === true || stored.hasGmail,
+      hasCalendar: data?.hasCalendar === true || stored.hasCalendar,
+      hasContacts: data?.hasContacts === true || stored.hasContacts,
       hasMemory: data?.hasMemory === true || stored.hasMemory,
       approvalMode: data?.approvalMode === "auto" ? "auto" : "ask",
       executeAetherOwned: (name, args) =>

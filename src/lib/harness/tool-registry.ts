@@ -25,6 +25,9 @@ export type ToolRegistryContext = {
   hasDrive?: boolean;
   hasGitHub?: boolean;
   hasMemory?: boolean;
+  hasGmail?: boolean;
+  hasCalendar?: boolean;
+  hasContacts?: boolean;
   approvalMode?: ToolApprovalMode;
   /** Optional per-turn loop controller (quotas, deferred discovery). */
   loop?: AgentLoopController;
@@ -41,6 +44,9 @@ export function resolveAvailableToolNames(ctx: {
   hasDrive?: boolean;
   hasGitHub?: boolean;
   hasMemory?: boolean;
+  hasGmail?: boolean;
+  hasCalendar?: boolean;
+  hasContacts?: boolean;
 }): string[] {
   const names: string[] = [
     TOOL_NAMES.executePython,
@@ -55,16 +61,49 @@ export function resolveAvailableToolNames(ctx: {
     TOOL_NAMES.workspaceReadFile,
     TOOL_NAMES.workspaceWriteFile,
     TOOL_NAMES.workspaceListFiles,
+    TOOL_NAMES.generateImage,
+    TOOL_NAMES.githubListIssues,
+    TOOL_NAMES.githubGetIssue,
+    TOOL_NAMES.githubListPullRequests,
+    TOOL_NAMES.githubGetPullRequest,
+    TOOL_NAMES.githubListCommits,
+    TOOL_NAMES.githubCreateBranch,
+    TOOL_NAMES.githubCreateOrUpdateFile,
+    TOOL_NAMES.githubCreateIssue,
+    TOOL_NAMES.githubAddIssueComment,
+    TOOL_NAMES.githubCreatePullRequest,
+    TOOL_NAMES.githubMergePullRequest,
   ];
   const hasMemory =
     ctx.hasMemory ?? !!(ctx.userId && isCloudDbConfigured());
   const hasDrive = !!(ctx.userId && ctx.hasDrive);
   const hasGitHub = !!(ctx.userId && ctx.hasGitHub);
+  const hasGmail = !!(ctx.userId && ctx.hasGmail);
+  const hasCalendar = !!(ctx.userId && ctx.hasCalendar);
+  const hasContacts = !!(ctx.userId && ctx.hasContacts);
   if (hasMemory) {
     names.push(TOOL_NAMES.memorySearch, TOOL_NAMES.memoryWrite);
   }
   if (hasDrive) {
     names.push(TOOL_NAMES.driveSearch, TOOL_NAMES.driveRead);
+  }
+  if (hasGmail) {
+    names.push(
+      TOOL_NAMES.gmailSearch,
+      TOOL_NAMES.gmailRead,
+      TOOL_NAMES.gmailSend,
+      TOOL_NAMES.gmailCreateDraft,
+    );
+  }
+  if (hasCalendar) {
+    names.push(
+      TOOL_NAMES.calendarListEvents,
+      TOOL_NAMES.calendarCreateEvent,
+      TOOL_NAMES.calendarDeleteEvent,
+    );
+  }
+  if (hasContacts) {
+    names.push(TOOL_NAMES.contactsSearch, TOOL_NAMES.contactsCreate);
   }
   if (hasGitHub) {
     names.push(
@@ -89,6 +128,9 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     hasMemory: ctx.hasMemory ?? !!(ctx.userId && isCloudDbConfigured()),
     hasDrive: !!ctx.hasDrive,
     hasGitHub: !!ctx.hasGitHub,
+    hasGmail: !!ctx.hasGmail,
+    hasCalendar: !!ctx.hasCalendar,
+    hasContacts: !!ctx.hasContacts,
   };
   const runAether = async (name: string, args: unknown) => {
     if (ctx.executeAetherOwned) return ctx.executeAetherOwned(name, args);
@@ -101,6 +143,9 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     hasMemory: !!(ctx.userId && aetherCtx.hasMemory),
     hasDrive: !!(ctx.userId && ctx.hasDrive),
     hasGitHub: !!(ctx.userId && ctx.hasGitHub),
+    hasGmail: !!(ctx.userId && ctx.hasGmail),
+    hasCalendar: !!(ctx.userId && ctx.hasCalendar),
+    hasContacts: !!(ctx.userId && ctx.hasContacts),
   });
 
   const tools: ToolSet = {
@@ -163,6 +208,10 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     [TOOL_NAMES.workspaceListFiles]: tool({
       ...schemas[TOOL_NAMES.workspaceListFiles],
       execute: async (input) => runAether(TOOL_NAMES.workspaceListFiles, input),
+    }),
+    [TOOL_NAMES.generateImage]: tool({
+      ...schemas[TOOL_NAMES.generateImage],
+      execute: async (input) => runAether(TOOL_NAMES.generateImage, input),
     }),
     [TOOL_NAMES.requestConfirmation]: tool({
       ...schemas[TOOL_NAMES.requestConfirmation],
@@ -234,6 +283,46 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
       execute: async ({ repo, path, ref }) =>
         runAether(TOOL_NAMES.githubReadFile, { repo, path, ref }),
     });
+  }
+
+  if (schemas[TOOL_NAMES.githubListIssues]) {
+    for (const name of [
+      TOOL_NAMES.githubListIssues,
+      TOOL_NAMES.githubGetIssue,
+      TOOL_NAMES.githubListPullRequests,
+      TOOL_NAMES.githubGetPullRequest,
+      TOOL_NAMES.githubListCommits,
+      TOOL_NAMES.githubCreateBranch,
+      TOOL_NAMES.githubCreateOrUpdateFile,
+      TOOL_NAMES.githubCreateIssue,
+      TOOL_NAMES.githubAddIssueComment,
+      TOOL_NAMES.githubCreatePullRequest,
+      TOOL_NAMES.githubMergePullRequest,
+    ]) {
+      tools[name] = tool({
+        ...schemas[name],
+        execute: async (input) => runAether(name, input),
+      });
+    }
+  }
+
+  if (schemas[TOOL_NAMES.gmailSearch]) {
+    for (const name of [
+      TOOL_NAMES.gmailSearch,
+      TOOL_NAMES.gmailRead,
+      TOOL_NAMES.gmailSend,
+      TOOL_NAMES.gmailCreateDraft,
+      TOOL_NAMES.calendarListEvents,
+      TOOL_NAMES.calendarCreateEvent,
+      TOOL_NAMES.calendarDeleteEvent,
+      TOOL_NAMES.contactsSearch,
+      TOOL_NAMES.contactsCreate,
+    ]) {
+      tools[name] = tool({
+        ...schemas[name],
+        execute: async (input) => runAether(name, input),
+      });
+    }
   }
 
   if (schemas[TOOL_NAMES.toolSearch] && ctx.loop) {

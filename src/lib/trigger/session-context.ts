@@ -35,6 +35,11 @@ export async function attachAgentContextToClientData(input: {
       hasMemory: !!(userId && isCloudDbConfigured()),
       hasDrive,
       hasGitHub,
+      // Google service capabilities follow the shared Google grant until
+      // per-service OAuth scopes are tracked.
+      hasGmail: hasDrive,
+      hasCalendar: hasDrive,
+      hasContacts: hasDrive,
       driveAccessToken:
         drive && drive.userId === userId ? drive.accessToken : undefined,
       driveRefreshToken:
@@ -55,5 +60,8 @@ export async function attachAgentContextToClientData(input: {
     hasDrive,
     hasGitHub,
     hasMemory: !!(userId && isCloudDbConfigured()),
+    hasGmail: hasDrive,
+    hasCalendar: hasDrive,
+    hasContacts: hasDrive,
   });
 }

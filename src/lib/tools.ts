@@ -18,6 +18,17 @@ export const TOOL_NAMES = {
   githubGetRepo: "github_get_repo",
   githubListContents: "github_list_contents",
   githubReadFile: "github_read_file",
+  githubListIssues: "github_list_issues",
+  githubGetIssue: "github_get_issue",
+  githubListPullRequests: "github_list_pull_requests",
+  githubGetPullRequest: "github_get_pull_request",
+  githubListCommits: "github_list_commits",
+  githubCreateBranch: "github_create_branch",
+  githubCreateOrUpdateFile: "github_create_or_update_file",
+  githubCreateIssue: "github_create_issue",
+  githubAddIssueComment: "github_add_issue_comment",
+  githubCreatePullRequest: "github_create_pull_request",
+  githubMergePullRequest: "github_merge_pull_request",
   fetchUrl: "fetch_url",
   /** Deferred discovery — unlocks memory/Drive/GitHub tools into later steps. */
   toolSearch: "tool_search",
@@ -33,6 +44,16 @@ export const TOOL_NAMES = {
   workspaceReadFile: "workspace_read_file",
   workspaceWriteFile: "workspace_write_file",
   workspaceListFiles: "workspace_list_files",
+  generateImage: "generate_image",
+  gmailSearch: "gmail_search",
+  gmailRead: "gmail_read",
+  gmailSend: "gmail_send",
+  gmailCreateDraft: "gmail_create_draft",
+  calendarListEvents: "calendar_list_events",
+  calendarCreateEvent: "calendar_create_event",
+  calendarDeleteEvent: "calendar_delete_event",
+  contactsSearch: "contacts_search",
+  contactsCreate: "contacts_create",
 } as const;
 
 export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -256,6 +277,145 @@ export const workspaceListFilesInput = z.object({
   depth: z.number().int().min(1).max(6).optional(),
 });
 
+export const githubListIssuesInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  state: z.enum(["open", "closed", "all"]).optional(),
+});
+
+export const githubGetIssueInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  issueNumber: z.number().int().min(1),
+});
+
+export const githubListPullRequestsInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  state: z.enum(["open", "closed", "all"]).optional(),
+});
+
+export const githubGetPullRequestInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  pullNumber: z.number().int().min(1),
+});
+
+export const githubListCommitsInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  ref: z.string().optional().describe("Branch, tag, or SHA."),
+});
+
+export const githubCreateBranchInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  branchName: z.string().describe("New branch name."),
+  fromRef: z.string().optional().describe("Base branch (defaults to repo default)."),
+});
+
+export const githubCreateOrUpdateFileInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  path: z.string().describe("File path inside the repo."),
+  content: z.string().describe("Complete UTF-8 file content."),
+  commitMessage: z.string().describe("Commit message."),
+  branch: z.string().optional(),
+  expectedSha: z
+    .string()
+    .optional()
+    .describe("Blob SHA from a prior read; omit to create a new file."),
+});
+
+export const githubCreateIssueInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  title: z.string(),
+  body: z.string().optional(),
+});
+
+export const githubAddIssueCommentInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  issueNumber: z.number().int().min(1),
+  body: z.string(),
+});
+
+export const githubCreatePullRequestInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  title: z.string(),
+  head: z.string().describe("Source branch."),
+  base: z.string().describe("Target branch."),
+  body: z.string().optional(),
+  draft: z.boolean().optional(),
+});
+
+export const githubMergePullRequestInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  pullNumber: z.number().int().min(1),
+  commitTitle: z.string().optional(),
+  commitMessage: z.string().optional(),
+  mergeMethod: z.enum(["merge", "squash", "rebase"]).optional(),
+});
+
+export const gmailSearchInput = z.object({
+  query: z
+    .string()
+    .describe("Gmail search query (supports Gmail operators like from:, is:unread)."),
+  maxResults: z.number().int().min(1).max(25).optional(),
+});
+
+export const gmailReadInput = z.object({
+  messageId: z.string().describe("Message id from gmail_search."),
+});
+
+export const gmailSendInput = z.object({
+  to: z.string().describe("Recipient email address."),
+  subject: z.string(),
+  body: z.string(),
+  threadId: z.string().optional().describe("Reply within this thread."),
+});
+
+export const gmailCreateDraftInput = z.object({
+  to: z.string(),
+  subject: z.string(),
+  body: z.string(),
+  threadId: z.string().optional(),
+});
+
+export const calendarListEventsInput = z.object({
+  timeMin: z.string().optional().describe("ISO 8601 start of range."),
+  timeMax: z.string().optional().describe("ISO 8601 end of range."),
+  maxResults: z.number().int().min(1).max(50).optional(),
+});
+
+export const calendarCreateEventInput = z.object({
+  summary: z.string().describe("Event title."),
+  start: z.string().describe("ISO 8601 start datetime."),
+  end: z.string().describe("ISO 8601 end datetime."),
+  description: z.string().optional(),
+  location: z.string().optional(),
+  attendees: z.array(z.string().email()).optional(),
+  timeZone: z.string().optional().describe("IANA timezone, e.g. America/New_York."),
+});
+
+export const calendarDeleteEventInput = z.object({
+  eventId: z.string().describe("Event id from calendar_list_events."),
+});
+
+export const contactsSearchInput = z.object({
+  query: z.string().describe("Name, email, or phone fragment to search."),
+});
+
+export const contactsCreateInput = z.object({
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  emails: z.array(z.string().email()).optional(),
+  phones: z.array(z.string()).optional(),
+});
+
+export const generateImageInput = z.object({
+  prompt: z
+    .string()
+    .min(1)
+    .describe("What the image should show, described concretely."),
+  size: z
+    .enum(["square", "portrait", "landscape"])
+    .optional()
+    .describe("Aspect ratio: square (default), portrait, or landscape."),
+});
+
 export const browserActInput = z.object({
   url: z.string().url().describe("Page URL for the action."),
   action: z
@@ -319,6 +479,50 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "GitHub",
     runningLabel: "Reading repository file…",
   },
+  [TOOL_NAMES.githubListIssues]: {
+    label: "GitHub",
+    runningLabel: "Listing issues…",
+  },
+  [TOOL_NAMES.githubGetIssue]: {
+    label: "GitHub",
+    runningLabel: "Reading issue…",
+  },
+  [TOOL_NAMES.githubListPullRequests]: {
+    label: "GitHub",
+    runningLabel: "Listing pull requests…",
+  },
+  [TOOL_NAMES.githubGetPullRequest]: {
+    label: "GitHub",
+    runningLabel: "Reading pull request…",
+  },
+  [TOOL_NAMES.githubListCommits]: {
+    label: "GitHub",
+    runningLabel: "Listing commits…",
+  },
+  [TOOL_NAMES.githubCreateBranch]: {
+    label: "GitHub",
+    runningLabel: "Creating branch…",
+  },
+  [TOOL_NAMES.githubCreateOrUpdateFile]: {
+    label: "GitHub",
+    runningLabel: "Committing file…",
+  },
+  [TOOL_NAMES.githubCreateIssue]: {
+    label: "GitHub",
+    runningLabel: "Creating issue…",
+  },
+  [TOOL_NAMES.githubAddIssueComment]: {
+    label: "GitHub",
+    runningLabel: "Posting comment…",
+  },
+  [TOOL_NAMES.githubCreatePullRequest]: {
+    label: "GitHub",
+    runningLabel: "Opening pull request…",
+  },
+  [TOOL_NAMES.githubMergePullRequest]: {
+    label: "GitHub",
+    runningLabel: "Merging pull request…",
+  },
   [TOOL_NAMES.fetchUrl]: {
     label: "Fetch URL",
     runningLabel: "Fetching page…",
@@ -359,6 +563,46 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Workspace",
     runningLabel: "Listing files…",
   },
+  [TOOL_NAMES.generateImage]: {
+    label: "Image",
+    runningLabel: "Generating image…",
+  },
+  [TOOL_NAMES.gmailSearch]: {
+    label: "Gmail",
+    runningLabel: "Searching Gmail…",
+  },
+  [TOOL_NAMES.gmailRead]: {
+    label: "Gmail",
+    runningLabel: "Reading email…",
+  },
+  [TOOL_NAMES.gmailSend]: {
+    label: "Gmail",
+    runningLabel: "Sending email…",
+  },
+  [TOOL_NAMES.gmailCreateDraft]: {
+    label: "Gmail",
+    runningLabel: "Creating draft…",
+  },
+  [TOOL_NAMES.calendarListEvents]: {
+    label: "Calendar",
+    runningLabel: "Listing events…",
+  },
+  [TOOL_NAMES.calendarCreateEvent]: {
+    label: "Calendar",
+    runningLabel: "Creating event…",
+  },
+  [TOOL_NAMES.calendarDeleteEvent]: {
+    label: "Calendar",
+    runningLabel: "Deleting event…",
+  },
+  [TOOL_NAMES.contactsSearch]: {
+    label: "Contacts",
+    runningLabel: "Searching contacts…",
+  },
+  [TOOL_NAMES.contactsCreate]: {
+    label: "Contacts",
+    runningLabel: "Creating contact…",
+  },
 };
 
 export function getToolDisplay(name: string): ToolDisplay {
@@ -389,12 +633,19 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 - "browser_act": extract / fill_preview / click / submit on a page. submit always returns needs_confirmation.
 - "workspace_exec": run shell commands in an isolated per-conversation Linux workspace.
 - "workspace_read_file" / "workspace_write_file" / "workspace_list_files": inspect and edit files in that isolated workspace.
+- "generate_image": generate a bitmap image from a description. Confirms before spending — the user sees a card.
 - "tool_search": unlock optional tools (memory, Drive, GitHub) by keyword when needed.
 
 ## Optional tools (via tool_search when the session supports them; GitHub may already be unlocked if the user pasted a repo link)
 - "memory_search" / "memory_write": lasting facts about the user.
 - "drive_search" / "drive_read": the user's Google Drive when connected.
 - "github_get_repo" / "github_list_contents" / "github_read_file": repo tools (one path per read_file call; parallelize multiple files).
+- "github_list_issues" / "github_get_issue" / "github_list_pull_requests" / "github_get_pull_request" / "github_list_commits": inspect issues, PRs, and commit history.
+- "github_create_branch" / "github_create_or_update_file": code writes. Your own repos commit directly; other owners' or org repos ask first.
+- "gmail_search" / "gmail_read": the user's Gmail when connected.
+- "gmail_send" / "gmail_create_draft": sending email. In Ask mode every send waits on a card; in Auto it runs directly — the user chose that tradeoff in settings.
+- "calendar_list_events" / "calendar_create_event": the user's primary calendar. Ordinary event creation just lands; deleting always confirms.
+- "contacts_search" / "contacts_create": the user's Google contacts. Creating just lands; searching is instant.
 
 ## GitHub rule (hard)
 - github.com / owner-repo → github_* only. Never Drive/fetch_url/web_search for repo contents.

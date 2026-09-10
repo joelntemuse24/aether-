@@ -39,6 +39,9 @@ export type ChatClientData = {
   hasDrive?: boolean;
   hasGitHub?: boolean;
   hasMemory?: boolean;
+  hasGmail?: boolean;
+  hasCalendar?: boolean;
+  hasContacts?: boolean;
   driveAccessToken?: string;
   githubAccessToken?: string;
 };
@@ -136,6 +139,9 @@ export function parseChatClientData(raw: unknown): ParseChatClientDataResult {
     hasDrive: rec.hasDrive === true,
     hasGitHub: rec.hasGitHub === true,
     hasMemory: rec.hasMemory === true,
+    hasGmail: rec.hasGmail === true,
+    hasCalendar: rec.hasCalendar === true,
+    hasContacts: rec.hasContacts === true,
   };
 
   return { ok: true, data };

@@ -17,6 +17,17 @@ import {
   githubGetRepoInput,
   githubListContentsInput,
   githubReadFileInput,
+  githubListIssuesInput,
+  githubGetIssueInput,
+  githubListPullRequestsInput,
+  githubGetPullRequestInput,
+  githubListCommitsInput,
+  githubCreateBranchInput,
+  githubCreateOrUpdateFileInput,
+  githubCreateIssueInput,
+  githubAddIssueCommentInput,
+  githubCreatePullRequestInput,
+  githubMergePullRequestInput,
   fetchUrlInput,
   toolSearchInput,
   requestConfirmationInput,
@@ -26,6 +37,16 @@ import {
   workspaceReadFileInput,
   workspaceWriteFileInput,
   workspaceListFilesInput,
+  generateImageInput,
+  gmailSearchInput,
+  gmailReadInput,
+  gmailSendInput,
+  gmailCreateDraftInput,
+  calendarListEventsInput,
+  calendarCreateEventInput,
+  calendarDeleteEventInput,
+  contactsSearchInput,
+  contactsCreateInput,
 } from "@/lib/tools";
 import { verifyChecklistInput } from "@/lib/harness/verify";
 
@@ -34,6 +55,9 @@ export type HeadStartToolCapabilities = {
   hasDrive?: boolean;
   hasGitHub?: boolean;
   hasMemory?: boolean;
+  hasGmail?: boolean;
+  hasCalendar?: boolean;
+  hasContacts?: boolean;
 };
 
 export function buildHeadStartToolSchemas(
@@ -92,6 +116,11 @@ export function buildHeadStartToolSchemas(
         "List files and directories in the isolated conversation workspace.",
       inputSchema: workspaceListFilesInput,
     }),
+    [TOOL_NAMES.generateImage]: tool({
+      description:
+        "Generate a bitmap image from a text description. Returns an image artifact shown in the side panel. Each generation costs credits — the user confirms first.",
+      inputSchema: generateImageInput,
+    }),
     [TOOL_NAMES.browserNavigate]: tool({
       description:
         "Open a public URL and extract readable text (fetch mode, or Browserless when configured). Prefer for portal-like pages after the user shares a link. Not for github.com repos.",
@@ -145,6 +174,110 @@ export function buildHeadStartToolSchemas(
       description:
         "Read one text file from a GitHub repository by path (README, source, config). Pass owner/repo (or URL), a single path, optional ref. For multiple files, call this tool multiple times in parallel — never put two JSON objects in one call.",
       inputSchema: githubReadFileInput,
+    });
+    tools[TOOL_NAMES.githubListIssues] = tool({
+      description:
+        "List issues in a GitHub repository the signed-in user can access.",
+      inputSchema: githubListIssuesInput,
+    });
+    tools[TOOL_NAMES.githubGetIssue] = tool({
+      description: "Read one GitHub issue with its body and labels.",
+      inputSchema: githubGetIssueInput,
+    });
+    tools[TOOL_NAMES.githubListPullRequests] = tool({
+      description: "List pull requests in a GitHub repository.",
+      inputSchema: githubListPullRequestsInput,
+    });
+    tools[TOOL_NAMES.githubGetPullRequest] = tool({
+      description:
+        "Read one GitHub pull request: branch, base, body, changed files count.",
+      inputSchema: githubGetPullRequestInput,
+    });
+    tools[TOOL_NAMES.githubListCommits] = tool({
+      description:
+        "List recent commits on a GitHub repository branch or ref.",
+      inputSchema: githubListCommitsInput,
+    });
+    tools[TOOL_NAMES.githubCreateBranch] = tool({
+      description:
+        "Create a new branch in a GitHub repository. Writes to repos the connected user owns run directly; writes to other owners' or organization repos require confirmation.",
+      inputSchema: githubCreateBranchInput,
+    });
+    tools[TOOL_NAMES.githubCreateOrUpdateFile] = tool({
+      description:
+        "Create or replace one file in a GitHub repository with a commit. Pass expectedSha from a prior read when updating an existing file.",
+      inputSchema: githubCreateOrUpdateFileInput,
+    });
+    tools[TOOL_NAMES.githubCreateIssue] = tool({
+      description:
+        "Open a new GitHub issue. Always asks for confirmation first — it is visible to others.",
+      inputSchema: githubCreateIssueInput,
+    });
+    tools[TOOL_NAMES.githubAddIssueComment] = tool({
+      description:
+        "Post a comment on a GitHub issue or pull request. Always asks for confirmation first.",
+      inputSchema: githubAddIssueCommentInput,
+    });
+    tools[TOOL_NAMES.githubCreatePullRequest] = tool({
+      description:
+        "Open a new GitHub pull request. Always asks for confirmation first.",
+      inputSchema: githubCreatePullRequestInput,
+    });
+    tools[TOOL_NAMES.githubMergePullRequest] = tool({
+      description:
+        "Merge a GitHub pull request. Always asks for confirmation first.",
+      inputSchema: githubMergePullRequestInput,
+    });
+  }
+
+  if (ctx.hasGmail) {
+    tools[TOOL_NAMES.gmailSearch] = tool({
+      description:
+        "Search the user's Gmail. Supports Gmail operators (from:, is:unread, subject:).",
+      inputSchema: gmailSearchInput,
+    });
+    tools[TOOL_NAMES.gmailRead] = tool({
+      description: "Read one email by message id from gmail_search.",
+      inputSchema: gmailReadInput,
+    });
+    tools[TOOL_NAMES.gmailSend] = tool({
+      description:
+        "Send an email from the user's Gmail. In Ask mode the user confirms first; in Auto it sends directly.",
+      inputSchema: gmailSendInput,
+    });
+    tools[TOOL_NAMES.gmailCreateDraft] = tool({
+      description:
+        "Create a Gmail draft without sending. Use when the user wants to review before sending.",
+      inputSchema: gmailCreateDraftInput,
+    });
+  }
+
+  if (ctx.hasCalendar) {
+    tools[TOOL_NAMES.calendarListEvents] = tool({
+      description:
+        "List upcoming events on the user's primary calendar.",
+      inputSchema: calendarListEventsInput,
+    });
+    tools[TOOL_NAMES.calendarCreateEvent] = tool({
+      description:
+        "Create an event on the user's primary calendar. Ordinary creation lands directly; deletion always confirms.",
+      inputSchema: calendarCreateEventInput,
+    });
+    tools[TOOL_NAMES.calendarDeleteEvent] = tool({
+      description:
+        "Delete a calendar event. Always asks for confirmation first.",
+      inputSchema: calendarDeleteEventInput,
+    });
+  }
+
+  if (ctx.hasContacts) {
+    tools[TOOL_NAMES.contactsSearch] = tool({
+      description: "Search the user's Google contacts.",
+      inputSchema: contactsSearchInput,
+    });
+    tools[TOOL_NAMES.contactsCreate] = tool({
+      description: "Create a Google contact.",
+      inputSchema: contactsCreateInput,
     });
   }
 

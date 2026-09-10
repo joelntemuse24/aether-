@@ -189,6 +189,34 @@ describe("executeAetherTool", () => {
     assert.equal((result as { stdout?: string }).stdout, "hello");
   });
 
+  it("returns an image confirmation card in Ask when image generation is not approved yet", async () => {
+    let generated = false;
+    const result = await executeAetherTool({
+      name: "generate_image",
+      args: { prompt: "a calm cream workspace" },
+      ctx: baseCtx({
+        approvalMode: "ask",
+        deps: {
+          generateImage: async () => {
+            generated = true;
+            return { ok: true as const, kind: "image" as const, title: "x", content: "y", mime: "image/png" };
+          },
+          createConfirmation: async (request) => ({
+            ok: true as const,
+            needs_confirmation: true as const,
+            confirmation_id: "img-1",
+            action: request.action,
+            title: request.title,
+            preview: request.preview,
+            instruction: "wait",
+          }),
+        },
+      }),
+    });
+    assert.equal(generated, false);
+    assert.equal(result.needs_confirmation, true);
+  });
+
   it("keeps Drive/GitHub unavailable when the connector is off", async () => {
     const drive = await executeAetherTool({
       name: "drive_search",
