@@ -197,6 +197,48 @@
   color: var(--error-text);
 }
 
+/* Collapsed source tray: one line — count + first hosts, expands on click. */
+.aether-source-tray {
+  margin: 0.7rem 0 0.15rem;
+  font-family: var(--font-ui), Inter, system-ui, sans-serif;
+  font-size: 11px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.aether-source-tray summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted);
+}
+
+.aether-source-tray summary::-webkit-details-marker {
+  display: none;
+}
+
+.aether-source-tray__count {
+  color: var(--accent);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.aether-source-tray__hosts {
+  display: inline-flex;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.aether-source-tray__host {
+  color: var(--muted);
+}
+
+.aether-source-tray[open] summary {
+  margin-bottom: 4px;
+}
+
 .aether-inline-sources {
   display: flex;
   flex-wrap: wrap;

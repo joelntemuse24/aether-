@@ -238,9 +238,23 @@ export const MessageSourceCards: FC = () => {
   const hits = collectWebSearchHits(parts);
   if (hits.length === 0) return null;
 
+  // One compact row: hosts as citation chips, expandable to full titles.
   return (
-    <ul className="aether-inline-sources" aria-label="Sources">
-      {hits.map((hit, i) => {
+    <details className="aether-source-tray">
+      <summary aria-label="Sources">
+        <span className="aether-source-tray__count">
+          {hits.length} {hits.length === 1 ? "source" : "sources"}
+        </span>
+        <span className="aether-source-tray__hosts">
+          {hits.slice(0, 4).map((hit, i) => (
+            <span key={`host:${i}`} className="aether-source-tray__host">
+              {hostLabel(hit.url) ?? hit.title.slice(0, 24)}
+            </span>
+          ))}
+        </span>
+      </summary>
+      <ul className="aether-inline-sources" aria-label="Sources">
+        {hits.map((hit, i) => {
         const host = hostLabel(hit.url);
         const inner = (
           <>
@@ -267,7 +281,8 @@ export const MessageSourceCards: FC = () => {
           </li>
         );
       })}
-    </ul>
+      </ul>
+    </details>
   );
 };
 
