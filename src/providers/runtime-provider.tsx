@@ -627,7 +627,18 @@ function useChatThreadRuntime() {
     };
 
     hydrate(readThreadStorageKey(aui) ?? readThreadIdFromLocation());
-    const onSwitch = () => {
+    const onSwitch = (event: Event) => {
+      const detail = (event as CustomEvent<{ newChat?: boolean }>).detail;
+      if (detail?.newChat) {
+        loadedKeyRef.current = null;
+        storedCountRef.current = 0;
+        threadIdRef.current = undefined;
+        persistedKeyRef.current = undefined;
+        messagesRef.current = [];
+        setMessages([]);
+        setHistoryReady(true);
+        return;
+      }
       hydrate(readThreadStorageKey(aui) ?? readThreadIdFromLocation());
     };
     window.addEventListener("aether:thread-switched", onSwitch);
