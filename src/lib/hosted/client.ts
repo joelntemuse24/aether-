@@ -36,7 +36,7 @@ export function createHostedLanguageModel(
   return createFailoverLanguageModel(candidates);
 }
 
-/** Ordered candidates: Fast = OpenRouter Nemotron; Expert = Buzz Luna + failover. */
+/** Ordered candidates: Fast Ultra→Lightning; Expert Luna→Sol→DeepSeek. */
 export function listHostedCandidates(
   modelId: string,
   origin?: string | null,

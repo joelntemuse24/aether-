@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { resolveHostedRoute } from "./router";
 import {
+  EXPERT_BUZZ_FALLBACK_MODEL,
+  EXPERT_OPENROUTER_FALLBACK_MODEL,
   EXPERT_PRIMARY_MODEL,
+  FAST_OPENROUTER_FALLBACK_MODEL,
   FAST_OPENROUTER_MODEL,
   hostedCloudRouteAdvertisement,
   resolveCloudTierModel,
@@ -42,6 +45,13 @@ function withBuzzAndOpenRouter<T>(fn: () => T): T {
   );
 }
 
+function hopIds(route: NonNullable<ReturnType<typeof resolveHostedRoute>>) {
+  return [route.primary, ...route.fallbacks].map((r) => ({
+    upstream: r.upstream.id,
+    model: r.modelId,
+  }));
+}
+
 describe("resolveCloudTierModel", () => {
   it("maps Fast to the paid OpenRouter Nemotron Ultra slug", () => {
     assert.equal(resolveCloudTierModel("fast"), FAST_OPENROUTER_MODEL);
@@ -56,11 +66,25 @@ describe("resolveCloudTierModel", () => {
 });
 
 describe("hostedCloudRouteAdvertisement", () => {
-  it("advertises Fast as the Cloud default and Expert as catalog Luna", () => {
+  it("advertises Fast/Expert primaries and the confirmed failover order", () => {
     const advertised = hostedCloudRouteAdvertisement();
     assert.equal(advertised.defaultModel, FAST_OPENROUTER_MODEL);
     assert.equal(advertised.routes.fast, FAST_OPENROUTER_MODEL);
     assert.equal(advertised.routes.expert, "openai/gpt-5.6-luna");
+    assert.deepEqual(advertised.failover.fast, [
+      "nvidia/nemotron-3-ultra-550b-a55b",
+      "nvidia/nemotron-3.5-lightning",
+    ]);
+    assert.deepEqual(advertised.failover.expert, [
+      "openai/gpt-5.6-luna",
+      "openai/gpt-5.6-sol",
+      "deepseek/deepseek-v4-flash",
+    ]);
+    assert.doesNotMatch(advertised.failover.fast.join(" "), /:free/);
+    assert.doesNotMatch(
+      advertised.failover.expert.join(" "),
+      /openai\/gpt-5\.6-luna$/,
+    );
   });
 });
 
@@ -87,33 +111,52 @@ describe("resolveEffectiveSpeedTier", () => {
 });
 
 describe("resolveHostedRoute speed tiers", () => {
-  it("Fast routes to OpenRouter Nemotron Ultra even when the client sent Luna", () => {
+  it("Fast is OpenRouter Ultra then paid Lightning, never Buzz", () => {
     withBuzzAndOpenRouter(() => {
       const route = resolveHostedRoute("gpt-5.6-luna", "fast");
       assert.ok(route, "route should resolve when OpenRouter is configured");
-      assert.equal(route.primary.upstream.id, "openrouter");
-      assert.equal(route.primary.modelId, FAST_OPENROUTER_MODEL);
+      assert.deepEqual(hopIds(route), [
+        { upstream: "openrouter", model: FAST_OPENROUTER_MODEL },
+        { upstream: "openrouter", model: FAST_OPENROUTER_FALLBACK_MODEL },
+      ]);
+      assert.equal(FAST_OPENROUTER_FALLBACK_MODEL, "nvidia/nemotron-3.5-lightning");
+      assert.doesNotMatch(FAST_OPENROUTER_FALLBACK_MODEL, /:free/);
+      assert.equal(
+        hopIds(route).some((h) => h.upstream === "gpt" || h.upstream === "claude"),
+        false,
+      );
     });
   });
 
-  it("Fast overrides leftover catalog ids", () => {
+  it("Fast overrides leftover catalog ids and stays on OpenRouter", () => {
     withBuzzAndOpenRouter(() => {
       const route = resolveHostedRoute("moonshotai/kimi-k3", "fast");
       assert.ok(route);
-      assert.equal(route.primary.upstream.id, "openrouter");
-      assert.equal(route.primary.modelId, FAST_OPENROUTER_MODEL);
+      assert.deepEqual(hopIds(route).map((h) => h.model), [
+        FAST_OPENROUTER_MODEL,
+        FAST_OPENROUTER_FALLBACK_MODEL,
+      ]);
     });
   });
 
-  it("Expert routes to Buzz GPT Luna even when the client sent a default catalog id", () => {
+  it("Expert is Buzz Luna, then Buzz Sol, then OpenRouter DeepSeek V4 Flash", () => {
     withBuzzAndOpenRouter(() => {
       const route = resolveHostedRoute("openai/gpt-5.5", "expert");
       assert.ok(route);
-      assert.equal(route.primary.upstream.id, "gpt");
-      assert.equal(route.primary.modelId, EXPERT_PRIMARY_MODEL);
-      const last = [route.primary, ...route.fallbacks].at(-1);
-      assert.equal(last?.upstream.id, "openrouter");
-      assert.equal(last?.modelId, "openai/gpt-5.6-luna");
+      assert.deepEqual(hopIds(route), [
+        { upstream: "gpt", model: EXPERT_PRIMARY_MODEL },
+        { upstream: "gpt", model: EXPERT_BUZZ_FALLBACK_MODEL },
+        { upstream: "openrouter", model: EXPERT_OPENROUTER_FALLBACK_MODEL },
+      ]);
+      assert.equal(EXPERT_BUZZ_FALLBACK_MODEL, "gpt-5.6-sol");
+      assert.equal(
+        EXPERT_OPENROUTER_FALLBACK_MODEL,
+        "deepseek/deepseek-v4-flash",
+      );
+      assert.equal(
+        hopIds(route).some((h) => h.model === "openai/gpt-5.6-luna"),
+        false,
+      );
     });
   });
 
@@ -126,7 +169,7 @@ describe("resolveHostedRoute speed tiers", () => {
     });
   });
 
-  it("Expert without Buzz falls back to OpenRouter Luna", () => {
+  it("Expert without Buzz goes to OpenRouter DeepSeek, not OpenRouter Luna", () => {
     withEnv(
       {
         AETHER_HOSTED_BUZZ_API_KEY: undefined,
@@ -140,13 +183,17 @@ describe("resolveHostedRoute speed tiers", () => {
       () => {
         const route = resolveHostedRoute("openai/gpt-5.5", "expert");
         assert.ok(route);
-        assert.equal(route.primary.upstream.id, "openrouter");
-        assert.equal(route.primary.modelId, "openai/gpt-5.6-luna");
+        assert.deepEqual(hopIds(route), [
+          {
+            upstream: "openrouter",
+            model: EXPERT_OPENROUTER_FALLBACK_MODEL,
+          },
+        ]);
       },
     );
   });
 
-  it("Fast without OpenRouter last-resorts to Buzz Luna so Cloud still answers", () => {
+  it("Fast without OpenRouter does not fall back to Buzz", () => {
     withEnv(
       {
         AETHER_HOSTED_BUZZ_API_KEY: "test-key",
@@ -155,9 +202,7 @@ describe("resolveHostedRoute speed tiers", () => {
       },
       () => {
         const route = resolveHostedRoute("openai/gpt-5.5", "fast");
-        assert.ok(route);
-        assert.equal(route.primary.upstream.id, "gpt");
-        assert.equal(route.primary.modelId, EXPERT_PRIMARY_MODEL);
+        assert.equal(route, null);
       },
     );
   });

@@ -1,15 +1,14 @@
 /**
  * Fast / Expert speed tiers — Cloud think-depth / model route.
  *
- * Fast (default): OpenRouter Nemotron Ultra.
- * Expert: Buzz GPT path, Luna.
+ * Fast (default): OpenRouter Nemotron Ultra → paid Lightning.
+ * Expert: Buzz GPT Luna → Buzz GPT Sol → OpenRouter DeepSeek V4 Flash.
  *
  * Fast/Expert is not a tools gate (Ask/Auto lives in Settings). Product UI
  * must never name vendors.
  *
  * OpenRouter has no literal "Nemotron 3.5 Ultra" slug. Closest paid Ultra:
- * `nvidia/nemotron-3-ultra-550b-a55b` (Nemotron 3 Ultra 550B). The 3.5 line
- * on OpenRouter is Lightning / Content Safety, not Ultra.
+ * `nvidia/nemotron-3-ultra-550b-a55b`. Fast's 3.5 hop is Lightning, not Ultra.
  */
 
 export type SpeedTier = "fast" | "expert";
@@ -20,11 +19,26 @@ export type SpeedTier = "fast" | "expert";
  */
 export const FAST_OPENROUTER_MODEL = "nvidia/nemotron-3-ultra-550b-a55b";
 
+/** Paid OpenRouter Nemotron 3.5 Lightning — Fast hop 2 if Ultra fails. */
+export const FAST_OPENROUTER_FALLBACK_MODEL = "nvidia/nemotron-3.5-lightning";
+
 /** Expert default: paid Buzz ChatGPT group, Luna. */
 export const EXPERT_PRIMARY_MODEL = "gpt-5.6-luna";
 
-/** Catalog / status form of the Expert model. */
+/**
+ * Expert hop 2 on the same Buzz GPT upstream. "Soul" in product talk is Sol.
+ * Gateway id matches `src/app/api/conversations/title/route.ts` (`gpt-5.6-sol`).
+ */
+export const EXPERT_BUZZ_FALLBACK_MODEL = "gpt-5.6-sol";
+
+/** Expert hop 3: OpenRouter DeepSeek V4 Flash (not OpenRouter Luna). */
+export const EXPERT_OPENROUTER_FALLBACK_MODEL = "deepseek/deepseek-v4-flash";
+
+/** Catalog / status form of the Expert primary. */
 export const EXPERT_CATALOG_MODEL = "openai/gpt-5.6-luna";
+
+/** Catalog / status form of Expert Sol. */
+export const EXPERT_SOL_CATALOG_MODEL = "openai/gpt-5.6-sol";
 
 /** Short-context cap for Luna — beyond this, long-ctx is required. */
 export const EXPERT_SHORT_CONTEXT_TOKENS = 272_000;
@@ -46,12 +60,21 @@ export function resolveCloudTierModel(speedTier: SpeedTier): string {
 export function hostedCloudRouteAdvertisement(): {
   defaultModel: string;
   routes: { fast: string; expert: string };
+  failover: { fast: string[]; expert: string[] };
 } {
   return {
     defaultModel: FAST_OPENROUTER_MODEL,
     routes: {
       fast: FAST_OPENROUTER_MODEL,
       expert: EXPERT_CATALOG_MODEL,
+    },
+    failover: {
+      fast: [FAST_OPENROUTER_MODEL, FAST_OPENROUTER_FALLBACK_MODEL],
+      expert: [
+        EXPERT_CATALOG_MODEL,
+        EXPERT_SOL_CATALOG_MODEL,
+        EXPERT_OPENROUTER_FALLBACK_MODEL,
+      ],
     },
   };
 }

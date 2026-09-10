@@ -51,6 +51,7 @@ export async function GET() {
     },
     defaultModel,
     routes: advertised.routes,
+    failover: advertised.failover,
     models: models.map((m) => ({
       id: m.id,
       label: m.label,

@@ -6,7 +6,10 @@ import {
   type UpstreamConfig,
 } from "./config";
 import {
+  EXPERT_BUZZ_FALLBACK_MODEL,
+  EXPERT_OPENROUTER_FALLBACK_MODEL,
   EXPERT_PRIMARY_MODEL,
+  FAST_OPENROUTER_FALLBACK_MODEL,
   FAST_OPENROUTER_MODEL,
   type SpeedTier,
 } from "./speed-tiers";
@@ -82,8 +85,8 @@ function buzzGptUpstream(): ReturnType<typeof getGptUpstream> | null {
 /**
  * Resolve Cloud Fast/Expert to primary + failover chain.
  *
- * Fast → OpenRouter Nemotron Ultra (client catalog id is ignored).
- * Expert → Buzz GPT Luna, then relays, then OpenRouter Luna.
+ * Fast → OpenRouter Ultra → OpenRouter Lightning (no Buzz).
+ * Expert → Buzz Luna → Buzz Sol → [optional relays] → OpenRouter DeepSeek.
  *
  * `modelId` is required for call-site compat but does not select the Cloud
  * route; Fast/Expert is the product control after the catalog picker was
@@ -109,26 +112,20 @@ export function resolveHostedRoute(
   const seen = new Set<string>();
 
   if (speedTier === "expert") {
-    const expertGatewayId = toGatewayModelId(EXPERT_PRIMARY_MODEL);
-    if (gpt.configured) {
-      pushUnique(chain, { upstream: gpt, modelId: expertGatewayId }, seen);
-    } else if (buzz) {
-      pushUnique(chain, { upstream: buzz, modelId: expertGatewayId }, seen);
+    const lunaId = toGatewayModelId(EXPERT_PRIMARY_MODEL);
+    const solId = toGatewayModelId(EXPERT_BUZZ_FALLBACK_MODEL);
+    const specialty = gpt.configured ? gpt : buzz;
+    if (specialty) {
+      pushUnique(chain, { upstream: specialty, modelId: lunaId }, seen);
+      pushUnique(chain, { upstream: specialty, modelId: solId }, seen);
     }
-    for (const relay of relayRoutes(expertGatewayId)) {
+    for (const relay of relayRoutes(lunaId)) {
       pushUnique(chain, relay, seen);
     }
-    pushUnique(chain, openrouterRoute(EXPERT_PRIMARY_MODEL), seen);
+    pushUnique(chain, openrouterRoute(EXPERT_OPENROUTER_FALLBACK_MODEL), seen);
   } else {
     pushUnique(chain, openrouterRoute(FAST_OPENROUTER_MODEL), seen);
-    // OpenRouter missing or saturated: keep Cloud answering via Buzz Luna.
-    if (buzz) {
-      pushUnique(
-        chain,
-        { upstream: buzz, modelId: toGatewayModelId(EXPERT_PRIMARY_MODEL) },
-        seen,
-      );
-    }
+    pushUnique(chain, openrouterRoute(FAST_OPENROUTER_FALLBACK_MODEL), seen);
   }
 
   if (chain.length === 0) return null;
