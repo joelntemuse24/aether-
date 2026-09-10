@@ -53,14 +53,18 @@ export function getOpenRouterUpstream(): UpstreamConfig {
 /**
  * Shared BUZZ credentials. One key covers Claude + ChatGPT groups on the token.
  * Prefer AETHER_HOSTED_BUZZ_*; accept legacy CLAUDE_* aliases.
+ * Also accepts the generic ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN pair,
+ * which some operators provision for the same gateway.
  */
 function getBuzzCredentials(): { baseURL: string; apiKey: string } {
   const apiKey =
     env("AETHER_HOSTED_BUZZ_API_KEY") ||
-    env("AETHER_HOSTED_CLAUDE_API_KEY");
+    env("AETHER_HOSTED_CLAUDE_API_KEY") ||
+    env("ANTHROPIC_AUTH_TOKEN");
   const baseURL = normalizeBaseURL(
     env("AETHER_HOSTED_BUZZ_BASE_URL") ||
       env("AETHER_HOSTED_CLAUDE_BASE_URL") ||
+      env("ANTHROPIC_BASE_URL") ||
       DEFAULT_BUZZ_BASE,
   );
   return { baseURL, apiKey };
