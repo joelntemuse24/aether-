@@ -103,7 +103,7 @@ describe("confirmation persist", () => {
     assert.equal(confirmationReplayPayload({}), null);
   });
 
-  it("rejects another user's confirmation", async () => {
+  it("rejects another user's confirmation, including after resolution", async () => {
     const repo = memoryRepo();
     setConfirmationRepository(repo);
     try {
@@ -115,10 +115,107 @@ describe("confirmation persist", () => {
         },
         "owner",
       );
-      const result = await resolveConfirmation(created.confirmation_id, true, "intruder");
-      assert.equal(result.ok, false);
+      const pendingResult = await resolveConfirmation(
+        created.confirmation_id,
+        true,
+        "intruder",
+      );
+      assert.equal(pendingResult.ok, false);
+
+      const ownerResult = await resolveConfirmation(
+        created.confirmation_id,
+        true,
+        "owner",
+      );
+      assert.equal(ownerResult.ok, true);
+      const resolvedResult = await resolveConfirmation(
+        created.confirmation_id,
+        true,
+        "intruder",
+      );
+      assert.equal(resolvedResult.ok, false);
     } finally {
       setConfirmationRepository(null);
     }
+  });
+
+  it("rejects unauthenticated resolution of an owned confirmation", async () => {
+    const created = await createConfirmationRequest(
+      {
+        action: "other_side_effect",
+        title: "Act",
+        preview: "Do the thing.",
+      },
+      "owner",
+    );
+    const result = await resolveConfirmation(created.confirmation_id, true, null);
+    assert.equal(result.ok, false);
+  });
+});
+
+describe("confirmation replay signing", () => {
+  it("signs replay payloads and binds them to the confirmation and user", async () => {
+    const { verifyConfirmationReplaySignature } = await import("./confirmation");
+    const created = await createConfirmationRequest(
+      {
+        action: "other_side_effect",
+        title: "Save memory",
+        preview: "Save it.",
+        payload: { tool: "memory_write", args: { title: "x", body: "y" } },
+      },
+      "user-1",
+    );
+    const payload = created.payload as Record<string, unknown>;
+    assert.equal(typeof payload.sig, "string");
+    assert.equal(
+      verifyConfirmationReplaySignature({
+        confirmationId: created.confirmation_id,
+        payload,
+        userId: "user-1",
+      }),
+      true,
+    );
+    assert.equal(
+      verifyConfirmationReplaySignature({
+        confirmationId: created.confirmation_id,
+        payload,
+        userId: "intruder",
+      }),
+      false,
+    );
+  });
+
+  it("rejects unsigned and tampered replay payloads", async () => {
+    const { verifyConfirmationReplaySignature } = await import("./confirmation");
+    assert.equal(
+      verifyConfirmationReplaySignature({
+        confirmationId: "made-up",
+        payload: { tool: "memory_write", args: { title: "x", body: "y" } },
+        userId: "user-1",
+      }),
+      false,
+    );
+
+    const created = await createConfirmationRequest(
+      {
+        action: "other_side_effect",
+        title: "Save memory",
+        preview: "Save it.",
+        payload: { tool: "memory_write", args: { title: "x", body: "y" } },
+      },
+      "user-1",
+    );
+    const tampered = {
+      ...(created.payload as Record<string, unknown>),
+      args: { title: "changed", body: "changed" },
+    };
+    assert.equal(
+      verifyConfirmationReplaySignature({
+        confirmationId: created.confirmation_id,
+        payload: tampered,
+        userId: "user-1",
+      }),
+      false,
+    );
   });
 });

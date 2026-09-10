@@ -7,7 +7,9 @@
  * confirm cards survive refresh (same /api/harness/confirm contract).
  */
 
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { getAuthSecretString } from "@/lib/auth-secret";
 
 export const CONFIRMABLE_ACTIONS = [
   "submit_form",
@@ -60,6 +62,51 @@ export function confirmationReplayPayload(raw: unknown): {
     args: rec.args ?? {},
     projectId: typeof rec.projectId === "string" ? rec.projectId : null,
   };
+}
+
+export function signConfirmationReplayPayload(input: {
+  confirmationId: string;
+  tool: string;
+  args: unknown;
+  projectId: string | null;
+  userId: string | null;
+}): string {
+  const mac = createHmac("sha256", getAuthSecretString());
+  mac.update(
+    JSON.stringify([
+      "aether-confirm-v1",
+      input.confirmationId,
+      input.tool,
+      input.args ?? {},
+      input.projectId,
+      input.userId,
+    ]),
+  );
+  return mac.digest("base64url");
+}
+
+export function verifyConfirmationReplaySignature(input: {
+  confirmationId: string;
+  payload: Record<string, unknown>;
+  userId: string | null;
+}): boolean {
+  const replay = confirmationReplayPayload(input.payload);
+  const signature = input.payload.sig;
+  if (!replay || typeof signature !== "string" || !signature) return false;
+
+  const expected = signConfirmationReplayPayload({
+    confirmationId: input.confirmationId,
+    tool: replay.tool,
+    args: replay.args,
+    projectId: replay.projectId,
+    userId: input.userId,
+  });
+  const expectedBytes = Buffer.from(expected);
+  const signatureBytes = Buffer.from(signature);
+  return (
+    expectedBytes.length === signatureBytes.length &&
+    timingSafeEqual(expectedBytes, signatureBytes)
+  );
 }
 
 export type ConfirmationResolved = {
@@ -135,9 +182,26 @@ export async function createConfirmationRequest(
 ): Promise<ConfirmationToolResult> {
   gc();
   const confirmation_id = crypto.randomUUID();
+  let storedRequest = request;
+  const replay = confirmationReplayPayload(request.payload);
+  if (replay && request.payload) {
+    storedRequest = {
+      ...request,
+      payload: {
+        ...request.payload,
+        sig: signConfirmationReplayPayload({
+          confirmationId: confirmation_id,
+          tool: replay.tool,
+          args: replay.args,
+          projectId: replay.projectId,
+          userId: userId ?? null,
+        }),
+      },
+    };
+  }
   const row: PendingConfirmationRow = {
     id: confirmation_id,
-    request,
+    request: storedRequest,
     userId: userId ?? null,
     conversationId: extras?.conversationId ?? null,
     runId: extras?.runId ?? null,
@@ -177,6 +241,9 @@ export async function resolveConfirmation(
   if (!row) {
     return { ok: false, error: "Confirmation expired or not found." };
   }
+  if (row.userId && row.userId !== userId) {
+    return { ok: false, error: "Confirmation belongs to another session." };
+  }
   if (row.status !== "pending") {
     return {
       ok: true,
@@ -185,12 +252,9 @@ export async function resolveConfirmation(
       approved: row.status === "approved",
       note:
         row.status === "approved"
-          ? "User already approved. You may proceed with the described action carefully."
+          ? "User already approved. The action will not run again."
           : "User already declined. Do not perform the action; offer an alternative.",
     };
-  }
-  if (row.userId && userId && row.userId !== userId) {
-    return { ok: false, error: "Confirmation belongs to another session." };
   }
   const next: PendingConfirmationRow = {
     ...row,
