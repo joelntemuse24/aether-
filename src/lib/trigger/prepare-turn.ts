@@ -83,12 +83,17 @@ export async function prepareDurableChatTurn(input: {
   const parsed = parseHarnessFields(data.harness);
   const timeBudget = resolveTurnTimeBudget(data.harness, userText);
 
-  // Speed tier: Expert for deep reasoning or vision attachments; Fast default.
+  // Speed tier: user's picker choice is the base; deep reasoning or a vision
+  // attachment forces Expert (premium/vision models) as a floor.
   const hasImageAttachment = (data.attachments ?? []).some(
     (a) => a.mime?.startsWith("image/"),
   );
+  const requestedTier: SpeedTier =
+    data.speedTier === "expert" ? "expert" : "fast";
   const speedTier: SpeedTier =
-    parsed.harnessDepth === "deep" || hasImageAttachment ? "expert" : "fast";
+    parsed.harnessDepth === "deep" || hasImageAttachment
+      ? "expert"
+      : requestedTier;
 
   let memoryBlock = "";
   let projectBlock = "";

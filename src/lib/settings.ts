@@ -44,6 +44,8 @@ export type AppSettings = {
    * Destructive actions always confirm.
    */
   toolApprovalMode: ToolApprovalMode;
+  /** Speed tier: fast (free cascade) or expert (premium models). */
+  speedTier: "fast" | "expert";
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -62,6 +64,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   enableTools: true,
   voice: "literary",
   toolApprovalMode: DEFAULT_TOOL_APPROVAL_MODE,
+  speedTier: "fast",
 };
 
 export function loadSettings(): AppSettings {
@@ -81,6 +84,9 @@ export function loadSettings(): AppSettings {
       next.model = DEFAULT_HOSTED_MODEL;
     }
     next.toolApprovalMode = parseToolApprovalMode(next.toolApprovalMode);
+    if (next.speedTier !== "fast" && next.speedTier !== "expert") {
+      next.speedTier = "fast";
+    }
     return next;
   } catch {
     return { ...DEFAULT_SETTINGS };

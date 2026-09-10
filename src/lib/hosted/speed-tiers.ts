@@ -17,7 +17,7 @@ export const FAST_MODEL_CASCADE = [
   "deepseek-v4-flash-free",
   "deepseek-v4-flash-vision-exp-free",
   "hy3-free",
-  "qwen-3.8-free",
+  "qwen3.8-flash-free",
   "mimo-v2.5-free",
   "buzz-free",
 ] as const;

@@ -21,6 +21,7 @@ export type ChatClientData = {
   model: string;
   toolsEnabled?: boolean;
   approvalMode?: ToolApprovalMode;
+  speedTier?: "fast" | "expert";
   provider?: ProviderId;
   apiKey?: string;
   baseURL?: string;
@@ -117,6 +118,7 @@ export function parseChatClientData(raw: unknown): ParseChatClientDataResult {
     model,
     toolsEnabled: rec.toolsEnabled !== false,
     approvalMode: parseToolApprovalMode(rec.approvalMode),
+    speedTier: rec.speedTier === "expert" ? "expert" : "fast",
     provider,
     apiKey: accessMode === "byok" ? apiKey : undefined,
     baseURL: str(rec.baseURL).trim() || undefined,
@@ -218,6 +220,7 @@ export function buildBrowserChatClientData(input: {
     model: resolveModel(input.settings),
     toolsEnabled: input.settings.enableTools,
     approvalMode: parseToolApprovalMode(input.settings.toolApprovalMode),
+    speedTier: input.settings.speedTier === "expert" ? "expert" : "fast",
     origin: input.origin,
     system: input.system,
     harness: input.harness ?? undefined,
