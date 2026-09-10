@@ -474,7 +474,6 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     rememberSessionArtifact,
     artifact: openPanelArtifact,
     open,
-    drafting,
     setDrafting,
   } = useArtifact();
   const running = usePartRunning(part);

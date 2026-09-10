@@ -14,6 +14,7 @@ import { useArtifact } from "@/providers/artifact-provider";
 import { useAttachments } from "@/providers/attachments-provider";
 import { useDrive } from "@/providers/drive-provider";
 import { cn } from "@/lib/utils";
+import { ArtifactDraftingPeek } from "@/components/layout/artifact-drafting-peek";
 
 // Lazy-loaded: pulls in highlight.js + marked only when an artifact is shown.
 const ArtifactPanel = dynamic(
