@@ -13,6 +13,10 @@ import { getValidGitHubAccessToken } from "@/lib/github-session";
 import { isCloudDbConfigured } from "@/lib/db";
 import { isHostedConfigured } from "@/lib/hosted/config";
 import { isHostedChatAvailable } from "@/lib/hosted/availability";
+import {
+  resolveCloudTierModel,
+  resolveEffectiveSpeedTier,
+} from "@/lib/hosted/speed-tiers";
 import { shouldProxyChatToHermes } from "@/lib/hermes/config";
 import { proxyChatToHermes } from "@/lib/hermes/proxy-chat";
 import { parseToolApprovalMode } from "@/lib/hermes/tool-approval";
@@ -204,16 +208,29 @@ export async function POST(req: Request) {
       approvalMode,
     });
     const { system, harnessDepth, budget } = composed;
-    const requestedModel =
-      (typeof body.model === "string" && body.model) || headerModel;
-
     const attachments = Array.isArray(body.attachments)
       ? (body.attachments as IncomingAttachment[])
       : [];
     const textPrefix =
       typeof body.textPrefix === "string" ? body.textPrefix : undefined;
+    const headerSpeedTier = getHeader(req, "x-speed-tier");
+    const bodySpeedTier =
+      typeof body.speedTier === "string" ? body.speedTier : headerSpeedTier;
+    const hasImageAttachment = attachments.some((a) =>
+      String(a.mime ?? "").startsWith("image/"),
+    );
+    const speedTier = resolveEffectiveSpeedTier({
+      requested: bodySpeedTier,
+      harnessDepth,
+      hasImageAttachment,
+    });
+    const incomingModel =
+      (typeof body.model === "string" && body.model) || headerModel;
+    const requestedModel = hosted
+      ? resolveCloudTierModel(speedTier)
+      : incomingModel;
 
-    if (!requestedModel) {
+    if (!incomingModel && !hosted) {
       return new Response(
         JSON.stringify({ error: "No model selected. Pick a model from the dropdown." }),
         { status: 400, headers: { "Content-Type": "application/json" } },
@@ -336,6 +353,7 @@ export async function POST(req: Request) {
     return streamLegacyLocalChat({
       hosted,
       requestedModel,
+      speedTier,
       provider,
       apiKey,
       baseURL,

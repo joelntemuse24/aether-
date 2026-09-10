@@ -44,7 +44,7 @@ export type AppSettings = {
    * Destructive actions always confirm.
    */
   toolApprovalMode: ToolApprovalMode;
-  /** Speed tier: fast (free cascade) or expert (premium models). */
+  /** Speed tier: Fast (OpenRouter Nemotron Ultra) or Expert (Buzz Luna). */
   speedTier: "fast" | "expert";
 };
 
@@ -144,6 +144,7 @@ export function buildChatHeaders(settings: AppSettings): Record<string, string> 
     return {
       "x-access-mode": "hosted",
       "x-model": resolveModel(settings),
+      "x-speed-tier": settings.speedTier === "expert" ? "expert" : "fast",
       "x-tools": settings.enableTools ? "1" : "0",
       "x-tool-approval-mode": parseToolApprovalMode(settings.toolApprovalMode),
     };
