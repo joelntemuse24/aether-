@@ -55,6 +55,18 @@ export function resolveAvailableToolNames(ctx: {
     TOOL_NAMES.workspaceReadFile,
     TOOL_NAMES.workspaceWriteFile,
     TOOL_NAMES.workspaceListFiles,
+    TOOL_NAMES.generateImage,
+    TOOL_NAMES.githubListIssues,
+    TOOL_NAMES.githubGetIssue,
+    TOOL_NAMES.githubListPullRequests,
+    TOOL_NAMES.githubGetPullRequest,
+    TOOL_NAMES.githubListCommits,
+    TOOL_NAMES.githubCreateBranch,
+    TOOL_NAMES.githubCreateOrUpdateFile,
+    TOOL_NAMES.githubCreateIssue,
+    TOOL_NAMES.githubAddIssueComment,
+    TOOL_NAMES.githubCreatePullRequest,
+    TOOL_NAMES.githubMergePullRequest,
   ];
   const hasMemory =
     ctx.hasMemory ?? !!(ctx.userId && isCloudDbConfigured());
@@ -164,6 +176,10 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
       ...schemas[TOOL_NAMES.workspaceListFiles],
       execute: async (input) => runAether(TOOL_NAMES.workspaceListFiles, input),
     }),
+    [TOOL_NAMES.generateImage]: tool({
+      ...schemas[TOOL_NAMES.generateImage],
+      execute: async (input) => runAether(TOOL_NAMES.generateImage, input),
+    }),
     [TOOL_NAMES.requestConfirmation]: tool({
       ...schemas[TOOL_NAMES.requestConfirmation],
       execute: async (input) =>
@@ -234,6 +250,27 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
       execute: async ({ repo, path, ref }) =>
         runAether(TOOL_NAMES.githubReadFile, { repo, path, ref }),
     });
+  }
+
+  if (schemas[TOOL_NAMES.githubListIssues]) {
+    for (const name of [
+      TOOL_NAMES.githubListIssues,
+      TOOL_NAMES.githubGetIssue,
+      TOOL_NAMES.githubListPullRequests,
+      TOOL_NAMES.githubGetPullRequest,
+      TOOL_NAMES.githubListCommits,
+      TOOL_NAMES.githubCreateBranch,
+      TOOL_NAMES.githubCreateOrUpdateFile,
+      TOOL_NAMES.githubCreateIssue,
+      TOOL_NAMES.githubAddIssueComment,
+      TOOL_NAMES.githubCreatePullRequest,
+      TOOL_NAMES.githubMergePullRequest,
+    ]) {
+      tools[name] = tool({
+        ...schemas[name],
+        execute: async (input) => runAether(name, input),
+      });
+    }
   }
 
   if (schemas[TOOL_NAMES.toolSearch] && ctx.loop) {

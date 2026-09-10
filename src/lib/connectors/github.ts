@@ -348,3 +348,570 @@ export async function githubReadFileForUser(
     truncated,
   };
 }
+
+// ─── Extended read operations ───
+
+export async function githubListIssuesForUser(
+  userId: string,
+  repo: string,
+  state: "open" | "closed" | "all" = "open",
+  accessToken?: string,
+): Promise<{
+  ok: boolean;
+  error?: string;
+  issues?: Array<{
+    number: number;
+    title: string;
+    state: string;
+    author?: string;
+    comments?: number;
+    url?: string;
+  }>;
+}> {
+  const parsed = resolveRef(repo);
+  if ("error" in parsed) return { ok: false, error: parsed.error };
+  const res = await githubFetch(
+    userId,
+    `/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/issues?state=${encodeURIComponent(state)}&per_page=25`,
+    undefined,
+    accessToken,
+  );
+  if (!(res instanceof Response)) return { ok: false, error: res.error };
+  if (!res.ok) return { ok: false, error: `GitHub list issues failed (${res.status})` };
+  const data = (await res.json()) as Array<{
+    number: number;
+    title: string;
+    state: string;
+    pull_request?: unknown;
+    user?: { login?: string };
+    comments?: number;
+    html_url?: string;
+  }>;
+  return {
+    ok: true,
+    issues: data
+      .filter((issue) => !issue.pull_request)
+      .slice(0, 25)
+      .map((issue) => ({
+        number: issue.number,
+        title: issue.title,
+        state: issue.state,
+        author: issue.user?.login,
+        comments: issue.comments,
+        url: `https://github.com/${parsed.owner}/${parsed.repo}/issues/${issue.number}`,
+      })),
+  };
+}
+
+export async function githubGetIssueForUser(
+  userId: string,
+  repo: string,
+  issueNumber: number,
+  accessToken?: string,
+): Promise<{
+  ok: boolean;
+  error?: string;
+  issue?: {
+    number: number;
+    title: string;
+    state: string;
+    body: string | null;
+    author?: string;
+    labels: string[];
+    url?: string;
+  };
+}> {
+  const parsed = resolveRef(repo);
+  if ("error" in parsed) return { ok: false, error: parsed.error };
+  const res = await githubFetch(
+    userId,
+    `/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/issues/${encodeURIComponent(String(issueNumber))}`,
+    undefined,
+    accessToken,
+  );
+  if (!(res instanceof Response)) return { ok: false, error: res.error };
+  if (!res.ok) return { ok: false, error: `GitHub get issue failed (${res.status})` };
+  const data = (await res.json()) as {
+    number: number;
+    title: string;
+    state: string;
+    body: string | null;
+    user?: { login?: string };
+    labels?: Array<{ name?: string }>;
+  };
+  return {
+    ok: true,
+    issue: {
+      number: data.number,
+      title: data.title,
+      state: data.state,
+      body: data.body,
+      author: data.user?.login,
+      labels: (data.labels ?? [])
+        .map((label) => label.name ?? "")
+        .filter(Boolean),
+      url: `https://github.com/${parsed.owner}/${parsed.repo}/issues/${issueNumber}`,
+    },
+  };
+}
+
+export async function githubListPullRequestsForUser(
+  userId: string,
+  repo: string,
+  state: "open" | "closed" | "all" = "open",
+  accessToken?: string,
+): Promise<{
+  ok: boolean;
+  error?: string;
+  pullRequests?: Array<{
+    number: number;
+    title: string;
+    state: string;
+    draft: boolean;
+    author?: string;
+    branch?: string;
+    url?: string;
+  }>;
+}> {
+  const parsed = resolveRef(repo);
+  if ("error" in parsed) return { ok: false, error: parsed.error };
+  const res = await githubFetch(
+    userId,
+    `/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/pulls?state=${encodeURIComponent(state)}&per_page=25`,
+    undefined,
+    accessToken,
+  );
+  if (!(res instanceof Response)) return { ok: false, error: res.error };
+  if (!res.ok) return { ok: false, error: `GitHub list PRs failed (${res.status})` };
+  const data = (await res.json()) as Array<{
+    number: number;
+    title: string;
+    state: string;
+    draft?: boolean;
+    user?: { login?: string };
+    head?: { ref?: string };
+  }>;
+  return {
+    ok: true,
+    pullRequests: data.slice(0, 25).map((pr) => ({
+      number: pr.number,
+      title: pr.title,
+      state: pr.state,
+      draft: !!pr.draft,
+      author: pr.user?.login,
+      branch: pr.head?.ref,
+      url: `https://github.com/${parsed.owner}/${parsed.repo}/pull/${pr.number}`,
+    })),
+  };
+}
+
+export async function githubGetPullRequestForUser(
+  userId: string,
+  repo: string,
+  pullNumber: number,
+  accessToken?: string,
+): Promise<{
+  ok: boolean;
+  error?: string;
+  pullRequest?: {
+    number: number;
+    title: string;
+    state: string;
+    draft: boolean;
+    mergeable: boolean | null;
+    author?: string;
+    branch?: string;
+    base?: string;
+    body: string | null;
+    changedFiles?: number;
+    url?: string;
+  };
+}> {
+  const parsed = resolveRef(repo);
+  if ("error" in parsed) return { ok: false, error: parsed.error };
+  const res = await githubFetch(
+    userId,
+    `/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/pulls/${encodeURIComponent(String(pullNumber))}`,
+    undefined,
+    accessToken,
+  );
+  if (!(res instanceof Response)) return { ok: false, error: res.error };
+  if (!res.ok) return { ok: false, error: `GitHub get PR failed (${res.status})` };
+  const data = (await res.json()) as {
+    number: number;
+    title: string;
+    state: string;
+    draft?: boolean;
+    body: string | null;
+    user?: { login?: string };
+    head?: { ref?: string };
+    base?: { ref?: string };
+    changed_files?: number;
+    mergeable?: boolean | null;
+  };
+  return {
+    ok: true,
+    pullRequest: {
+      number: data.number,
+      title: data.title,
+      state: data.state,
+      draft: !!data.draft,
+      mergeable: data.mergeable ?? null,
+      author: data.user?.login,
+      branch: data.head?.ref,
+      base: data.base?.ref,
+      body: data.body,
+      changedFiles: data.changed_files,
+      url: `https://github.com/${parsed.owner}/${parsed.repo}/pull/${pullNumber}`,
+    },
+  };
+}
+
+export async function githubListCommitsForUser(
+  userId: string,
+  repo: string,
+  ref?: string,
+  accessToken?: string,
+): Promise<{
+  ok: boolean;
+  error?: string;
+  commits?: Array<{
+    sha: string;
+    message: string;
+    author?: string;
+    date?: string;
+    url?: string;
+  }>;
+}> {
+  const parsed = resolveRef(repo);
+  if ("error" in parsed) return { ok: false, error: parsed.error };
+  const sha = ref || parsed.ref;
+  const res = await githubFetch(
+    userId,
+    `/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/commits${sha ? `?sha=${encodeURIComponent(sha)}&per_page=25` : "?per_page=25"}`,
+    undefined,
+    accessToken,
+  );
+  if (!(res instanceof Response)) return { ok: false, error: res.error };
+  if (!res.ok) return { ok: false, error: `GitHub list commits failed (${res.status})` };
+  const data = (await res.json()) as Array<{
+    sha: string;
+    commit?: { message?: string; author?: { name?: string; date?: string } };
+  }>;
+  return {
+    ok: true,
+    commits: data.slice(0, 25).map((entry) => ({
+      sha: entry.sha,
+      message: (entry.commit?.message ?? "").split("\n")[0] ?? "",
+      author: entry.commit?.author?.name,
+      date: entry.commit?.author?.date,
+      url: `https://github.com/${parsed.owner}/${parsed.repo}/commit/${entry.sha}`,
+    })),
+  };
+}
+
+// ─── Write operations ───
+
+export type RepoOwnership = {
+  isOwnedByConnectedUser: boolean;
+  hasPush: boolean;
+  ownerLogin: string;
+  connectedLogin: string;
+  private: boolean;
+};
+
+/**
+ * Classify ownership from real repository metadata — never from model args.
+ * Organization-owned repos count as foreign even when the user is a member,
+ * because writes there are visible to others.
+ */
+export async function classifyRepoOwnership(
+  userId: string,
+  repo: string,
+  accessToken?: string,
+): Promise<{ ok: true; classification: RepoOwnership } | { ok: false; error: string }> {
+  const parsed = resolveRef(repo);
+  if ("error" in parsed) return { ok: false, error: parsed.error };
+
+  const res = await githubFetch(
+    userId,
+    `/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}`,
+    undefined,
+    accessToken,
+  );
+  if (!(res instanceof Response)) return { ok: false, error: res.error };
+  if (!res.ok) return { ok: false, error: `GitHub repo lookup failed (${res.status})` };
+
+  const data = (await res.json()) as {
+    owner?: { login?: string };
+    private?: boolean;
+    permissions?: { push?: boolean; admin?: boolean };
+  };
+  const connected = accessToken
+    ? { login: undefined }
+    : await getValidGitHubAccessToken(userId);
+
+  let connectedLogin = connected?.login;
+  if (!connectedLogin) {
+    const me = await githubFetch(userId, "/user", undefined, accessToken);
+    if (!(me instanceof Response) || !me.ok) {
+      return { ok: false, error: "Could not verify the connected GitHub account." };
+    }
+    const meData = (await me.json()) as { login?: string };
+    connectedLogin = meData.login;
+  }
+
+  const ownerLogin = parsed.owner;
+  return {
+    ok: true,
+    classification: {
+      isOwnedByConnectedUser: ownerLogin === connectedLogin,
+      hasPush: !!data.permissions?.push || !!data.permissions?.admin,
+      ownerLogin,
+      connectedLogin: connectedLogin ?? "",
+      private: !!data.private,
+    },
+  };
+}
+
+export async function githubCreateBranchForUser(
+  userId: string,
+  repo: string,
+  branchName: string,
+  fromRef?: string,
+  accessToken?: string,
+): Promise<{ ok: boolean; error?: string; branch?: string; url?: string }> {
+  const parsed = resolveRef(repo);
+  if ("error" in parsed) return { ok: false, error: parsed.error };
+
+  const baseRef = fromRef || parsed.ref;
+  const baseRes = await githubFetch(
+    userId,
+    `/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/git/ref/heads/${encodeURIComponent(baseRef || "main")}`,
+    undefined,
+    accessToken,
+  );
+  if (!(baseRes instanceof Response)) return { ok: false, error: baseRes.error };
+  if (!baseRes.ok) return { ok: false, error: `Could not find base branch (${baseRes.status})` };
+  const baseData = (await baseRes.json()) as {
+    object?: { sha?: string };
+  };
+  const baseSha = baseData.object?.sha;
+  if (!baseSha) return { ok: false, error: "Base branch has no head commit." };
+
+  const createRes = await githubFetch(
+    userId,
+    `/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/git/refs`,
+    {
+      method: "POST",
+      body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha: baseSha }),
+    },
+    accessToken,
+  );
+  if (!(createRes instanceof Response)) return { ok: false, error: createRes.error };
+  if (!createRes.ok) {
+    return { ok: false, error: `Branch creation failed (${createRes.status})` };
+  }
+  return {
+    ok: true,
+    branch: branchName,
+    url: `https://github.com/${parsed.owner}/${parsed.repo}/tree/${branchName}`,
+  };
+}
+
+export async function githubCreateOrUpdateFileForUser(
+  userId: string,
+  repo: string,
+  path: string,
+  content: string,
+  commitMessage: string,
+  branch?: string,
+  expectedSha?: string,
+  accessToken?: string,
+): Promise<{
+  ok: boolean;
+  error?: string;
+  path?: string;
+  commitSha?: string;
+  url?: string;
+}> {
+  const parsed = resolveRef(repo);
+  if ("error" in parsed) return { ok: false, error: parsed.error };
+  const filePath = path.replace(/^\/+|\/+$/g, "");
+  if (!filePath) return { ok: false, error: "A file path is required." };
+
+  let sha = expectedSha;
+  if (!sha) {
+    const existing = await githubFetch(
+      userId,
+      `/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/contents/${filePath.split("/").map(encodeURIComponent).join("/")}${branch ? `?ref=${encodeURIComponent(branch)}` : ""}`,
+      undefined,
+      accessToken,
+    );
+    if (existing instanceof Response && existing.status === 404) {
+      sha = undefined;
+    } else if (!(existing instanceof Response)) {
+      return { ok: false, error: existing.error };
+    } else if (!existing.ok) {
+      return { ok: false, error: `Could not check existing file (${existing.status})` };
+    } else {
+      const existingData = (await existing.json()) as { sha?: string };
+      sha = existingData.sha;
+    }
+  }
+
+  const res = await githubFetch(
+    userId,
+    `/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/contents/${filePath.split("/").map(encodeURIComponent).join("/")}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        message: commitMessage,
+        content: Buffer.from(content, "utf8").toString("base64"),
+        ...(branch ? { branch } : {}),
+        ...(sha ? { sha } : {}),
+      }),
+    },
+    accessToken,
+  );
+  if (!(res instanceof Response)) return { ok: false, error: res.error };
+  if (!res.ok) {
+    return {
+      ok: false,
+      error:
+        res.status === 409
+          ? "The file changed since you last saw it. Re-read it and try again."
+          : `GitHub file write failed (${res.status})`,
+    };
+  }
+  const data = (await res.json()) as {
+    commit?: { sha?: string };
+    content?: { html_url?: string };
+  };
+  return {
+    ok: true,
+    path: filePath,
+    commitSha: data.commit?.sha,
+    url: data.content?.html_url,
+  };
+}
+
+export async function githubCreateIssueForUser(
+  userId: string,
+  repo: string,
+  title: string,
+  body?: string,
+  accessToken?: string,
+): Promise<{ ok: boolean; error?: string; number?: number; url?: string }> {
+  const parsed = resolveRef(repo);
+  if ("error" in parsed) return { ok: false, error: parsed.error };
+  const res = await githubFetch(
+    userId,
+    `/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/issues`,
+    {
+      method: "POST",
+      body: JSON.stringify({ title, ...(body ? { body } : {}) }),
+    },
+    accessToken,
+  );
+  if (!(res instanceof Response)) return { ok: false, error: res.error };
+  if (!res.ok) return { ok: false, error: `GitHub create issue failed (${res.status})` };
+  const data = (await res.json()) as { number: number };
+  return {
+    ok: true,
+    number: data.number,
+    url: `https://github.com/${parsed.owner}/${parsed.repo}/issues/${data.number}`,
+  };
+}
+
+export async function githubAddIssueCommentForUser(
+  userId: string,
+  repo: string,
+  issueNumber: number,
+  body: string,
+  accessToken?: string,
+): Promise<{ ok: boolean; error?: string; url?: string }> {
+  const parsed = resolveRef(repo);
+  if ("error" in parsed) return { ok: false, error: parsed.error };
+  const res = await githubFetch(
+    userId,
+    `/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/issues/${encodeURIComponent(String(issueNumber))}/comments`,
+    {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    },
+    accessToken,
+  );
+  if (!(res instanceof Response)) return { ok: false, error: res.error };
+  if (!res.ok) return { ok: false, error: `GitHub comment failed (${res.status})` };
+  const data = (await res.json()) as { html_url?: string };
+  return { ok: true, url: data.html_url };
+}
+
+export async function githubCreatePullRequestForUser(
+  userId: string,
+  repo: string,
+  input: {
+    title: string;
+    head: string;
+    base: string;
+    body?: string;
+    draft?: boolean;
+  },
+  accessToken?: string,
+): Promise<{ ok: boolean; error?: string; number?: number; url?: string }> {
+  const parsed = resolveRef(repo);
+  if ("error" in parsed) return { ok: false, error: parsed.error };
+  const res = await githubFetch(
+    userId,
+    `/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/pulls`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        title: input.title,
+        head: input.head,
+        base: input.base,
+        ...(input.body ? { body: input.body } : {}),
+        ...(input.draft !== undefined ? { draft: input.draft } : {}),
+      }),
+    },
+    accessToken,
+  );
+  if (!(res instanceof Response)) return { ok: false, error: res.error };
+  if (!res.ok) {
+    return { ok: false, error: `GitHub create PR failed (${res.status})` };
+  }
+  const data = (await res.json()) as { number: number; html_url?: string };
+  return { ok: true, number: data.number, url: data.html_url };
+}
+
+export async function githubMergePullRequestForUser(
+  userId: string,
+  repo: string,
+  pullNumber: number,
+  commitTitle?: string,
+  commitMessage?: string,
+  mergeMethod: "merge" | "squash" | "rebase" = "squash",
+  accessToken?: string,
+): Promise<{ ok: boolean; error?: string; merged?: boolean; url?: string }> {
+  const parsed = resolveRef(repo);
+  if ("error" in parsed) return { ok: false, error: parsed.error };
+  const res = await githubFetch(
+    userId,
+    `/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/pulls/${encodeURIComponent(String(pullNumber))}/merge`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        commit_title: commitTitle,
+        commit_message: commitMessage,
+        merge_method: mergeMethod,
+      }),
+    },
+    accessToken,
+  );
+  if (!(res instanceof Response)) return { ok: false, error: res.error };
+  if (!res.ok) {
+    return { ok: false, error: `GitHub merge failed (${res.status})` };
+  }
+  return { ok: true, merged: true };
+}

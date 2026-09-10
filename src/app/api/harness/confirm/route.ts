@@ -8,8 +8,7 @@ import {
 } from "@/lib/harness/confirmation";
 import { ensureConfirmationRepository } from "@/lib/harness/confirmation-store";
 import { executeAetherTool, isAetherOwnedToolName } from "@/lib/hermes/aether-tools";
-import { parseToolApprovalMode } from "@/lib/hermes/tool-approval";
-import { isCloudDbConfigured } from "@/lib/db";
+import { connectorContextForReplay } from "@/lib/harness/confirm-execution";
 
 export const runtime = "nodejs";
 
@@ -114,16 +113,11 @@ export async function POST(req: Request) {
     const execution = await executeAetherTool({
       name: replay.tool,
       args: replay.args,
-      ctx: {
+      ctx: await connectorContextForReplay({
         userId,
         conversationId: null,
         projectId: replay.projectId,
-        approvalMode: parseToolApprovalMode("ask"),
-        hasMemory: !!(userId && isCloudDbConfigured()),
-        hasDrive: false,
-        hasGitHub: false,
-        skipGate: true,
-      },
+      }),
     });
     return NextResponse.json({
       ok: true,
@@ -154,17 +148,12 @@ export async function POST(req: Request) {
     execution = await executeAetherTool({
       name: payload.tool,
       args: payload.args,
-      ctx: {
+      ctx: await connectorContextForReplay({
         userId,
         conversationId: peek.conversationId,
         projectId: payload.projectId,
         runId: peek.runId,
-        approvalMode: parseToolApprovalMode("ask"),
-        hasMemory: !!(userId && isCloudDbConfigured()),
-        hasDrive: false,
-        hasGitHub: false,
-        skipGate: true,
-      },
+      }),
     });
   }
 

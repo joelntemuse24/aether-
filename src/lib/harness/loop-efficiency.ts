@@ -29,6 +29,7 @@ export const CORE_TOOL_ORDER = [
   TOOL_NAMES.workspaceReadFile,
   TOOL_NAMES.workspaceWriteFile,
   TOOL_NAMES.workspaceListFiles,
+  TOOL_NAMES.generateImage,
   TOOL_NAMES.toolSearch,
 ] as const;
 
@@ -49,6 +50,17 @@ const GITHUB_TOOL_NAMES = [
   TOOL_NAMES.githubGetRepo,
   TOOL_NAMES.githubListContents,
   TOOL_NAMES.githubReadFile,
+  TOOL_NAMES.githubListIssues,
+  TOOL_NAMES.githubGetIssue,
+  TOOL_NAMES.githubListPullRequests,
+  TOOL_NAMES.githubGetPullRequest,
+  TOOL_NAMES.githubListCommits,
+  TOOL_NAMES.githubCreateBranch,
+  TOOL_NAMES.githubCreateOrUpdateFile,
+  TOOL_NAMES.githubCreateIssue,
+  TOOL_NAMES.githubAddIssueComment,
+  TOOL_NAMES.githubCreatePullRequest,
+  TOOL_NAMES.githubMergePullRequest,
 ] as const;
 
 export type ToolCatalogEntry = {
@@ -65,6 +77,17 @@ const DEFERRED_SUITES: ReadonlyArray<readonly string[]> = [
     TOOL_NAMES.githubGetRepo,
     TOOL_NAMES.githubListContents,
     TOOL_NAMES.githubReadFile,
+    TOOL_NAMES.githubListIssues,
+    TOOL_NAMES.githubGetIssue,
+    TOOL_NAMES.githubListPullRequests,
+    TOOL_NAMES.githubGetPullRequest,
+    TOOL_NAMES.githubListCommits,
+    TOOL_NAMES.githubCreateBranch,
+    TOOL_NAMES.githubCreateOrUpdateFile,
+    TOOL_NAMES.githubCreateIssue,
+    TOOL_NAMES.githubAddIssueComment,
+    TOOL_NAMES.githubCreatePullRequest,
+    TOOL_NAMES.githubMergePullRequest,
   ],
 ];
 

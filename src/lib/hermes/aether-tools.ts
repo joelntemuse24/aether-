@@ -13,6 +13,18 @@ import {
   githubGetRepoForUser,
   githubListContentsForUser,
   githubReadFileForUser,
+  githubListIssuesForUser,
+  githubGetIssueForUser,
+  githubListPullRequestsForUser,
+  githubGetPullRequestForUser,
+  githubListCommitsForUser,
+  githubCreateBranchForUser,
+  githubCreateOrUpdateFileForUser,
+  githubCreateIssueForUser,
+  githubAddIssueCommentForUser,
+  githubCreatePullRequestForUser,
+  githubMergePullRequestForUser,
+  classifyRepoOwnership,
 } from "@/lib/connectors/github";
 import {
   createConfirmationRequest,
@@ -28,6 +40,7 @@ import {
   workspaceReadFile,
   workspaceWriteFile,
 } from "@/lib/connectors/workspace";
+import { generateImageForUser } from "@/lib/connectors/image";
 import {
   parseToolApprovalMode,
   shouldConfirmAetherTool,
@@ -101,6 +114,7 @@ export type AetherToolDeps = {
   workspaceReadFile?: typeof workspaceReadFile;
   workspaceWriteFile?: typeof workspaceWriteFile;
   workspaceListFiles?: typeof workspaceListFiles;
+  generateImage?: typeof generateImageForUser;
 };
 
 export type AetherToolContext = {
@@ -136,10 +150,22 @@ const AETHER_TOOL_NAMES = new Set<string>([
   TOOL_NAMES.githubGetRepo,
   TOOL_NAMES.githubListContents,
   TOOL_NAMES.githubReadFile,
+  TOOL_NAMES.githubListIssues,
+  TOOL_NAMES.githubGetIssue,
+  TOOL_NAMES.githubListPullRequests,
+  TOOL_NAMES.githubGetPullRequest,
+  TOOL_NAMES.githubListCommits,
+  TOOL_NAMES.githubCreateBranch,
+  TOOL_NAMES.githubCreateOrUpdateFile,
+  TOOL_NAMES.githubCreateIssue,
+  TOOL_NAMES.githubAddIssueComment,
+  TOOL_NAMES.githubCreatePullRequest,
+  TOOL_NAMES.githubMergePullRequest,
   TOOL_NAMES.workspaceExec,
   TOOL_NAMES.workspaceReadFile,
   TOOL_NAMES.workspaceWriteFile,
   TOOL_NAMES.workspaceListFiles,
+  TOOL_NAMES.generateImage,
 ]);
 
 export function isAetherOwnedToolName(name: string): boolean {
@@ -156,6 +182,108 @@ export function resolveAetherToolContextFlags(ctx: {
     hasDrive: !!(ctx.userId && ctx.hasDrive),
     hasGitHub: !!(ctx.userId && ctx.hasGitHub),
   };
+}
+
+/** Execute a GitHub write for a repo already classified as owned by the connected user. */
+async function executeGithubWrite(
+  name: string,
+  args: Record<string, unknown>,
+  ctx: AetherToolContext,
+): Promise<AetherToolResult> {
+  const repo = str(args.repo);
+  const token = ctx.githubAccessToken;
+  switch (name) {
+    case TOOL_NAMES.githubCreateBranch:
+      return wrapConnectorResult(
+        await githubCreateBranchForUser(
+          ctx.userId ?? "",
+          repo,
+          str(args.branchName),
+          str(args.fromRef) || undefined,
+          token,
+        ),
+      );
+    case TOOL_NAMES.githubCreateOrUpdateFile:
+      return wrapConnectorResult(
+        await githubCreateOrUpdateFileForUser(
+          ctx.userId ?? "",
+          repo,
+          str(args.path),
+          str(args.content),
+          str(args.commitMessage) || "Update via Aether",
+          str(args.branch) || undefined,
+          str(args.expectedSha) || undefined,
+          token,
+        ),
+      );
+    default:
+      return { ok: false, error: `Unsupported GitHub write: ${name}` };
+  }
+}
+
+/** Execute a GitHub publishing action after the user approved it. */
+async function executeGithubPublish(
+  name: string,
+  args: Record<string, unknown>,
+  ctx: AetherToolContext,
+): Promise<AetherToolResult> {
+  const repo = str(args.repo);
+  const token = ctx.githubAccessToken;
+  switch (name) {
+    case TOOL_NAMES.githubCreateIssue:
+      return wrapConnectorResult(
+        await githubCreateIssueForUser(
+          ctx.userId ?? "",
+          repo,
+          str(args.title),
+          str(args.body) || undefined,
+          token,
+        ),
+      );
+    case TOOL_NAMES.githubAddIssueComment:
+      return wrapConnectorResult(
+        await githubAddIssueCommentForUser(
+          ctx.userId ?? "",
+          repo,
+          typeof args.issueNumber === "number" ? args.issueNumber : 0,
+          str(args.body),
+          token,
+        ),
+      );
+    case TOOL_NAMES.githubCreatePullRequest:
+      return wrapConnectorResult(
+        await githubCreatePullRequestForUser(
+          ctx.userId ?? "",
+          repo,
+          {
+            title: str(args.title),
+            head: str(args.head),
+            base: str(args.base),
+            body: str(args.body) || undefined,
+            draft: args.draft === true ? true : undefined,
+          },
+          token,
+        ),
+      );
+    case TOOL_NAMES.githubMergePullRequest:
+      return wrapConnectorResult(
+        await githubMergePullRequestForUser(
+          ctx.userId ?? "",
+          repo,
+          typeof args.pullNumber === "number" ? args.pullNumber : 0,
+          str(args.commitTitle) || undefined,
+          str(args.commitMessage) || undefined,
+          args.mergeMethod === "merge" ||
+            args.mergeMethod === "squash" ||
+            args.mergeMethod === "rebase"
+            ? args.mergeMethod
+            : "squash",
+          token,
+        ),
+      );
+    default:
+      return { ok: false, error: `Unsupported GitHub publish: ${name}` };
+  }
 }
 
 function asRecord(args: unknown): Record<string, unknown> {
@@ -397,6 +525,173 @@ export async function executeAetherTool(input: {
       path: str(args.path) || undefined,
       depth: typeof args.depth === "number" ? args.depth : undefined,
     });
+  }
+
+  if (name === TOOL_NAMES.generateImage) {
+    const generate = ctx.deps?.generateImage ?? generateImageForUser;
+    return generate({
+      prompt: str(args.prompt),
+      size:
+        args.size === "square" || args.size === "portrait" || args.size === "landscape"
+          ? args.size
+          : undefined,
+    });
+  }
+
+  if (name === TOOL_NAMES.githubListIssues) {
+    if (!ctx.userId || !ctx.hasGitHub) {
+      return { ok: false, error: "GitHub is not connected." };
+    }
+    return wrapConnectorResult(
+      await githubListIssuesForUser(
+        ctx.userId,
+        str(args.repo),
+        args.state === "open" || args.state === "closed" || args.state === "all"
+          ? args.state
+          : "open",
+        ctx.githubAccessToken,
+      ),
+    );
+  }
+
+  if (name === TOOL_NAMES.githubGetIssue) {
+    if (!ctx.userId || !ctx.hasGitHub) {
+      return { ok: false, error: "GitHub is not connected." };
+    }
+    return wrapConnectorResult(
+      await githubGetIssueForUser(
+        ctx.userId,
+        str(args.repo),
+        typeof args.issueNumber === "number" ? args.issueNumber : 0,
+        ctx.githubAccessToken,
+      ),
+    );
+  }
+
+  if (name === TOOL_NAMES.githubListPullRequests) {
+    if (!ctx.userId || !ctx.hasGitHub) {
+      return { ok: false, error: "GitHub is not connected." };
+    }
+    return wrapConnectorResult(
+      await githubListPullRequestsForUser(
+        ctx.userId,
+        str(args.repo),
+        args.state === "open" || args.state === "closed" || args.state === "all"
+          ? args.state
+          : "open",
+        ctx.githubAccessToken,
+      ),
+    );
+  }
+
+  if (name === TOOL_NAMES.githubGetPullRequest) {
+    if (!ctx.userId || !ctx.hasGitHub) {
+      return { ok: false, error: "GitHub is not connected." };
+    }
+    return wrapConnectorResult(
+      await githubGetPullRequestForUser(
+        ctx.userId,
+        str(args.repo),
+        typeof args.pullNumber === "number" ? args.pullNumber : 0,
+        ctx.githubAccessToken,
+      ),
+    );
+  }
+
+  if (name === TOOL_NAMES.githubListCommits) {
+    if (!ctx.userId || !ctx.hasGitHub) {
+      return { ok: false, error: "GitHub is not connected." };
+    }
+    return wrapConnectorResult(
+      await githubListCommitsForUser(
+        ctx.userId,
+        str(args.repo),
+        str(args.ref) || undefined,
+        ctx.githubAccessToken,
+      ),
+    );
+  }
+
+  // Server-side ownership gate for GitHub writes. Never trusts model args:
+  // the repository's real owner is compared against the connected account,
+  // and org/foreign repos always require a confirmation card.
+  const githubWriteOps: Record<string, (owned: boolean) => boolean> = {
+    [TOOL_NAMES.githubCreateBranch]: (owned) => owned,
+    [TOOL_NAMES.githubCreateOrUpdateFile]: (owned) => owned,
+  };
+  if (githubWriteOps[name] !== undefined || name === TOOL_NAMES.githubCreateIssue ||
+      name === TOOL_NAMES.githubAddIssueComment ||
+      name === TOOL_NAMES.githubCreatePullRequest ||
+      name === TOOL_NAMES.githubMergePullRequest) {
+    if (!ctx.userId || !ctx.hasGitHub) {
+      return { ok: false, error: "GitHub is not connected." };
+    }
+    const repo = str(args.repo);
+    if (githubWriteOps[name] !== undefined) {
+      const classification = await classifyRepoOwnership(
+        ctx.userId,
+        repo,
+        ctx.githubAccessToken,
+      );
+      if (!classification.ok) {
+        return { ok: false, error: classification.error };
+      }
+      const owned = githubWriteOps[name]!(
+        classification.classification.isOwnedByConnectedUser &&
+          classification.classification.hasPush,
+      );
+      if (!owned) {
+        const create =
+          ctx.deps?.createConfirmation ??
+          ((request: ConfirmationRequest, userId?: string | null) =>
+            createConfirmationRequest(request, userId, {
+              conversationId: ctx.conversationId,
+              runId: ctx.runId,
+            }));
+        const conf = await create(
+          {
+            action: "other_side_effect",
+            title: `Write to ${repo}`,
+            preview: `Aether will write to the GitHub repository ${repo}, which is not owned by your connected account. This is visible to others.`,
+            target: repo,
+            payload: { tool: name, args, projectId: ctx.projectId ?? null },
+          },
+          ctx.userId,
+        );
+        return { ...conf };
+      }
+      return await executeGithubWrite(name, args, ctx);
+    }
+    // Publishing actions (issues, comments, PRs, merges) always confirm.
+    if (ctx.skipGate) {
+      return await executeGithubPublish(name, args, ctx);
+    }
+    const create =
+      ctx.deps?.createConfirmation ??
+      ((request: ConfirmationRequest, userId?: string | null) =>
+        createConfirmationRequest(request, userId, {
+          conversationId: ctx.conversationId,
+          runId: ctx.runId,
+        }));
+    const verb =
+      name === TOOL_NAMES.githubCreateIssue
+        ? "Open issue"
+        : name === TOOL_NAMES.githubAddIssueComment
+          ? "Post comment"
+          : name === TOOL_NAMES.githubCreatePullRequest
+            ? "Open pull request"
+            : "Merge pull request";
+    const conf = await create(
+      {
+        action: "other_side_effect",
+        title: `${verb} on ${repo}`,
+        preview: `${verb} on ${repo}. This is visible to others and may notify watchers.`,
+        target: repo,
+        payload: { tool: name, args, projectId: ctx.projectId ?? null },
+      },
+      ctx.userId,
+    );
+    return { ...conf };
   }
 
   if (name === TOOL_NAMES.driveSearch) {

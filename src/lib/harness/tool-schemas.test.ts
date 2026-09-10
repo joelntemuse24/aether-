@@ -14,6 +14,7 @@ describe("head-start schema-only tools", () => {
     assert.ok(tools[TOOL_NAMES.workspaceReadFile]);
     assert.ok(tools[TOOL_NAMES.workspaceWriteFile]);
     assert.ok(tools[TOOL_NAMES.workspaceListFiles]);
+    assert.ok(tools[TOOL_NAMES.generateImage]);
     for (const tool of Object.values(tools)) {
       assert.equal(
         tool && typeof tool === "object" && "execute" in tool && tool.execute != null,
@@ -35,6 +36,9 @@ describe("head-start schema-only tools", () => {
     assert.ok(full[TOOL_NAMES.memorySearch]);
     assert.ok(full[TOOL_NAMES.driveRead]);
     assert.ok(full[TOOL_NAMES.githubReadFile]);
+    assert.ok(full[TOOL_NAMES.githubListIssues]);
+    assert.ok(full[TOOL_NAMES.githubCreateOrUpdateFile]);
+    assert.ok(full[TOOL_NAMES.githubMergePullRequest]);
   });
 
   it("returns no tools when tools are disabled", () => {

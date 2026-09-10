@@ -18,6 +18,17 @@ export const TOOL_NAMES = {
   githubGetRepo: "github_get_repo",
   githubListContents: "github_list_contents",
   githubReadFile: "github_read_file",
+  githubListIssues: "github_list_issues",
+  githubGetIssue: "github_get_issue",
+  githubListPullRequests: "github_list_pull_requests",
+  githubGetPullRequest: "github_get_pull_request",
+  githubListCommits: "github_list_commits",
+  githubCreateBranch: "github_create_branch",
+  githubCreateOrUpdateFile: "github_create_or_update_file",
+  githubCreateIssue: "github_create_issue",
+  githubAddIssueComment: "github_add_issue_comment",
+  githubCreatePullRequest: "github_create_pull_request",
+  githubMergePullRequest: "github_merge_pull_request",
   fetchUrl: "fetch_url",
   /** Deferred discovery — unlocks memory/Drive/GitHub tools into later steps. */
   toolSearch: "tool_search",
@@ -33,6 +44,7 @@ export const TOOL_NAMES = {
   workspaceReadFile: "workspace_read_file",
   workspaceWriteFile: "workspace_write_file",
   workspaceListFiles: "workspace_list_files",
+  generateImage: "generate_image",
 } as const;
 
 export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -256,6 +268,89 @@ export const workspaceListFilesInput = z.object({
   depth: z.number().int().min(1).max(6).optional(),
 });
 
+export const githubListIssuesInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  state: z.enum(["open", "closed", "all"]).optional(),
+});
+
+export const githubGetIssueInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  issueNumber: z.number().int().min(1),
+});
+
+export const githubListPullRequestsInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  state: z.enum(["open", "closed", "all"]).optional(),
+});
+
+export const githubGetPullRequestInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  pullNumber: z.number().int().min(1),
+});
+
+export const githubListCommitsInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  ref: z.string().optional().describe("Branch, tag, or SHA."),
+});
+
+export const githubCreateBranchInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  branchName: z.string().describe("New branch name."),
+  fromRef: z.string().optional().describe("Base branch (defaults to repo default)."),
+});
+
+export const githubCreateOrUpdateFileInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  path: z.string().describe("File path inside the repo."),
+  content: z.string().describe("Complete UTF-8 file content."),
+  commitMessage: z.string().describe("Commit message."),
+  branch: z.string().optional(),
+  expectedSha: z
+    .string()
+    .optional()
+    .describe("Blob SHA from a prior read; omit to create a new file."),
+});
+
+export const githubCreateIssueInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  title: z.string(),
+  body: z.string().optional(),
+});
+
+export const githubAddIssueCommentInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  issueNumber: z.number().int().min(1),
+  body: z.string(),
+});
+
+export const githubCreatePullRequestInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  title: z.string(),
+  head: z.string().describe("Source branch."),
+  base: z.string().describe("Target branch."),
+  body: z.string().optional(),
+  draft: z.boolean().optional(),
+});
+
+export const githubMergePullRequestInput = z.object({
+  repo: z.string().describe("GitHub repository as owner/repo or URL."),
+  pullNumber: z.number().int().min(1),
+  commitTitle: z.string().optional(),
+  commitMessage: z.string().optional(),
+  mergeMethod: z.enum(["merge", "squash", "rebase"]).optional(),
+});
+
+export const generateImageInput = z.object({
+  prompt: z
+    .string()
+    .min(1)
+    .describe("What the image should show, described concretely."),
+  size: z
+    .enum(["square", "portrait", "landscape"])
+    .optional()
+    .describe("Aspect ratio: square (default), portrait, or landscape."),
+});
+
 export const browserActInput = z.object({
   url: z.string().url().describe("Page URL for the action."),
   action: z
@@ -319,6 +414,50 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "GitHub",
     runningLabel: "Reading repository file…",
   },
+  [TOOL_NAMES.githubListIssues]: {
+    label: "GitHub",
+    runningLabel: "Listing issues…",
+  },
+  [TOOL_NAMES.githubGetIssue]: {
+    label: "GitHub",
+    runningLabel: "Reading issue…",
+  },
+  [TOOL_NAMES.githubListPullRequests]: {
+    label: "GitHub",
+    runningLabel: "Listing pull requests…",
+  },
+  [TOOL_NAMES.githubGetPullRequest]: {
+    label: "GitHub",
+    runningLabel: "Reading pull request…",
+  },
+  [TOOL_NAMES.githubListCommits]: {
+    label: "GitHub",
+    runningLabel: "Listing commits…",
+  },
+  [TOOL_NAMES.githubCreateBranch]: {
+    label: "GitHub",
+    runningLabel: "Creating branch…",
+  },
+  [TOOL_NAMES.githubCreateOrUpdateFile]: {
+    label: "GitHub",
+    runningLabel: "Committing file…",
+  },
+  [TOOL_NAMES.githubCreateIssue]: {
+    label: "GitHub",
+    runningLabel: "Creating issue…",
+  },
+  [TOOL_NAMES.githubAddIssueComment]: {
+    label: "GitHub",
+    runningLabel: "Posting comment…",
+  },
+  [TOOL_NAMES.githubCreatePullRequest]: {
+    label: "GitHub",
+    runningLabel: "Opening pull request…",
+  },
+  [TOOL_NAMES.githubMergePullRequest]: {
+    label: "GitHub",
+    runningLabel: "Merging pull request…",
+  },
   [TOOL_NAMES.fetchUrl]: {
     label: "Fetch URL",
     runningLabel: "Fetching page…",
@@ -359,6 +498,10 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Workspace",
     runningLabel: "Listing files…",
   },
+  [TOOL_NAMES.generateImage]: {
+    label: "Image",
+    runningLabel: "Generating image…",
+  },
 };
 
 export function getToolDisplay(name: string): ToolDisplay {
@@ -389,12 +532,16 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 - "browser_act": extract / fill_preview / click / submit on a page. submit always returns needs_confirmation.
 - "workspace_exec": run shell commands in an isolated per-conversation Linux workspace.
 - "workspace_read_file" / "workspace_write_file" / "workspace_list_files": inspect and edit files in that isolated workspace.
+- "generate_image": generate a bitmap image from a description. Confirms before spending — the user sees a card.
 - "tool_search": unlock optional tools (memory, Drive, GitHub) by keyword when needed.
 
 ## Optional tools (via tool_search when the session supports them; GitHub may already be unlocked if the user pasted a repo link)
 - "memory_search" / "memory_write": lasting facts about the user.
 - "drive_search" / "drive_read": the user's Google Drive when connected.
 - "github_get_repo" / "github_list_contents" / "github_read_file": repo tools (one path per read_file call; parallelize multiple files).
+- "github_list_issues" / "github_get_issue" / "github_list_pull_requests" / "github_get_pull_request" / "github_list_commits": inspect issues, PRs, and commit history.
+- "github_create_branch" / "github_create_or_update_file": code writes. Your own repos commit directly; other owners' or org repos ask first.
+- "github_create_issue" / "github_add_issue_comment" / "github_create_pull_request" / "github_merge_pull_request": publishing actions — always confirm first; visible to others.
 
 ## GitHub rule (hard)
 - github.com / owner-repo → github_* only. Never Drive/fetch_url/web_search for repo contents.

@@ -17,6 +17,12 @@ export const DEFAULT_TOOL_APPROVAL_MODE: ToolApprovalMode = "ask";
 
 const ALWAYS_CONFIRM_TOOLS = new Set<string>([
   TOOL_NAMES.requestConfirmation,
+  TOOL_NAMES.generateImage,
+  // Publishing / finalizing actions are always visible to others.
+  TOOL_NAMES.githubCreateIssue,
+  TOOL_NAMES.githubAddIssueComment,
+  TOOL_NAMES.githubCreatePullRequest,
+  TOOL_NAMES.githubMergePullRequest,
 ]);
 
 const SAFE_READ_TOOLS = new Set<string>([
@@ -26,8 +32,23 @@ const SAFE_READ_TOOLS = new Set<string>([
   TOOL_NAMES.githubGetRepo,
   TOOL_NAMES.githubListContents,
   TOOL_NAMES.githubReadFile,
+  TOOL_NAMES.githubListIssues,
+  TOOL_NAMES.githubGetIssue,
+  TOOL_NAMES.githubListPullRequests,
+  TOOL_NAMES.githubGetPullRequest,
+  TOOL_NAMES.githubListCommits,
   TOOL_NAMES.workspaceReadFile,
   TOOL_NAMES.workspaceListFiles,
+]);
+
+/**
+ * Owned-repo GitHub writes classify ownership server-side in the dispatcher
+ * (never from model args), so the policy layer treats them as routine
+ * mutations for the connected user's own repos.
+ */
+const GITHUB_OWNED_WRITE_TOOLS = new Set<string>([
+  TOOL_NAMES.githubCreateBranch,
+  TOOL_NAMES.githubCreateOrUpdateFile,
 ]);
 
 const ROUTINE_MUTATION_TOOLS = new Set<string>([TOOL_NAMES.memoryWrite]);
@@ -94,6 +115,11 @@ export function isAlwaysConfirmAetherCall(
   const action = actionOf(args);
   if (DESTRUCTIVE_ACTIONS.has(action)) return true;
   if (name === TOOL_NAMES.browserAct && action === "submit") return true;
+  if (GITHUB_OWNED_WRITE_TOOLS.has(name)) {
+    // Foreign-owner args only force the card earlier; the dispatcher
+    // re-verifies ownership from real repo metadata either way.
+    return false;
+  }
   if (name.includes("delete") || action.includes("delete")) return true;
   if (args?.foreignOwner === true || args?.someoneElses === true) return true;
   if (args?.targetOwner === "other" || args?.scope === "foreign") return true;
@@ -128,6 +154,12 @@ export function approvalDecisionForAetherTool(input: {
   }
   if (isUserDeliverableAetherTool(input.name)) {
     return { confirm: false, reason: "user_deliverable" };
+  }
+  if (GITHUB_OWNED_WRITE_TOOLS.has(input.name)) {
+    if (input.mode === "auto") {
+      return { confirm: false, reason: "auto_routine" };
+    }
+    return { confirm: true, reason: "ask_mutation" };
   }
   if (isRoutineMutationAetherTool(input.name)) {
     if (input.mode === "auto") {

@@ -28,6 +28,11 @@ describe("Ask vs Auto policy", () => {
       "github_get_repo",
       "github_list_contents",
       "github_read_file",
+      "github_list_issues",
+      "github_get_issue",
+      "github_list_pull_requests",
+      "github_get_pull_request",
+      "github_list_commits",
       "workspace_read_file",
       "workspace_list_files",
     ]) {
@@ -48,6 +53,32 @@ describe("Ask vs Auto policy", () => {
       shouldConfirmAetherTool({ name: "memory_write", mode: "auto" }),
       false,
     );
+  });
+
+  it("always confirms image generation (spend)", () => {
+    for (const mode of ["ask", "auto"] as const) {
+      assert.equal(shouldConfirmAetherTool({ name: "generate_image", mode }), true);
+    }
+  });
+
+  it("always confirms GitHub publishing actions", () => {
+    for (const name of [
+      "github_create_issue",
+      "github_add_issue_comment",
+      "github_create_pull_request",
+      "github_merge_pull_request",
+    ]) {
+      for (const mode of ["ask", "auto"] as const) {
+        assert.equal(shouldConfirmAetherTool({ name, mode }), true, `${name}/${mode}`);
+      }
+    }
+  });
+
+  it("gates owned-repo GitHub writes in Ask and allows them in Auto", () => {
+    for (const name of ["github_create_branch", "github_create_or_update_file"]) {
+      assert.equal(shouldConfirmAetherTool({ name, mode: "ask" }), true, name);
+      assert.equal(shouldConfirmAetherTool({ name, mode: "auto" }), false, name);
+    }
   });
 
   it("does not pause ordinary workspace work", () => {
