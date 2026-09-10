@@ -39,6 +39,18 @@ describe("head-start schema-only tools", () => {
     assert.ok(full[TOOL_NAMES.githubListIssues]);
     assert.ok(full[TOOL_NAMES.githubCreateOrUpdateFile]);
     assert.ok(full[TOOL_NAMES.githubMergePullRequest]);
+    const google = buildHeadStartToolSchemas({
+      toolsEnabled: true,
+      hasGmail: true,
+      hasCalendar: true,
+      hasContacts: true,
+    });
+    assert.ok(google[TOOL_NAMES.gmailSearch]);
+    assert.ok(google[TOOL_NAMES.gmailSend]);
+    assert.ok(google[TOOL_NAMES.calendarCreateEvent]);
+    assert.ok(google[TOOL_NAMES.contactsCreate]);
+    // Google tools stay hidden until granted.
+    assert.equal(core[TOOL_NAMES.gmailSearch], undefined);
   });
 
   it("returns no tools when tools are disabled", () => {

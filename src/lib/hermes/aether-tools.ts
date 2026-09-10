@@ -42,6 +42,17 @@ import {
 } from "@/lib/connectors/workspace";
 import { generateImageForUser } from "@/lib/connectors/image";
 import {
+  gmailSearchForUser,
+  gmailReadForUser,
+  gmailSendForUser,
+  gmailCreateDraftForUser,
+  calendarListEventsForUser,
+  calendarCreateEventForUser,
+  calendarDeleteEventForUser,
+  contactsSearchForUser,
+  contactsCreateForUser,
+} from "@/lib/connectors/google";
+import {
   parseToolApprovalMode,
   shouldConfirmAetherTool,
   type ToolApprovalMode,
@@ -126,6 +137,9 @@ export type AetherToolContext = {
   hasMemory?: boolean;
   hasDrive?: boolean;
   hasGitHub?: boolean;
+  hasGmail?: boolean;
+  hasCalendar?: boolean;
+  hasContacts?: boolean;
   driveAccessToken?: string;
   githubAccessToken?: string;
   skipGate?: boolean;
@@ -166,6 +180,15 @@ const AETHER_TOOL_NAMES = new Set<string>([
   TOOL_NAMES.workspaceWriteFile,
   TOOL_NAMES.workspaceListFiles,
   TOOL_NAMES.generateImage,
+  TOOL_NAMES.gmailSearch,
+  TOOL_NAMES.gmailRead,
+  TOOL_NAMES.gmailSend,
+  TOOL_NAMES.gmailCreateDraft,
+  TOOL_NAMES.calendarListEvents,
+  TOOL_NAMES.calendarCreateEvent,
+  TOOL_NAMES.calendarDeleteEvent,
+  TOOL_NAMES.contactsSearch,
+  TOOL_NAMES.contactsCreate,
 ]);
 
 export function isAetherOwnedToolName(name: string): boolean {
@@ -692,6 +715,189 @@ export async function executeAetherTool(input: {
       ctx.userId,
     );
     return { ...conf };
+  }
+
+  // Gmail / Calendar / Contacts execution.
+  if (name === TOOL_NAMES.gmailSearch) {
+    if (!ctx.userId || !ctx.hasGmail) {
+      return { ok: false, error: "Gmail is not connected." };
+    }
+    return wrapConnectorResult(
+      await gmailSearchForUser(
+        ctx.userId,
+        str(args.query),
+        typeof args.maxResults === "number" ? args.maxResults : 15,
+        ctx.driveAccessToken,
+      ),
+    );
+  }
+
+  if (name === TOOL_NAMES.gmailRead) {
+    if (!ctx.userId || !ctx.hasGmail) {
+      return { ok: false, error: "Gmail is not connected." };
+    }
+    return wrapConnectorResult(
+      await gmailReadForUser(ctx.userId, str(args.messageId), ctx.driveAccessToken),
+    );
+  }
+
+  if (name === TOOL_NAMES.gmailSend) {
+    if (!ctx.userId || !ctx.hasGmail) {
+      return { ok: false, error: "Gmail is not connected." };
+    }
+    if (!ctx.skipGate) {
+      // Ask mode: email send waits on a card. Auto mode (or an approved
+      // replay) sends directly — the user picked that tradeoff.
+      const create =
+        ctx.deps?.createConfirmation ??
+        ((request: ConfirmationRequest, userId?: string | null) =>
+          createConfirmationRequest(request, userId, {
+            conversationId: ctx.conversationId,
+            runId: ctx.runId,
+          }));
+      const conf = await create(
+        {
+          action: "send_message",
+          title: "Send email",
+          preview: `Send an email to ${str(args.to)}: “${str(args.subject)}”.`,
+          target: str(args.to),
+          payload: { tool: name, args, projectId: ctx.projectId ?? null },
+        },
+        ctx.userId,
+      );
+      return { ...conf };
+    }
+    return wrapConnectorResult(
+      await gmailSendForUser(
+        ctx.userId,
+        {
+          to: str(args.to),
+          subject: str(args.subject),
+          body: str(args.body),
+          threadId: str(args.threadId) || undefined,
+        },
+        ctx.driveAccessToken,
+      ),
+    );
+  }
+
+  if (name === TOOL_NAMES.gmailCreateDraft) {
+    if (!ctx.userId || !ctx.hasGmail) {
+      return { ok: false, error: "Gmail is not connected." };
+    }
+    return wrapConnectorResult(
+      await gmailCreateDraftForUser(
+        ctx.userId,
+        {
+          to: str(args.to),
+          subject: str(args.subject),
+          body: str(args.body),
+          threadId: str(args.threadId) || undefined,
+        },
+        ctx.driveAccessToken,
+      ),
+    );
+  }
+
+  if (name === TOOL_NAMES.calendarListEvents) {
+    if (!ctx.userId || !ctx.hasCalendar) {
+      return { ok: false, error: "Google Calendar is not connected." };
+    }
+    return wrapConnectorResult(
+      await calendarListEventsForUser(
+        ctx.userId,
+        {
+          timeMin: str(args.timeMin) || undefined,
+          timeMax: str(args.timeMax) || undefined,
+          maxResults:
+            typeof args.maxResults === "number" ? args.maxResults : undefined,
+        },
+        ctx.driveAccessToken,
+      ),
+    );
+  }
+
+  if (name === TOOL_NAMES.calendarCreateEvent) {
+    if (!ctx.userId || !ctx.hasCalendar) {
+      return { ok: false, error: "Google Calendar is not connected." };
+    }
+    return wrapConnectorResult(
+      await calendarCreateEventForUser(
+        ctx.userId,
+        {
+          summary: str(args.summary),
+          start: str(args.start),
+          end: str(args.end),
+          description: str(args.description) || undefined,
+          location: str(args.location) || undefined,
+          attendees: Array.isArray(args.attendees)
+            ? args.attendees.filter((a): a is string => typeof a === "string")
+            : undefined,
+          timeZone: str(args.timeZone) || undefined,
+        },
+        ctx.driveAccessToken,
+      ),
+    );
+  }
+
+  if (name === TOOL_NAMES.calendarDeleteEvent) {
+    if (!ctx.userId || !ctx.hasCalendar) {
+      return { ok: false, error: "Google Calendar is not connected." };
+    }
+    if (!ctx.skipGate) {
+      const create =
+        ctx.deps?.createConfirmation ??
+        ((request: ConfirmationRequest, userId?: string | null) =>
+          createConfirmationRequest(request, userId, {
+            conversationId: ctx.conversationId,
+            runId: ctx.runId,
+          }));
+      const conf = await create(
+        {
+          action: "delete_resource",
+          title: "Delete calendar event",
+          preview: "This removes the event from your calendar.",
+          target: str(args.eventId),
+          payload: { tool: name, args, projectId: ctx.projectId ?? null },
+        },
+        ctx.userId,
+      );
+      return { ...conf };
+    }
+    return wrapConnectorResult(
+      await calendarDeleteEventForUser(ctx.userId, str(args.eventId), ctx.driveAccessToken),
+    );
+  }
+
+  if (name === TOOL_NAMES.contactsSearch) {
+    if (!ctx.userId || !ctx.hasContacts) {
+      return { ok: false, error: "Google Contacts is not connected." };
+    }
+    return wrapConnectorResult(
+      await contactsSearchForUser(ctx.userId, str(args.query), ctx.driveAccessToken),
+    );
+  }
+
+  if (name === TOOL_NAMES.contactsCreate) {
+    if (!ctx.userId || !ctx.hasContacts) {
+      return { ok: false, error: "Google Contacts is not connected." };
+    }
+    return wrapConnectorResult(
+      await contactsCreateForUser(
+        ctx.userId,
+        {
+          firstName: str(args.firstName) || undefined,
+          lastName: str(args.lastName) || undefined,
+          emails: Array.isArray(args.emails)
+            ? args.emails.filter((e): e is string => typeof e === "string")
+            : undefined,
+          phones: Array.isArray(args.phones)
+            ? args.phones.filter((p): p is string => typeof p === "string")
+            : undefined,
+        },
+        ctx.driveAccessToken,
+      ),
+    );
   }
 
   if (name === TOOL_NAMES.driveSearch) {

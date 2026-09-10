@@ -42,6 +42,26 @@ export const DEFERRED_TOOL_ORDER = [
   TOOL_NAMES.githubGetRepo,
   TOOL_NAMES.githubListContents,
   TOOL_NAMES.githubReadFile,
+  TOOL_NAMES.githubListIssues,
+  TOOL_NAMES.githubGetIssue,
+  TOOL_NAMES.githubListPullRequests,
+  TOOL_NAMES.githubGetPullRequest,
+  TOOL_NAMES.githubListCommits,
+  TOOL_NAMES.githubCreateBranch,
+  TOOL_NAMES.githubCreateOrUpdateFile,
+  TOOL_NAMES.githubCreateIssue,
+  TOOL_NAMES.githubAddIssueComment,
+  TOOL_NAMES.githubCreatePullRequest,
+  TOOL_NAMES.githubMergePullRequest,
+  TOOL_NAMES.gmailSearch,
+  TOOL_NAMES.gmailRead,
+  TOOL_NAMES.gmailSend,
+  TOOL_NAMES.gmailCreateDraft,
+  TOOL_NAMES.calendarListEvents,
+  TOOL_NAMES.calendarCreateEvent,
+  TOOL_NAMES.calendarDeleteEvent,
+  TOOL_NAMES.contactsSearch,
+  TOOL_NAMES.contactsCreate,
 ] as const;
 
 const DEFERRED_SET = new Set<string>(DEFERRED_TOOL_ORDER);
@@ -89,6 +109,18 @@ const DEFERRED_SUITES: ReadonlyArray<readonly string[]> = [
     TOOL_NAMES.githubCreatePullRequest,
     TOOL_NAMES.githubMergePullRequest,
   ],
+  [
+    TOOL_NAMES.gmailSearch,
+    TOOL_NAMES.gmailRead,
+    TOOL_NAMES.gmailSend,
+    TOOL_NAMES.gmailCreateDraft,
+  ],
+  [
+    TOOL_NAMES.calendarListEvents,
+    TOOL_NAMES.calendarCreateEvent,
+    TOOL_NAMES.calendarDeleteEvent,
+  ],
+  [TOOL_NAMES.contactsSearch, TOOL_NAMES.contactsCreate],
 ];
 
 const CATALOG: Record<string, Omit<ToolCatalogEntry, "name">> = {

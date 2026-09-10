@@ -20,6 +20,9 @@ export type AgentContextPayload = {
   hasMemory: boolean;
   hasDrive: boolean;
   hasGitHub: boolean;
+  hasGmail: boolean;
+  hasCalendar: boolean;
+  hasContacts: boolean;
   driveAccessToken?: string;
   driveRefreshToken?: string;
   driveExpiresAt?: number;
@@ -73,6 +76,9 @@ export async function verifyAgentContextToken(
       hasMemory: payload.hasMemory === true,
       hasDrive: payload.hasDrive === true,
       hasGitHub: payload.hasGitHub === true,
+      hasGmail: payload.hasGmail === true,
+      hasCalendar: payload.hasCalendar === true,
+      hasContacts: payload.hasContacts === true,
       driveAccessToken:
         typeof payload.driveAccessToken === "string"
           ? payload.driveAccessToken

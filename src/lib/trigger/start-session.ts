@@ -8,6 +8,9 @@ export function mergeStartSessionClientData(input: {
   hasDrive: boolean;
   hasGitHub: boolean;
   hasMemory: boolean;
+  hasGmail?: boolean;
+  hasCalendar?: boolean;
+  hasContacts?: boolean;
 }): ChatClientData {
   return {
     ...input.clientData,
@@ -17,5 +20,8 @@ export function mergeStartSessionClientData(input: {
     hasDrive: input.hasDrive,
     hasGitHub: input.hasGitHub,
     hasMemory: input.hasMemory,
+    hasGmail: input.hasGmail ?? input.hasDrive,
+    hasCalendar: input.hasCalendar ?? input.hasDrive,
+    hasContacts: input.hasContacts ?? input.hasDrive,
   };
 }

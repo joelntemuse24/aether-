@@ -39,6 +39,23 @@ const SAFE_READ_TOOLS = new Set<string>([
   TOOL_NAMES.githubListCommits,
   TOOL_NAMES.workspaceReadFile,
   TOOL_NAMES.workspaceListFiles,
+  TOOL_NAMES.gmailSearch,
+  TOOL_NAMES.gmailRead,
+  TOOL_NAMES.calendarListEvents,
+  TOOL_NAMES.contactsSearch,
+]);
+
+/**
+ * Routine mutations on the user's own resources. In Ask mode they wait on a
+ * card; in Auto they run directly. Email send is deliberately here — the
+ * user's Ask/Auto choice is the consent mechanism.
+ */
+const ROUTINE_MUTATION_TOOLS = new Set<string>([
+  TOOL_NAMES.memoryWrite,
+  TOOL_NAMES.gmailSend,
+  TOOL_NAMES.gmailCreateDraft,
+  TOOL_NAMES.calendarCreateEvent,
+  TOOL_NAMES.contactsCreate,
 ]);
 
 /**
@@ -50,8 +67,6 @@ const GITHUB_OWNED_WRITE_TOOLS = new Set<string>([
   TOOL_NAMES.githubCreateBranch,
   TOOL_NAMES.githubCreateOrUpdateFile,
 ]);
-
-const ROUTINE_MUTATION_TOOLS = new Set<string>([TOOL_NAMES.memoryWrite]);
 
 /** Files / tables / docs the user just asked for — land, don't pause. */
 const USER_DELIVERABLE_TOOLS = new Set<string>([

@@ -45,6 +45,15 @@ export const TOOL_NAMES = {
   workspaceWriteFile: "workspace_write_file",
   workspaceListFiles: "workspace_list_files",
   generateImage: "generate_image",
+  gmailSearch: "gmail_search",
+  gmailRead: "gmail_read",
+  gmailSend: "gmail_send",
+  gmailCreateDraft: "gmail_create_draft",
+  calendarListEvents: "calendar_list_events",
+  calendarCreateEvent: "calendar_create_event",
+  calendarDeleteEvent: "calendar_delete_event",
+  contactsSearch: "contacts_search",
+  contactsCreate: "contacts_create",
 } as const;
 
 export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -340,6 +349,62 @@ export const githubMergePullRequestInput = z.object({
   mergeMethod: z.enum(["merge", "squash", "rebase"]).optional(),
 });
 
+export const gmailSearchInput = z.object({
+  query: z
+    .string()
+    .describe("Gmail search query (supports Gmail operators like from:, is:unread)."),
+  maxResults: z.number().int().min(1).max(25).optional(),
+});
+
+export const gmailReadInput = z.object({
+  messageId: z.string().describe("Message id from gmail_search."),
+});
+
+export const gmailSendInput = z.object({
+  to: z.string().describe("Recipient email address."),
+  subject: z.string(),
+  body: z.string(),
+  threadId: z.string().optional().describe("Reply within this thread."),
+});
+
+export const gmailCreateDraftInput = z.object({
+  to: z.string(),
+  subject: z.string(),
+  body: z.string(),
+  threadId: z.string().optional(),
+});
+
+export const calendarListEventsInput = z.object({
+  timeMin: z.string().optional().describe("ISO 8601 start of range."),
+  timeMax: z.string().optional().describe("ISO 8601 end of range."),
+  maxResults: z.number().int().min(1).max(50).optional(),
+});
+
+export const calendarCreateEventInput = z.object({
+  summary: z.string().describe("Event title."),
+  start: z.string().describe("ISO 8601 start datetime."),
+  end: z.string().describe("ISO 8601 end datetime."),
+  description: z.string().optional(),
+  location: z.string().optional(),
+  attendees: z.array(z.string().email()).optional(),
+  timeZone: z.string().optional().describe("IANA timezone, e.g. America/New_York."),
+});
+
+export const calendarDeleteEventInput = z.object({
+  eventId: z.string().describe("Event id from calendar_list_events."),
+});
+
+export const contactsSearchInput = z.object({
+  query: z.string().describe("Name, email, or phone fragment to search."),
+});
+
+export const contactsCreateInput = z.object({
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  emails: z.array(z.string().email()).optional(),
+  phones: z.array(z.string()).optional(),
+});
+
 export const generateImageInput = z.object({
   prompt: z
     .string()
@@ -502,6 +567,42 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Image",
     runningLabel: "Generating image…",
   },
+  [TOOL_NAMES.gmailSearch]: {
+    label: "Gmail",
+    runningLabel: "Searching Gmail…",
+  },
+  [TOOL_NAMES.gmailRead]: {
+    label: "Gmail",
+    runningLabel: "Reading email…",
+  },
+  [TOOL_NAMES.gmailSend]: {
+    label: "Gmail",
+    runningLabel: "Sending email…",
+  },
+  [TOOL_NAMES.gmailCreateDraft]: {
+    label: "Gmail",
+    runningLabel: "Creating draft…",
+  },
+  [TOOL_NAMES.calendarListEvents]: {
+    label: "Calendar",
+    runningLabel: "Listing events…",
+  },
+  [TOOL_NAMES.calendarCreateEvent]: {
+    label: "Calendar",
+    runningLabel: "Creating event…",
+  },
+  [TOOL_NAMES.calendarDeleteEvent]: {
+    label: "Calendar",
+    runningLabel: "Deleting event…",
+  },
+  [TOOL_NAMES.contactsSearch]: {
+    label: "Contacts",
+    runningLabel: "Searching contacts…",
+  },
+  [TOOL_NAMES.contactsCreate]: {
+    label: "Contacts",
+    runningLabel: "Creating contact…",
+  },
 };
 
 export function getToolDisplay(name: string): ToolDisplay {
@@ -541,7 +642,10 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 - "github_get_repo" / "github_list_contents" / "github_read_file": repo tools (one path per read_file call; parallelize multiple files).
 - "github_list_issues" / "github_get_issue" / "github_list_pull_requests" / "github_get_pull_request" / "github_list_commits": inspect issues, PRs, and commit history.
 - "github_create_branch" / "github_create_or_update_file": code writes. Your own repos commit directly; other owners' or org repos ask first.
-- "github_create_issue" / "github_add_issue_comment" / "github_create_pull_request" / "github_merge_pull_request": publishing actions — always confirm first; visible to others.
+- "gmail_search" / "gmail_read": the user's Gmail when connected.
+- "gmail_send" / "gmail_create_draft": sending email. In Ask mode every send waits on a card; in Auto it runs directly — the user chose that tradeoff in settings.
+- "calendar_list_events" / "calendar_create_event": the user's primary calendar. Ordinary event creation just lands; deleting always confirms.
+- "contacts_search" / "contacts_create": the user's Google contacts. Creating just lands; searching is instant.
 
 ## GitHub rule (hard)
 - github.com / owner-repo → github_* only. Never Drive/fetch_url/web_search for repo contents.

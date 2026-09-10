@@ -38,6 +38,15 @@ import {
   workspaceWriteFileInput,
   workspaceListFilesInput,
   generateImageInput,
+  gmailSearchInput,
+  gmailReadInput,
+  gmailSendInput,
+  gmailCreateDraftInput,
+  calendarListEventsInput,
+  calendarCreateEventInput,
+  calendarDeleteEventInput,
+  contactsSearchInput,
+  contactsCreateInput,
 } from "@/lib/tools";
 import { verifyChecklistInput } from "@/lib/harness/verify";
 
@@ -46,6 +55,9 @@ export type HeadStartToolCapabilities = {
   hasDrive?: boolean;
   hasGitHub?: boolean;
   hasMemory?: boolean;
+  hasGmail?: boolean;
+  hasCalendar?: boolean;
+  hasContacts?: boolean;
 };
 
 export function buildHeadStartToolSchemas(
@@ -215,6 +227,57 @@ export function buildHeadStartToolSchemas(
       description:
         "Merge a GitHub pull request. Always asks for confirmation first.",
       inputSchema: githubMergePullRequestInput,
+    });
+  }
+
+  if (ctx.hasGmail) {
+    tools[TOOL_NAMES.gmailSearch] = tool({
+      description:
+        "Search the user's Gmail. Supports Gmail operators (from:, is:unread, subject:).",
+      inputSchema: gmailSearchInput,
+    });
+    tools[TOOL_NAMES.gmailRead] = tool({
+      description: "Read one email by message id from gmail_search.",
+      inputSchema: gmailReadInput,
+    });
+    tools[TOOL_NAMES.gmailSend] = tool({
+      description:
+        "Send an email from the user's Gmail. In Ask mode the user confirms first; in Auto it sends directly.",
+      inputSchema: gmailSendInput,
+    });
+    tools[TOOL_NAMES.gmailCreateDraft] = tool({
+      description:
+        "Create a Gmail draft without sending. Use when the user wants to review before sending.",
+      inputSchema: gmailCreateDraftInput,
+    });
+  }
+
+  if (ctx.hasCalendar) {
+    tools[TOOL_NAMES.calendarListEvents] = tool({
+      description:
+        "List upcoming events on the user's primary calendar.",
+      inputSchema: calendarListEventsInput,
+    });
+    tools[TOOL_NAMES.calendarCreateEvent] = tool({
+      description:
+        "Create an event on the user's primary calendar. Ordinary creation lands directly; deletion always confirms.",
+      inputSchema: calendarCreateEventInput,
+    });
+    tools[TOOL_NAMES.calendarDeleteEvent] = tool({
+      description:
+        "Delete a calendar event. Always asks for confirmation first.",
+      inputSchema: calendarDeleteEventInput,
+    });
+  }
+
+  if (ctx.hasContacts) {
+    tools[TOOL_NAMES.contactsSearch] = tool({
+      description: "Search the user's Google contacts.",
+      inputSchema: contactsSearchInput,
+    });
+    tools[TOOL_NAMES.contactsCreate] = tool({
+      description: "Create a Google contact.",
+      inputSchema: contactsCreateInput,
     });
   }
 

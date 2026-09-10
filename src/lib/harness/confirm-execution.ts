@@ -9,7 +9,7 @@ import type { AetherToolContext } from "@/lib/hermes/aether-tools";
  * Build an execution context for an approved confirmation replay from the
  * signed-in user's CURRENT connector grants. The replay payload itself never
  * carries tokens; capabilities and tokens are reacquired server-side so
- * approved Drive/GitHub work can actually execute.
+ * approved Drive/GitHub/Google work can actually execute.
  *
  * Callers must keep skipGate: true — the user already approved this call.
  */
@@ -22,18 +22,28 @@ export async function connectorContextForReplay(input: {
   const session = await auth();
   const userId =
     input.userId ?? session?.user?.id ?? session?.user?.email ?? null;
-  const hasDrive = userId ? !!(await getValidDriveAccessToken(userId)) : false;
-  const hasGitHub = userId ? !!(await getValidGitHubAccessToken(userId)) : false;
+  const googleToken = userId
+    ? ((await getValidDriveAccessToken(userId))?.accessToken ?? undefined)
+    : undefined;
 
   return {
     userId,
-    conversationId: input.conversationId,
+    conversationId: input.conversationId ?? null,
     projectId: input.projectId,
     runId: input.runId ?? null,
     approvalMode: parseToolApprovalMode("ask"),
     hasMemory: !!(userId && isCloudDbConfigured()),
-    hasDrive,
-    hasGitHub,
+    hasDrive: !!googleToken,
+    hasGitHub: userId
+      ? !!(await getValidGitHubAccessToken(userId))
+      : false,
+    // Google service capabilities follow the shared Google grant until
+    // per-service scope tracking lands; the token refresh in drive-session
+    // fails closed for missing scopes, so this is safe for read paths.
+    hasGmail: !!googleToken,
+    hasCalendar: !!googleToken,
+    hasContacts: !!googleToken,
+    driveAccessToken: googleToken,
     skipGate: true,
   };
 }
