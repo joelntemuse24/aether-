@@ -23,6 +23,12 @@ import { isCloudDbConfigured } from "@/lib/db";
 import { searchMemories, writeMemory } from "@/lib/memory/store";
 import { TOOL_NAMES } from "@/lib/tools";
 import {
+  workspaceExec,
+  workspaceListFiles,
+  workspaceReadFile,
+  workspaceWriteFile,
+} from "@/lib/connectors/workspace";
+import {
   parseToolApprovalMode,
   shouldConfirmAetherTool,
   type ToolApprovalMode,
@@ -91,6 +97,10 @@ export type AetherToolDeps = {
     request: ConfirmationRequest,
     userId?: string | null,
   ) => Promise<ConfirmationToolResult>;
+  workspaceExec?: typeof workspaceExec;
+  workspaceReadFile?: typeof workspaceReadFile;
+  workspaceWriteFile?: typeof workspaceWriteFile;
+  workspaceListFiles?: typeof workspaceListFiles;
 };
 
 export type AetherToolContext = {
@@ -126,6 +136,10 @@ const AETHER_TOOL_NAMES = new Set<string>([
   TOOL_NAMES.githubGetRepo,
   TOOL_NAMES.githubListContents,
   TOOL_NAMES.githubReadFile,
+  TOOL_NAMES.workspaceExec,
+  TOOL_NAMES.workspaceReadFile,
+  TOOL_NAMES.workspaceWriteFile,
+  TOOL_NAMES.workspaceListFiles,
 ]);
 
 export function isAetherOwnedToolName(name: string): boolean {
@@ -348,6 +362,41 @@ export async function executeAetherTool(input: {
       }
     }
     return { ok: true, kind, title, persisted: false, content };
+  }
+
+  const workspaceIdentity = {
+    userId: ctx.userId,
+    conversationId: ctx.conversationId,
+  };
+
+  if (name === TOOL_NAMES.workspaceExec) {
+    const exec = ctx.deps?.workspaceExec ?? workspaceExec;
+    return exec(workspaceIdentity, {
+      command: str(args.command),
+      timeoutMs:
+        typeof args.timeoutMs === "number" ? args.timeoutMs : undefined,
+    });
+  }
+
+  if (name === TOOL_NAMES.workspaceReadFile) {
+    const read = ctx.deps?.workspaceReadFile ?? workspaceReadFile;
+    return read(workspaceIdentity, { path: str(args.path) });
+  }
+
+  if (name === TOOL_NAMES.workspaceWriteFile) {
+    const write = ctx.deps?.workspaceWriteFile ?? workspaceWriteFile;
+    return write(workspaceIdentity, {
+      path: str(args.path),
+      content: str(args.content),
+    });
+  }
+
+  if (name === TOOL_NAMES.workspaceListFiles) {
+    const list = ctx.deps?.workspaceListFiles ?? workspaceListFiles;
+    return list(workspaceIdentity, {
+      path: str(args.path) || undefined,
+      depth: typeof args.depth === "number" ? args.depth : undefined,
+    });
   }
 
   if (name === TOOL_NAMES.driveSearch) {

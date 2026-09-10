@@ -11,6 +11,7 @@ import { resolveToolCallbackAuth } from "@/lib/trigger/tool-callback-auth";
 import { driveAccessFromAgentContext } from "@/lib/trigger/connector-from-context";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 /**
  * Remote-host callback: execute an Aether-owned tool with the user's
