@@ -61,7 +61,8 @@ describe("four chat playbooks", () => {
     assert.match(block, /slides/i);
     assert.match(block, /sheet/i);
     assert.match(block, /web_search/);
-    assert.match(block, /create_artifact/);
+    assert.match(block, /create_presentation/);
+    assert.match(block, /create_spreadsheet/);
   });
 
   it("returns empty addendum when no playbook applies", () => {

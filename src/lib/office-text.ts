@@ -1,10 +1,10 @@
 import JSZip from "jszip";
 
-const DOCX_MIME =
+export const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-const PPTX_MIME =
+export const PPTX_MIME =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-const XLSX_MIME =
+export const XLSX_MIME =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 const OFFICE_EXTENSIONS = new Set(["docx", "pptx", "xlsx"]);
@@ -150,6 +150,11 @@ export async function extractOfficeText(
       const cells = row.match(/<c[\s>][\s\S]*?<\/c>|<c\b[^>]*\/>/g) ?? [];
       const vals: string[] = [];
       for (const cell of cells) {
+        const inline = cell.match(/<is>[\s\S]*?<t[^>]*>([\s\S]*?)<\/t>/);
+        if (inline?.[1] != null) {
+          vals.push(decodeXmlEntities(inline[1]));
+          continue;
+        }
         const isShared = /\bt="s"/.test(cell);
         const v = cell.match(/<v>([\s\S]*?)<\/v>/)?.[1];
         if (v == null) {

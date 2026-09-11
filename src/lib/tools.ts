@@ -44,6 +44,9 @@ export const TOOL_NAMES = {
   workspaceReadFile: "workspace_read_file",
   workspaceWriteFile: "workspace_write_file",
   workspaceListFiles: "workspace_list_files",
+  workspacePublishFile: "workspace_publish_file",
+  createPresentation: "create_presentation",
+  createSpreadsheet: "create_spreadsheet",
   generateImage: "generate_image",
   gmailSearch: "gmail_search",
   gmailRead: "gmail_read",
@@ -75,6 +78,7 @@ export const ARTIFACT_KINDS = [
   "data",
   "image",
   "svg",
+  "file",
 ] as const;
 
 export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
@@ -123,7 +127,7 @@ export const createArtifactInput = z.object({
   kind: z
     .enum(ARTIFACT_KINDS)
     .describe(
-      "The artifact type: 'code' for source code, 'document' for markdown prose, 'data' for JSON/tabular data, 'image' for an image data URL, 'svg' for inline SVG markup.",
+      "The artifact type: 'code' for source code, 'document' for markdown prose, 'data' for JSON/tabular data, 'image' for an image data URL, 'svg' for inline SVG markup, 'file' for a downloadable binary (pptx/xlsx/pdf).",
     ),
   title: z.string().describe("A short, human-friendly title."),
   language: z
@@ -275,6 +279,56 @@ export const workspaceWriteFileInput = z.object({
 export const workspaceListFilesInput = z.object({
   path: z.string().optional().describe("Directory relative to the workspace root."),
   depth: z.number().int().min(1).max(6).optional(),
+});
+
+export const workspacePublishFileInput = z.object({
+  path: z
+    .string()
+    .min(1)
+    .describe("Workspace-relative path of the file to attach in-thread (pptx, xlsx, pdf, etc.)."),
+  title: z
+    .string()
+    .optional()
+    .describe("Short title for the artifact panel."),
+});
+
+export const createPresentationInput = z.object({
+  title: z.string().min(1).describe("Deck title shown to the user and used as the filename."),
+  subtitle: z.string().optional().describe("Optional subtitle for the title slide."),
+  slides: z
+    .array(
+      z.object({
+        title: z.string().min(1).describe("Slide title."),
+        bullets: z
+          .array(z.string())
+          .optional()
+          .describe("3–5 short bullets. Omit on a title/section slide."),
+        notes: z.string().optional().describe("Optional speaker notes (plain text)."),
+        layout: z
+          .enum(["title", "title_and_bullets", "section"])
+          .optional()
+          .describe("title = cover; section = section divider; default is title plus bullets."),
+      }),
+    )
+    .min(1)
+    .max(40)
+    .describe("Ordered slides. Prefer 6–12 for a research deck."),
+});
+
+export const createSpreadsheetInput = z.object({
+  title: z.string().min(1).describe("Workbook title used as the filename."),
+  sheets: z
+    .array(
+      z.object({
+        name: z.string().optional().describe("Sheet tab name."),
+        headers: z.array(z.string()).optional().describe("Column headers for the first row."),
+        rows: z
+          .array(z.array(z.union([z.string(), z.number(), z.boolean(), z.null()])))
+          .describe("Data rows. Values are stored as text or numbers."),
+      }),
+    )
+    .min(1)
+    .max(8),
 });
 
 export const githubListIssuesInput = z.object({
@@ -563,6 +617,18 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Workspace",
     runningLabel: "Listing files…",
   },
+  [TOOL_NAMES.workspacePublishFile]: {
+    label: "File",
+    runningLabel: "Attaching file…",
+  },
+  [TOOL_NAMES.createPresentation]: {
+    label: "Slides",
+    runningLabel: "Building slides…",
+  },
+  [TOOL_NAMES.createSpreadsheet]: {
+    label: "Spreadsheet",
+    runningLabel: "Building spreadsheet…",
+  },
   [TOOL_NAMES.generateImage]: {
     label: "Image",
     runningLabel: "Generating image…",
@@ -626,13 +692,16 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 - "execute_python": sandboxed in-browser Python for math, data, or verifying code.
 - "web_search": current or factual lookups. Few focused queries only.
 - "fetch_url": read a public page as text (IR, press, docs). Soft-fails paywalls; PDFs best-effort. Never use for github.com repos.
-- "create_artifact": substantial reusable content. kind "document" for essays/briefs; "code" / "data" / "svg" / "image" when those fit.
+- "create_artifact": substantial reusable content. kind "document" for essays/briefs; "code" / "data" / "svg" / "image" when those fit. Do not use this for a PowerPoint or Excel file.
+- "create_presentation": build a real .pptx and attach it in-thread. Use this for decks / slides / PowerPoint — do not install python-pptx or fall back to a markdown briefing.
+- "create_spreadsheet": build a real .xlsx and attach it in-thread. Use this for Excel / tables the user asked to download.
 - "verify_checklist": structured verify pass before handing back substantial work (deep / research / write / timed drafts).
 - "request_confirmation": gate any side effect (submit, send, upload) until the user approves. Never claim a side effect completed without approval.
 - "browser_navigate": open a public URL and extract text (fetch or full browser when configured).
 - "browser_act": extract / fill_preview / click / submit on a page. submit always returns needs_confirmation.
-- "workspace_exec": run shell commands in an isolated per-conversation Linux workspace.
+- "workspace_exec": run shell commands in an isolated per-conversation Linux workspace. If it reports the workspace unavailable, use create_presentation / create_spreadsheet for office files instead of retrying pip.
 - "workspace_read_file" / "workspace_write_file" / "workspace_list_files": inspect and edit files in that isolated workspace.
+- "workspace_publish_file": attach a binary from the isolated workspace (pptx, xlsx, pdf) as a downloadable file in this thread.
 - "generate_image": generate a bitmap image from a description. Confirms before spending — the user sees a card.
 - "tool_search": unlock optional tools (memory, Drive, GitHub) by keyword when needed.
 
@@ -662,6 +731,7 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 
 ## Artifacts & narration
 - Short snippets in chat; create_artifact for long or reusable work (essays, briefs).
+- Decks and spreadsheets the user asked to download must be real files (create_presentation / create_spreadsheet), not markdown stand-ins.
 - Weave tool results into the answer; no raw JSON dumps.
 
 ## If tools are unavailable

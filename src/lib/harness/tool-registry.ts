@@ -61,6 +61,9 @@ export function resolveAvailableToolNames(ctx: {
     TOOL_NAMES.workspaceReadFile,
     TOOL_NAMES.workspaceWriteFile,
     TOOL_NAMES.workspaceListFiles,
+    TOOL_NAMES.workspacePublishFile,
+    TOOL_NAMES.createPresentation,
+    TOOL_NAMES.createSpreadsheet,
     TOOL_NAMES.generateImage,
     TOOL_NAMES.githubListIssues,
     TOOL_NAMES.githubGetIssue,
@@ -208,6 +211,18 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     [TOOL_NAMES.workspaceListFiles]: tool({
       ...schemas[TOOL_NAMES.workspaceListFiles],
       execute: async (input) => runAether(TOOL_NAMES.workspaceListFiles, input),
+    }),
+    [TOOL_NAMES.workspacePublishFile]: tool({
+      ...schemas[TOOL_NAMES.workspacePublishFile],
+      execute: async (input) => runAether(TOOL_NAMES.workspacePublishFile, input),
+    }),
+    [TOOL_NAMES.createPresentation]: tool({
+      ...schemas[TOOL_NAMES.createPresentation],
+      execute: async (input) => runAether(TOOL_NAMES.createPresentation, input),
+    }),
+    [TOOL_NAMES.createSpreadsheet]: tool({
+      ...schemas[TOOL_NAMES.createSpreadsheet],
+      execute: async (input) => runAether(TOOL_NAMES.createSpreadsheet, input),
     }),
     [TOOL_NAMES.generateImage]: tool({
       ...schemas[TOOL_NAMES.generateImage],

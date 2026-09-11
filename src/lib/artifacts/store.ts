@@ -44,7 +44,12 @@ export async function saveArtifact(
   const kind = input.kind;
   const title = input.title.slice(0, 200);
   const language = input.language ?? null;
-  const content = input.content.slice(0, 500_000);
+  const maxChars = kind === "file" ? 4_000_000 : 500_000;
+  if (kind === "file" && input.content.length > maxChars) {
+    throw new Error("File is too large to save.");
+  }
+  const content =
+    kind === "file" ? input.content : input.content.slice(0, maxChars);
   const projectId = input.projectId ?? null;
   const conversationId = input.conversationId ?? null;
 

@@ -14,6 +14,9 @@ describe("head-start schema-only tools", () => {
     assert.ok(tools[TOOL_NAMES.workspaceReadFile]);
     assert.ok(tools[TOOL_NAMES.workspaceWriteFile]);
     assert.ok(tools[TOOL_NAMES.workspaceListFiles]);
+    assert.ok(tools[TOOL_NAMES.workspacePublishFile]);
+    assert.ok(tools[TOOL_NAMES.createPresentation]);
+    assert.ok(tools[TOOL_NAMES.createSpreadsheet]);
     assert.ok(tools[TOOL_NAMES.generateImage]);
     for (const tool of Object.values(tools)) {
       assert.equal(

@@ -88,7 +88,18 @@ describe("Ask vs Auto policy", () => {
   });
 
   it("does not pause ordinary workspace work", () => {
-    for (const name of ["workspace_exec", "workspace_write_file"]) {
+    for (const name of [
+      "workspace_exec",
+      "workspace_write_file",
+      "workspace_publish_file",
+    ]) {
+      assert.equal(shouldConfirmAetherTool({ name, mode: "ask" }), false, name);
+      assert.equal(shouldConfirmAetherTool({ name, mode: "auto" }), false, name);
+    }
+  });
+
+  it("does not pause create_presentation or create_spreadsheet", () => {
+    for (const name of ["create_presentation", "create_spreadsheet"]) {
       assert.equal(shouldConfirmAetherTool({ name, mode: "ask" }), false, name);
       assert.equal(shouldConfirmAetherTool({ name, mode: "auto" }), false, name);
     }

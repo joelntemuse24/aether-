@@ -8,6 +8,7 @@ import {
   CodeIcon,
   CopyIcon,
   DownloadIcon,
+  FileIcon,
   FileTextIcon,
   ImageIcon,
   PencilIcon,
@@ -74,6 +75,15 @@ const PREVIEWABLE_CODE_LANGS = new Set([
 type Tab = "preview" | "code" | "edit" | "table" | "chart" | "json";
 
 function download(filename: string, content: string, mime: string) {
+  if (content.startsWith("data:")) {
+    const a = document.createElement("a");
+    a.href = content;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return;
+  }
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -491,6 +501,7 @@ export function ArtifactPanel() {
   const tabs = useMemo<Tab[]>(() => {
     if (!artifact) return [];
     if (kind === "image") return [];
+    if (kind === "file") return [];
     if (kind === "svg") return ["preview", "code"];
     if (kind === "document") return ["preview", "edit"];
     if (kind === "data") {
@@ -589,10 +600,16 @@ export function ArtifactPanel() {
   };
 
   const onDownload = () => {
-    if (kind === "image") {
+    if (kind === "image" || kind === "file") {
+      const filename =
+        kind === "file"
+          ? artifact.language?.includes(".")
+            ? artifact.language
+            : `${slugify(artifact.title)}${artifact.language ? `.${artifact.language}` : ""}`
+          : `${slugify(artifact.title)}`;
       const a = document.createElement("a");
       a.href = content;
-      a.download = `${slugify(artifact.title)}`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -665,7 +682,9 @@ export function ArtifactPanel() {
         ? BracesIcon
         : kind === "image"
           ? ImageIcon
-          : CodeIcon;
+          : kind === "file"
+            ? FileIcon
+            : CodeIcon;
 
   const tabIcon: Record<Tab, FC<{ className?: string }>> = {
     preview: EyeIcon,
@@ -703,6 +722,7 @@ export function ArtifactPanel() {
             <div className="text-[11px] lowercase text-[var(--muted-soft)]">
               {kind}
               {kind === "code" && lang ? ` · ${lang}` : ""}
+              {kind === "file" && lang ? ` · ${lang}` : ""}
               {saveState === "saving"
                 ? " · saving…"
                 : saveState === "saved"
@@ -736,7 +756,7 @@ export function ArtifactPanel() {
           >
             <SaveIcon className="size-4" />
           </button>
-          {driveConnected && (
+          {driveConnected && kind !== "file" && (
             <button
               type="button"
               onClick={() => void onSaveToDrive()}
@@ -767,7 +787,7 @@ export function ArtifactPanel() {
               PDF
             </button>
           )}
-          {kind !== "image" && (
+          {kind !== "image" && kind !== "file" && (
             <button
               type="button"
               onClick={onCopy}
@@ -837,6 +857,27 @@ export function ArtifactPanel() {
               alt={artifact.title}
               className="max-h-full max-w-full object-contain"
             />
+          </div>
+        )}
+        {kind === "file" && (
+          <div className="flex h-full flex-col items-center justify-center gap-4 bg-[var(--elevated)] px-6 text-center">
+            <FileIcon className="size-10 text-[var(--accent)]" />
+            <div>
+              <p className="text-sm font-medium text-[var(--text)]">
+                {artifact.title}
+              </p>
+              <p className="mt-1 text-[12px] text-[var(--muted)]">
+                {artifact.language || "Downloadable file"}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onDownload}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-[var(--accent-hover)]"
+            >
+              <DownloadIcon className="size-3.5" />
+              Download
+            </button>
           </div>
         )}
 
