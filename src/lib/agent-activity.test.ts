@@ -3,9 +3,14 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   activityClockShouldRun,
+  closeActivityClock,
+  collectActivitySteps,
   collectWebSearchHits,
   deriveAgentActivity,
   formatActivityElapsed,
+  recalledActivityElapsed,
+  resetActivityClock,
+  syncActivityClock,
 } from "./agent-activity";
 
 describe("deriveAgentActivity — honesty", () => {
@@ -98,7 +103,7 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(empty.steps.filter((s) => s.kind === "tool").length, 0);
     assert.equal(empty.mode, "elapsed");
     assert.equal(empty.liveLine, "Working");
-    assert.equal(empty.elapsedLabel, "Working 5s");
+    assert.equal(empty.elapsedLabel, "Working for 5s");
     assert.doesNotMatch(JSON.stringify(empty), /search|Planning|Thinking|Mulling|Untangling/i);
 
     const tokensOnScreen = deriveAgentActivity({
@@ -111,8 +116,9 @@ describe("deriveAgentActivity — honesty", () => {
       isRunning: true,
       elapsedSeconds: 5,
     });
-    assert.equal(tokensOnScreen.visible, false);
-    assert.equal(tokensOnScreen.mode, "hidden");
+    assert.equal(tokensOnScreen.visible, true);
+    assert.equal(tokensOnScreen.mode, "elapsed");
+    assert.equal(tokensOnScreen.elapsedLabel, "Working for 5s");
     assert.equal(tokensOnScreen.steps.length, 0);
 
     const finishedTextOnly = deriveAgentActivity({
@@ -125,7 +131,9 @@ describe("deriveAgentActivity — honesty", () => {
       isRunning: false,
       elapsedSeconds: 8,
     });
-    assert.equal(finishedTextOnly.visible, false);
+    assert.equal(finishedTextOnly.visible, true);
+    assert.equal(finishedTextOnly.mode, "collapsed");
+    assert.equal(finishedTextOnly.summaryLabel, "Worked for 8s");
     assert.equal(finishedTextOnly.steps.length, 0);
   });
 
@@ -188,7 +196,7 @@ describe("deriveAgentActivity — honesty", () => {
 
     assert.equal(view.visible, true);
     assert.equal(view.mode, "collapsed");
-    assert.equal(view.summaryLabel, "Searched the web");
+    assert.equal(view.summaryLabel, "Worked for 12s");
     assert.equal(view.elapsedSeconds, 12);
     assert.equal(view.steps.length, 1);
     assert.equal(view.steps[0]?.label, "Searched the web");
@@ -445,6 +453,86 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(fetched[0]?.id, "1");
     assert.equal(fetched[0]?.title, "Central Bank");
   });
+
+  it("treats raw DSML tool_search text as a real tool step, not visible prose", () => {
+    const dsml =
+      '<|DSML| tool_search query="current time Dublin Ireland"><|/DSML| tool_search>';
+    const live = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [{ type: "text", text: dsml }],
+        },
+      ],
+      isRunning: true,
+      elapsedSeconds: 3,
+    });
+    assert.equal(live.mode, "live");
+    assert.equal(live.steps[0]?.toolName, "tool_search");
+    assert.match(live.steps[0]?.label ?? "", /Looking up tools|Searching/i);
+    assert.equal(live.elapsedLabel, "Working for 3s");
+    assert.doesNotMatch(JSON.stringify(live), /DSML|tool_search query=/);
+
+    const done = deriveAgentActivity({
+      messages: [
+        {
+          id: "a-dsml",
+          role: "assistant",
+          parts: [{ type: "text", text: dsml }],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 7,
+    });
+    assert.equal(done.mode, "collapsed");
+    assert.equal(done.summaryLabel, "Worked for 7s");
+  });
+
+  it("keeps Worked for Ns after the live clock is interrupted", () => {
+    resetActivityClock();
+    syncActivityClock(true);
+    const seconds = closeActivityClock("asst-turn-1");
+    assert.ok(seconds >= 1);
+    assert.equal(recalledActivityElapsed("asst-turn-1"), seconds);
+    const afterRemount = syncActivityClock(false);
+    assert.equal(afterRemount, seconds);
+    assert.equal(recalledActivityElapsed("new-id-after-remount"), seconds);
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          id: "new-id-after-remount",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-web_search",
+              args: { query: "Ireland unemployment" },
+              result: { ok: true },
+              status: { type: "complete" },
+            },
+          ],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 0,
+    });
+    assert.equal(view.mode, "collapsed");
+    assert.equal(view.summaryLabel, `Worked for ${seconds}s`);
+    resetActivityClock();
+  });
+
+  it("collects DSML tool_search from a text part", () => {
+    const steps = collectActivitySteps(
+      [
+        {
+          type: "text",
+          text: '<|DSML| tool_search query="current time Dublin Ireland">',
+        },
+      ],
+      true,
+    );
+    assert.equal(steps.length, 1);
+    assert.equal(steps[0]?.toolName, "tool_search");
+  });
 });
 
 describe("formatActivityElapsed", () => {
@@ -481,6 +569,7 @@ describe("thread / composer copy stays honest", () => {
       /bg-\[var\(--text\)\] px-3 text-\[var\(--canvas\)\]/,
     );
     assert.match(thread, /aether-send-stop/);
+    assert.match(thread, /aether-composer-dock/);
     const activity = readFileSync(
       new URL(
         "../components/assistant-ui/agent-status-strip.tsx",
@@ -518,6 +607,8 @@ describe("thread / composer copy stays honest", () => {
     assert.match(css, /prefers-reduced-motion/);
     assert.match(css, /transition-property:/);
     assert.match(css, /aether-inline-source/);
+    assert.match(css, /aether-activity__spinner/);
+    assert.match(css, /aether-composer-dock/);
     assert.match(css, /aether-activity__chip/);
     assert.match(toolUi, /aether-tool-trace/);
     assert.doesNotMatch(toolUi, /const ICONS/);
@@ -526,11 +617,15 @@ describe("thread / composer copy stays honest", () => {
     assert.doesNotMatch(toolUi, /Mulling|Untangling/);
     assert.doesNotMatch(toolUi, /ToolApprovalToggle/);
     assert.match(strip, /aether-inline-source/);
+    assert.match(strip, /aether-source-tray__pill/);
     assert.match(strip, /aether-activity__chip/);
     assert.match(strip, /MessageSourceCards/);
     assert.match(thread, /MessageSourceCards/);
     assert.doesNotMatch(thread, /ToolApprovalToggle/);
     assert.doesNotMatch(strip, /Mulling|Untangling|Churning/);
+    assert.match(strip, /Working for/);
+    assert.match(strip, /aether-activity__steps/);
+    assert.match(strip, /aether-activity__spinner/);
     assert.match(strip, /activityClockShouldRun/);
     assert.match(
       strip,

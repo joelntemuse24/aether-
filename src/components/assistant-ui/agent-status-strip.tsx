@@ -18,6 +18,7 @@ import {
   type ContinuePhase,
 } from "@/lib/agent-activity";
 import { cn } from "@/lib/utils";
+import { sanitizeVisibleAssistantText } from "@/lib/visible-chat-text";
 import "@/components/assistant-ui/agent-activity.css";
 
 type ContinueStatusDetail = {
@@ -56,7 +57,8 @@ function useThreadActivityElapsed(isRunning: boolean, messageId?: string) {
       if (wasRunningRef.current) {
         setElapsed(closeActivityClock(messageId));
       } else {
-        setElapsed(recalledActivityElapsed(messageId));
+        const recalled = recalledActivityElapsed(messageId);
+        setElapsed(recalled > 0 ? recalled : closeActivityClock(messageId));
       }
       wasRunningRef.current = false;
       return;
@@ -89,41 +91,51 @@ function ElapsedTicks({
   );
 }
 
-function MutatingLine({
+function WorkingHeader({ view }: { view: ActivityView }) {
+  return (
+    <div className="aether-activity__line">
+      <span className="aether-activity__spinner" aria-hidden />
+      {view.elapsedSeconds > 0 ? (
+        <ElapsedTicks seconds={view.elapsedSeconds} prefix="Working for" />
+      ) : (
+        <span className="aether-activity__words">Working</span>
+      )}
+    </div>
+  );
+}
+
+function LiveActivity({
   view,
   className,
 }: {
   view: ActivityView;
   className?: string;
 }) {
-  const working = view.mode === "elapsed";
-  const words = working ? "Working" : view.liveLine;
-
-  if (!words) return null;
-
-  const showTicks =
-    view.elapsedSeconds > 0 &&
-    (view.mode === "live" || view.mode === "elapsed");
-
   return (
     <div
       className={cn(
-        "aether-activity aether-activity--enter aether-activity__line",
+        "aether-activity aether-activity--enter",
         className,
       )}
       role="status"
       aria-live="polite"
     >
-      <span
-        key={view.lineKey ?? words}
-        className="aether-activity__words aether-activity--enter"
-      >
-        {words}
-      </span>
-      {showTicks ? (
-        <span className="aether-activity__ticks">
-          {formatActivityElapsed(view.elapsedSeconds)}
-        </span>
+      <WorkingHeader view={view} />
+      {view.steps.length > 0 ? (
+        <ol className="aether-activity__steps" aria-label="Work in this turn">
+          {view.steps.map((step) => (
+            <li
+              key={step.id}
+              className={cn(
+                "aether-activity__step",
+                step.state === "running" && "aether-activity__step--live",
+              )}
+              title={step.label}
+            >
+              {step.label}
+            </li>
+          ))}
+        </ol>
       ) : null}
     </div>
   );
@@ -177,7 +189,7 @@ export function AgentActivityPanel({
     );
   }
 
-  return <MutatingLine view={view} className={className} />;
+  return <LiveActivity view={view} className={className} />;
 }
 
 function threadMessagesFromState(messages: unknown): ActivityMessage[] {
@@ -202,6 +214,15 @@ export const AgentStatusStrip: FC = () => {
     const last = s.thread.messages[s.thread.messages.length - 1];
     return !!last && last.role === "assistant";
   });
+  const hasVisibleAssistantText = useAuiState((s) => {
+    const last = s.thread.messages[s.thread.messages.length - 1];
+    if (!last || last.role !== "assistant") return false;
+    return (last.parts ?? []).some((part) => {
+      if (part.type !== "text") return false;
+      const text = "text" in part && typeof part.text === "string" ? part.text : "";
+      return sanitizeVisibleAssistantText(text).length > 0;
+    });
+  });
   const messages = useAuiState((s) =>
     threadMessagesFromState(s.thread.messages),
   );
@@ -225,8 +246,9 @@ export const AgentStatusStrip: FC = () => {
     continueMax: continueStatus.max ?? MAX_AUTO_CONTINUES,
   });
 
-  if (hasLiveAssistant) return null;
-  if (view.mode === "collapsed") return null;
+  // Keep the composer clock ticking while the assistant is markup-only / empty.
+  if (hasVisibleAssistantText) return null;
+  if (view.mode === "collapsed" && hasLiveAssistant) return null;
 
   return <AgentActivityPanel view={view} className="mb-1.5 px-2.5" />;
 };
@@ -254,7 +276,7 @@ export const MessageSourceCards: FC = () => {
         </span>
         <span className="aether-source-tray__hosts">
           {hits.slice(0, 4).map((hit, i) => (
-            <span key={`host:${i}`} className="aether-source-tray__host">
+            <span key={`host:${i}`} className="aether-source-tray__pill">
               {hostLabel(hit.url) ?? hit.title.slice(0, 24)}
             </span>
           ))}

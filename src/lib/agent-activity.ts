@@ -7,6 +7,7 @@
  */
 
 import { collectSourceCitations } from "./citations";
+import { recoverToolCallsFromMarkup } from "./visible-chat-text";
 
 export type ActivityPart = {
   type?: string;
@@ -280,31 +281,44 @@ export function activityLabelForTool(
   }
 }
 
-function hasVisibleText(parts: readonly ActivityPart[] | undefined): boolean {
-  return (parts ?? []).some(
-    (p) =>
-      p.type === "text" &&
-      typeof p.text === "string" &&
-      p.text.trim().length > 0,
-  );
-}
-
 export function collectActivitySteps(
   parts: readonly ActivityPart[] | undefined,
   isRunning: boolean,
 ): ActivityStep[] {
   const steps: ActivityStep[] = [];
+  const seen = new Set<string>();
   for (const [index, part] of (parts ?? []).entries()) {
     const toolName = toolNameFromActivityPart(part);
-    if (!toolName) continue;
-    const running = partLooksRunning(part, isRunning);
-    steps.push({
-      id: `${toolName}:${index}`,
-      kind: "tool",
-      toolName,
-      label: activityLabelForTool(toolName, parseArgs(part), running),
-      state: running ? "running" : "complete",
-    });
+    if (toolName) {
+      const running = partLooksRunning(part, isRunning);
+      const id = `${toolName}:${index}`;
+      seen.add(toolName);
+      steps.push({
+        id,
+        kind: "tool",
+        toolName,
+        label: activityLabelForTool(toolName, parseArgs(part), running),
+        state: running ? "running" : "complete",
+      });
+      continue;
+    }
+    if (part.type === "text" && typeof part.text === "string") {
+      for (const recovered of recoverToolCallsFromMarkup(part.text)) {
+        if (seen.has(recovered.toolName)) continue;
+        seen.add(recovered.toolName);
+        steps.push({
+          id: `${recovered.toolName}:markup:${index}`,
+          kind: "tool",
+          toolName: recovered.toolName,
+          label: activityLabelForTool(
+            recovered.toolName,
+            recovered.args,
+            isRunning,
+          ),
+          state: isRunning ? "running" : "complete",
+        });
+      }
+    }
   }
   return steps;
 }
@@ -328,7 +342,14 @@ export function deriveAgentActivity(
   const assistant = latestAssistant(input.messages);
   const steps = collectActivitySteps(assistant?.parts, input.isRunning);
   const live = steps.find((s) => s.state === "running") ?? null;
-  const elapsed = input.elapsedSeconds;
+  const elapsed =
+    input.elapsedSeconds > 0
+      ? input.elapsedSeconds
+      : input.isRunning
+        ? 0
+        : steps.length > 0
+          ? recalledActivityElapsed(assistant?.id)
+          : 0;
   const elapsedText = elapsed > 0 ? formatActivityElapsed(elapsed) : null;
 
   if (
@@ -382,7 +403,7 @@ export function deriveAgentActivity(
         liveLine: current,
         lineKey: live?.id ?? steps[steps.length - 1]!.id,
         elapsedSeconds: elapsed,
-        elapsedLabel: elapsedText,
+        elapsedLabel: elapsedText ? `Working for ${elapsedText}` : "Working",
         summaryLabel: null,
       };
     }
@@ -395,20 +416,14 @@ export function deriveAgentActivity(
       lineKey: "collapsed",
       elapsedSeconds: elapsed,
       elapsedLabel: elapsedText,
-      summaryLabel:
-        steps.length === 1
-          ? (steps[0]?.label ?? null)
-          : elapsedText
-            ? `Worked for ${elapsedText}`
-            : (steps[0]?.label ?? null),
+      summaryLabel: elapsedText
+        ? `Worked for ${elapsedText}`
+        : (steps[0]?.label ?? null),
     };
   }
 
   if (input.isRunning) {
-    if (hasVisibleText(assistant?.parts)) {
-      return hidden(elapsed);
-    }
-    // Honest gerund while the model is actually generating — not a costume stack.
+    // Keep the Grok-style clock up until the turn ends — tokens do not hide it.
     return {
       visible: true,
       mode: "elapsed",
@@ -417,8 +432,22 @@ export function deriveAgentActivity(
       liveLine: "Working",
       lineKey: "elapsed",
       elapsedSeconds: elapsed,
-      elapsedLabel: elapsedText ? `Working ${elapsedText}` : "Working",
+      elapsedLabel: elapsedText ? `Working for ${elapsedText}` : "Working",
       summaryLabel: null,
+    };
+  }
+
+  if (elapsed > 0) {
+    return {
+      visible: true,
+      mode: "collapsed",
+      steps: [],
+      liveStepId: null,
+      liveLine: null,
+      lineKey: "collapsed",
+      elapsedSeconds: elapsed,
+      elapsedLabel: elapsedText,
+      summaryLabel: `Worked for ${elapsedText}`,
     };
   }
 
@@ -448,6 +477,72 @@ const MAX_RENDERED_SOURCES = 8;
 /** Session-local elapsed clock so completed turns can say "Worked for Ns". */
 let liveStartedAt: number | null = null;
 const completedElapsed = new Map<string, number>();
+let lastClosedElapsed = 0;
+let lastClosedAt = 0;
+const CLOCK_STORAGE_KEY = "aether:activity-clock:v1";
+const LAST_CLOSED_REUSE_MS = 60_000;
+
+function readPersistedClock(): {
+  startedAt?: number;
+  lastClosed?: number;
+  lastClosedAt?: number;
+} {
+  if (typeof sessionStorage === "undefined") return {};
+  try {
+    const raw = sessionStorage.getItem(CLOCK_STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as {
+      startedAt?: number;
+      lastClosed?: number;
+      lastClosedAt?: number;
+    };
+  } catch {
+    return {};
+  }
+}
+
+function writePersistedClock() {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(
+      CLOCK_STORAGE_KEY,
+      JSON.stringify({
+        startedAt: liveStartedAt,
+        lastClosed: lastClosedElapsed,
+        lastClosedAt,
+      }),
+    );
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+function restoreClockFromSession() {
+  if (liveStartedAt != null || lastClosedElapsed > 0) return;
+  const persisted = readPersistedClock();
+  if (typeof persisted.startedAt === "number" && persisted.startedAt > 0) {
+    liveStartedAt = persisted.startedAt;
+  }
+  if (typeof persisted.lastClosed === "number" && persisted.lastClosed > 0) {
+    lastClosedElapsed = persisted.lastClosed;
+    lastClosedAt =
+      typeof persisted.lastClosedAt === "number" ? persisted.lastClosedAt : Date.now();
+  }
+}
+
+export function resetActivityClock(): void {
+  liveStartedAt = null;
+  lastClosedElapsed = 0;
+  lastClosedAt = 0;
+  completedElapsed.clear();
+  if (typeof sessionStorage !== "undefined") {
+    try {
+      sessionStorage.removeItem(CLOCK_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  }
+}
 
 export function activityClockShouldRun(input: {
   isRunning: boolean;
@@ -466,11 +561,13 @@ export function activityClockShouldRun(input: {
 }
 
 export function syncActivityClock(isRunning: boolean): number {
+  restoreClockFromSession();
   if (!isRunning) {
-    liveStartedAt = null;
-    return 0;
+    if (liveStartedAt == null) return lastClosedElapsed;
+    return Math.floor((Date.now() - liveStartedAt) / 1000);
   }
   if (liveStartedAt == null) liveStartedAt = Date.now();
+  writePersistedClock();
   return Math.floor((Date.now() - liveStartedAt) / 1000);
 }
 
@@ -478,19 +575,40 @@ export function rememberActivityElapsed(
   messageId: string,
   seconds: number,
 ): void {
-  if (seconds > 0) completedElapsed.set(messageId, seconds);
+  if (seconds > 0) {
+    completedElapsed.set(messageId, seconds);
+    lastClosedElapsed = Math.max(lastClosedElapsed, seconds);
+    lastClosedAt = Date.now();
+    writePersistedClock();
+  }
 }
 
 export function recalledActivityElapsed(messageId?: string | null): number {
-  if (!messageId) return 0;
-  return completedElapsed.get(messageId) ?? 0;
+  if (messageId && completedElapsed.has(messageId)) {
+    return completedElapsed.get(messageId) ?? 0;
+  }
+  restoreClockFromSession();
+  if (liveStartedAt != null) {
+    return Math.max(0, Math.floor((Date.now() - liveStartedAt) / 1000));
+  }
+  const closedRecently =
+    lastClosedElapsed > 0 && Date.now() - lastClosedAt < LAST_CLOSED_REUSE_MS;
+  if (!messageId) return closedRecently ? lastClosedElapsed : 0;
+  return closedRecently ? lastClosedElapsed : 0;
 }
 
 export function closeActivityClock(messageId?: string | null): number {
+  restoreClockFromSession();
   if (liveStartedAt != null) {
-    const seconds = Math.floor((Date.now() - liveStartedAt) / 1000);
+    const seconds = Math.max(
+      1,
+      Math.floor((Date.now() - liveStartedAt) / 1000),
+    );
     if (messageId) rememberActivityElapsed(messageId, seconds);
+    lastClosedElapsed = Math.max(lastClosedElapsed, seconds);
+    lastClosedAt = Date.now();
     liveStartedAt = null;
+    writePersistedClock();
     return seconds;
   }
   return recalledActivityElapsed(messageId);

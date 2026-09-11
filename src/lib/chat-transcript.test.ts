@@ -8,6 +8,7 @@ import {
   prepareOutgoingChatMessages,
   shouldBlockSend,
   shouldCopyDraftToRemoteId,
+  shouldReplaceLiveWithStored,
 } from "./chat-transcript";
 
 function user(id: string, text: string): UIMessage {
@@ -98,6 +99,64 @@ describe("chat transcript client helpers", () => {
     } finally {
       restore();
     }
+  });
+
+  it("seeds a remount from a stashed first-send user turn", async () => {
+    const {
+      clearFirstSendDraft,
+      mergeSeedWithDraft,
+      stashFirstSendDraft,
+    } = await import("./chat-turn-draft");
+    clearFirstSendDraft();
+    const draft = [user("u-first", "What time is it in Dublin?")];
+    stashFirstSendDraft({
+      keys: ["__LOCALID_abc", "remote-first"],
+      messages: draft,
+    });
+
+    const seeded = mergeSeedWithDraft("remote-first", []);
+    assert.equal(seeded.length, 1);
+    const text = seeded[0]?.parts.find((p) => p.type === "text");
+    assert.equal(text && "text" in text ? text.text : "", "What time is it in Dublin?");
+
+    const remounted = mergeSeedWithDraft("brand-new-after-initialize", []);
+    assert.equal(remounted.length, 1);
+    const remountText = remounted[0]?.parts.find((p) => p.type === "text");
+    assert.equal(
+      remountText && "text" in remountText ? remountText.text : "",
+      "What time is it in Dublin?",
+    );
+    clearFirstSendDraft();
+  });
+
+  it("does not replace a live first send with empty stored history", () => {
+    assert.equal(
+      shouldReplaceLiveWithStored({
+        switched: true,
+        liveCount: 1,
+        storedCount: 0,
+        newChat: false,
+      }),
+      false,
+    );
+    assert.equal(
+      shouldReplaceLiveWithStored({
+        switched: true,
+        liveCount: 2,
+        storedCount: 2,
+        newChat: false,
+      }),
+      true,
+    );
+    assert.equal(
+      shouldReplaceLiveWithStored({
+        switched: true,
+        liveCount: 1,
+        storedCount: 0,
+        newChat: true,
+      }),
+      true,
+    );
   });
 
   it("copies an optimistic draft when remoteId first appears", () => {

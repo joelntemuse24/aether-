@@ -106,6 +106,15 @@ export function planUrlToThread(input: {
     if (input.pendingPath === input.pathname) return "ignore";
     return "switch-thread";
   }
+  // First send: initialize() writes `/c/<id>` while the path is still `/`.
+  // Treating that as switch-new wipes the guest turn (blank New chat).
+  if (
+    input.pendingPath &&
+    input.pendingPath !== NEW_CHAT_PATH &&
+    input.pendingPath !== input.pathname
+  ) {
+    return "ignore";
+  }
   // `/` must switch unless the runtime is already a new empty chat.
   // Skipping whenever pendingNewChat is set left the old thread mounted
   // (sidebar New conversation does not switchToNewThread itself).
