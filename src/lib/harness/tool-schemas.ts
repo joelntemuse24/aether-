@@ -14,6 +14,8 @@ import {
   memoryWriteInput,
   driveSearchInput,
   driveReadInput,
+  driveUploadInput,
+  driveWriteInput,
   githubGetRepoInput,
   githubListContentsInput,
   githubReadFileInput,
@@ -211,6 +213,16 @@ export function buildHeadStartToolSchemas(
         "Read a Google Drive file as text (Docs/Sheets export or text-like files). Pass a file id from drive_search. Discover via tool_search first if not already unlocked.",
       inputSchema: driveReadInput,
     });
+    tools[TOOL_NAMES.driveUpload] = tool({
+      description:
+        "Save a generated file (pptx, xlsx, pdf, docx) into the user's Drive. Pass filename plus workspacePath, artifactId, or content. Always confirms first — including Auto.",
+      inputSchema: driveUploadInput,
+    });
+    tools[TOOL_NAMES.driveWrite] = tool({
+      description:
+        "Alias of drive_upload. Save a generated file into a Drive folder. Always confirms first.",
+      inputSchema: driveWriteInput,
+    });
   }
 
   if (ctx.hasGitHub) {
@@ -296,12 +308,12 @@ export function buildHeadStartToolSchemas(
     });
     tools[TOOL_NAMES.gmailSend] = tool({
       description:
-        "Send an email from the user's Gmail. In Ask mode the user confirms first; in Auto it sends directly.",
+        "Send an email from the user's Gmail. Always waits on a confirm card — never silent-send, including Auto. Prefer gmail_create_draft unless they explicitly asked to send.",
       inputSchema: gmailSendInput,
     });
     tools[TOOL_NAMES.gmailCreateDraft] = tool({
       description:
-        "Create a Gmail draft without sending. Use when the user wants to review before sending.",
+        "Create a Gmail draft without sending. Default email path. Use this unless the user explicitly asked to send.",
       inputSchema: gmailCreateDraftInput,
     });
   }

@@ -612,4 +612,106 @@ describe("executeAetherTool", () => {
     assert.equal(result.ok, false);
     assert.match(String(result.error), /project/i);
   });
+
+  it("confirms drive_upload in Ask and Auto before writing", async () => {
+    for (const mode of ["ask", "auto"] as const) {
+      let uploaded = false;
+      const result = await executeAetherTool({
+        name: "drive_upload",
+        args: {
+          filename: "Q3-deck.pptx",
+          content:
+            "data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,UEs=",
+          folderId: "folder-1",
+        },
+        ctx: baseCtx({
+          approvalMode: mode,
+          hasDrive: true,
+          deps: {
+            driveUpload: async () => {
+              uploaded = true;
+              return { ok: true, fileId: "file-1", name: "Q3-deck.pptx" };
+            },
+            createConfirmation: async (request) => ({
+              ok: true as const,
+              needs_confirmation: true as const,
+              confirmation_id: `drive-${mode}`,
+              action: request.action,
+              title: request.title,
+              preview: request.preview,
+              instruction: "wait",
+            }),
+          },
+        }),
+      });
+      assert.equal(uploaded, false, mode);
+      assert.equal(result.needs_confirmation, true, mode);
+      assert.match(String(result.title), /Drive/i);
+      assert.match(String(result.preview), /Q3-deck\.pptx/);
+      assert.doesNotMatch(String(result.preview), /Google|OpenRouter/i);
+    }
+  });
+
+  it("uploads to Drive after the user confirms", async () => {
+    let uploaded = false;
+    const result = await executeAetherTool({
+      name: "drive_write",
+      args: {
+        filename: "costs.xlsx",
+        workspacePath: "out/costs.xlsx",
+        folderId: "folder-9",
+      },
+      ctx: baseCtx({
+        approvalMode: "auto",
+        skipGate: true,
+        hasDrive: true,
+        deps: {
+          workspaceReadBinary: async (_id, input) => {
+            assert.equal(input.path, "out/costs.xlsx");
+            return { ok: true as const, buffer: Buffer.from("xlsx-bytes") };
+          },
+          driveUpload: async (_userId, input) => {
+            uploaded = true;
+            assert.equal(input.filename, "costs.xlsx");
+            assert.equal(input.folderId, "folder-9");
+            assert.equal(input.buffer.toString(), "xlsx-bytes");
+            return {
+              ok: true,
+              fileId: "file-xlsx",
+              name: "costs.xlsx",
+              webViewLink: "https://drive.example/file-xlsx",
+            };
+          },
+        },
+      }),
+    });
+    assert.equal(uploaded, true);
+    assert.equal(result.ok, true);
+    assert.equal(result.needs_confirmation, undefined);
+    assert.equal(result.fileId, "file-xlsx");
+  });
+
+  it("does not silent-send gmail in Auto — confirm card first", async () => {
+    const result = await executeAetherTool({
+      name: "gmail_send",
+      args: { to: "a@b.com", subject: "Hi", body: "Hello" },
+      ctx: baseCtx({
+        approvalMode: "auto",
+        hasGmail: true,
+        deps: {
+          createConfirmation: async (request) => ({
+            ok: true as const,
+            needs_confirmation: true as const,
+            confirmation_id: "mail-auto",
+            action: request.action,
+            title: request.title,
+            preview: request.preview,
+            instruction: "wait",
+          }),
+        },
+      }),
+    });
+    assert.equal(result.needs_confirmation, true);
+    assert.match(String(result.preview), /a@b\.com/);
+  });
 });

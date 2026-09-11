@@ -22,6 +22,8 @@ export const TOOL_NAMES = {
   memoryWrite: "memory_write",
   driveSearch: "drive_search",
   driveRead: "drive_read",
+  driveUpload: "drive_upload",
+  driveWrite: "drive_write",
   githubGetRepo: "github_get_repo",
   githubListContents: "github_list_contents",
   githubReadFile: "github_read_file",
@@ -202,6 +204,30 @@ export const driveSearchInput = z.object({
 export const driveReadInput = z.object({
   fileId: z.string().describe("Google Drive file id."),
 });
+
+export const driveUploadInput = z.object({
+  filename: z
+    .string()
+    .describe("File name with extension (pptx, xlsx, pdf, or docx)."),
+  folderId: z
+    .string()
+    .optional()
+    .describe("Drive folder id from drive_search. Omit to save in My Drive."),
+  workspacePath: z
+    .string()
+    .optional()
+    .describe("Path of a generated file in the isolated workspace."),
+  artifactId: z
+    .string()
+    .optional()
+    .describe("Persisted artifact id to upload."),
+  content: z
+    .string()
+    .optional()
+    .describe("data: URL or raw text of the generated file."),
+  mimeType: z.string().optional(),
+});
+export const driveWriteInput = driveUploadInput;
 
 export const githubGetRepoInput = z.object({
   repo: z
@@ -585,6 +611,14 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Drive",
     runningLabel: "Reading Drive file…",
   },
+  [TOOL_NAMES.driveUpload]: {
+    label: "Drive",
+    runningLabel: "Saving to Drive…",
+  },
+  [TOOL_NAMES.driveWrite]: {
+    label: "Drive",
+    runningLabel: "Saving to Drive…",
+  },
   [TOOL_NAMES.githubGetRepo]: {
     label: "GitHub",
     runningLabel: "Looking up repository…",
@@ -798,11 +832,13 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 - "memory_search" / "memory_write": lasting facts about the user.
 - "project_knowledge_search": retrieve passages from files uploaded to the active project. Do not assume the whole folder is in this prompt.
 - "drive_search" / "drive_read": the user's Google Drive when connected.
+- "drive_upload" / "drive_write": save a generated pptx/xlsx/pdf/docx (workspace path, artifact, or data URL) into a Drive folder. Always waits on a confirm card — including Auto.
 - "github_get_repo" / "github_list_contents" / "github_read_file": repo tools (one path per read_file call; parallelize multiple files).
 - "github_list_issues" / "github_get_issue" / "github_list_pull_requests" / "github_get_pull_request" / "github_list_commits": inspect issues, PRs, and commit history.
 - "github_create_branch" / "github_create_or_update_file": code writes. Your own repos commit directly; other owners' or org repos ask first.
 - "gmail_search" / "gmail_read": the user's Gmail when connected.
-- "gmail_send" / "gmail_create_draft": sending email. In Ask mode every send waits on a card; in Auto it runs directly — the user chose that tradeoff in settings.
+- "gmail_create_draft": default email path — create a draft without sending. In Auto it runs directly.
+- "gmail_send": send only after the user confirms the card. Never silent-send, including in Auto. Prefer a draft unless they explicitly asked to send.
 - "calendar_list_events" / "calendar_create_event": the user's primary calendar. Ordinary event creation just lands; deleting always confirms.
 - "contacts_search" / "contacts_create": the user's Google contacts. Creating just lands; searching is instant.
 

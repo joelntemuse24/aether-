@@ -104,7 +104,12 @@ export function resolveAvailableToolNames(ctx: {
     );
   }
   if (hasDrive) {
-    names.push(TOOL_NAMES.driveSearch, TOOL_NAMES.driveRead);
+    names.push(
+      TOOL_NAMES.driveSearch,
+      TOOL_NAMES.driveRead,
+      TOOL_NAMES.driveUpload,
+      TOOL_NAMES.driveWrite,
+    );
   }
   if (hasGmail) {
     names.push(
@@ -364,6 +369,18 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
       ...schemas[TOOL_NAMES.driveRead],
       execute: async ({ fileId }) =>
         runAether(TOOL_NAMES.driveRead, { fileId }),
+    });
+  }
+  if (schemas[TOOL_NAMES.driveUpload]) {
+    tools[TOOL_NAMES.driveUpload] = tool({
+      ...schemas[TOOL_NAMES.driveUpload],
+      execute: async (input) => runAether(TOOL_NAMES.driveUpload, input),
+    });
+  }
+  if (schemas[TOOL_NAMES.driveWrite]) {
+    tools[TOOL_NAMES.driveWrite] = tool({
+      ...schemas[TOOL_NAMES.driveWrite],
+      execute: async (input) => runAether(TOOL_NAMES.driveWrite, input),
     });
   }
   if (schemas[TOOL_NAMES.githubGetRepo]) {

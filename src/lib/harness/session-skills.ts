@@ -49,7 +49,7 @@ export function resolveSessionSkills(input: {
       label: "Google Drive",
       description: "Search and read Drive files",
       promptHint:
-        "Google Drive is connected — use drive_search / drive_read (tool_search for drive if needed).",
+        "Drive is connected — use drive_search / drive_read / drive_upload (tool_search for drive if needed). Saving a file always waits on a confirm card.",
       available: !!input.hasDrive,
     },
     {

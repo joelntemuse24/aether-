@@ -16,6 +16,7 @@ describe("hermes Aether tool seam", () => {
     assert.match(text, /create_artifact/);
     assert.match(text, /request_confirmation/);
     assert.match(text, /drive_search/);
+    assert.match(text, /drive_upload/);
     assert.match(text, /github_read_file/);
     assert.doesNotMatch(text, /not live tools this turn/i);
     assert.doesNotMatch(text, /not a live tool this turn/i);

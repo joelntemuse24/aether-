@@ -20,6 +20,11 @@ import {
 } from "@/components/assistant-ui/agent-status-strip";
 import "@/components/assistant-ui/agent-activity.css";
 import { ModelPicker } from "@/components/model-picker";
+import {
+  filterMentionOptions,
+  insertAppMention,
+  mentionQueryAtCaret,
+} from "@/lib/composer/app-mentions";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
@@ -624,11 +629,21 @@ const Composer: FC = () => {
   const [micState, setMicState] = useState<MicState>("idle");
   const speechRef = useRef<SpeechSession | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
   const {
     connected: githubConnected,
     connect: connectGitHub,
     githubConfigured,
   } = useGitHub();
+
+  const mentionOptions =
+    mentionQuery === null ? [] : filterMentionOptions(mentionQuery);
+  const mentionConnected: Record<string, boolean> = {
+    drive: driveConnected,
+    github: githubConnected,
+    gmail: driveConnected,
+  };
 
   useEffect(() => {
     return () => {
@@ -743,7 +758,7 @@ const Composer: FC = () => {
         }}
         onDrop={(e) => void onDrop(e)}
         className={cn(
-          "flex w-full flex-col gap-1 rounded-2xl border bg-[var(--elevated)] p-2 transition-colors",
+          "relative flex w-full flex-col gap-1 rounded-2xl border bg-[var(--elevated)] p-2 transition-colors",
           dragging
             ? "border-[var(--accent)]/50 bg-[var(--accent-muted)]"
             : "border-[var(--border)]",
@@ -769,6 +784,44 @@ const Composer: FC = () => {
           </div>
         )}
 
+        {mentionOptions.length > 0 && (
+          <div
+            className="absolute bottom-full left-2 z-50 mb-1 w-56 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--elevated-deep)] p-1 shadow-lg"
+            role="listbox"
+            aria-label="Mention a connected app"
+          >
+            {mentionOptions.map((opt, i) => {
+              const connected = mentionConnected[opt.id] ?? false;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="option"
+                  aria-selected={i === mentionIndex}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    const state = composerRuntime.getState();
+                    const next = insertAppMention(state.text, opt);
+                    composerRuntime.setText(next.text);
+                    setMentionQuery(null);
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] font-medium transition-colors",
+                    i === mentionIndex
+                      ? "bg-[var(--hover-overlay)] text-[var(--text)]"
+                      : "text-[var(--text)] hover:bg-[var(--hover-overlay)]",
+                  )}
+                >
+                  <span>@{opt.token}</span>
+                  <span className="ml-auto text-[10px] text-[var(--muted-soft)]">
+                    {connected ? "Connected" : "Not connected"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <ComposerPrimitive.Input
           placeholder={micPlaceholder}
           className="max-h-40 min-h-[44px] w-full resize-none border-0 bg-transparent px-2.5 py-2 text-[15px] leading-relaxed text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)]"
@@ -776,7 +829,43 @@ const Composer: FC = () => {
           autoFocus
           aria-label="Message input"
           submitMode="none"
+          onChange={(e) => {
+            const value = e.target.value;
+            const at = mentionQueryAtCaret(value, e.target.selectionStart ?? value.length);
+            setMentionQuery(at ? at.query : null);
+            setMentionIndex(0);
+          }}
           onKeyDown={(e) => {
+            if (mentionOptions.length > 0) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setMentionIndex((i) => (i + 1) % mentionOptions.length);
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setMentionIndex(
+                  (i) => (i - 1 + mentionOptions.length) % mentionOptions.length,
+                );
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setMentionQuery(null);
+                return;
+              }
+              if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+                e.preventDefault();
+                const opt = mentionOptions[mentionIndex] ?? mentionOptions[0];
+                if (opt) {
+                  const state = composerRuntime.getState();
+                  const next = insertAppMention(state.text, opt);
+                  composerRuntime.setText(next.text);
+                }
+                setMentionQuery(null);
+                return;
+              }
+            }
             if (
               e.key === "Enter" &&
               !e.shiftKey &&

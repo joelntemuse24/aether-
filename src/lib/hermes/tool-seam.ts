@@ -45,7 +45,8 @@ export function hermesAetherToolSeamAddendum(
 
   if (ctx.hasDrive) {
     live.push(
-      "- drive_search / drive_read: search and read the user's connected Google Drive (reads only).",
+      "- drive_search / drive_read: search and read the user's connected Drive.",
+      "- drive_upload / drive_write: save a generated pptx/xlsx/pdf/docx into a Drive folder. Always confirm first.",
     );
   } else {
     live.push(

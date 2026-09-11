@@ -5,7 +5,7 @@
  * create_artifact for a file/table/doc the user asked for lands immediately.
  * Auto: routine / non-destructive Aether tools run without a tap.
  * Always confirm: destructive, spend, third-party submit, delete,
- * or writes to someone else's Drive/GitHub.
+ * Drive write, email send, or writes to someone else's Drive/GitHub.
  */
 
 import { TOOL_NAMES } from "@/lib/tools";
@@ -18,6 +18,9 @@ export const DEFAULT_TOOL_APPROVAL_MODE: ToolApprovalMode = "ask";
 const ALWAYS_CONFIRM_TOOLS = new Set<string>([
   TOOL_NAMES.requestConfirmation,
   TOOL_NAMES.generateImage,
+  TOOL_NAMES.driveUpload,
+  TOOL_NAMES.driveWrite,
+  TOOL_NAMES.gmailSend,
   // Publishing / finalizing actions are always visible to others.
   TOOL_NAMES.githubCreateIssue,
   TOOL_NAMES.githubAddIssueComment,
@@ -48,12 +51,10 @@ const SAFE_READ_TOOLS = new Set<string>([
 
 /**
  * Routine mutations on the user's own resources. In Ask mode they wait on a
- * card; in Auto they run directly. Email send is deliberately here — the
- * user's Ask/Auto choice is the consent mechanism.
+ * card; in Auto they run directly. Email send is NOT here — it always confirms.
  */
 const ROUTINE_MUTATION_TOOLS = new Set<string>([
   TOOL_NAMES.memoryWrite,
-  TOOL_NAMES.gmailSend,
   TOOL_NAMES.gmailCreateDraft,
   TOOL_NAMES.calendarCreateEvent,
   TOOL_NAMES.contactsCreate,

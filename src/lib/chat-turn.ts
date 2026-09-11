@@ -1,4 +1,8 @@
 import type { FilePart, ImagePart, ModelMessage, TextPart, UIMessage } from "ai";
+import {
+  connectorMentionAddendum,
+  parseAppMentions,
+} from "@/lib/composer/app-mentions";
 import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
 import {
   budgetForDepthWithTime,
@@ -251,6 +255,7 @@ export type ComposeChatSystemInput = {
   projectBlock?: string;
   hasDrive: boolean;
   hasGitHub: boolean;
+  hasGmail?: boolean;
   hasBrowserless: boolean;
   signedIn: boolean;
   hasMemory: boolean;
@@ -298,6 +303,11 @@ export function composeChatSystem(input: ComposeChatSystemInput): ComposedChatSy
   const timeBlock = input.timeBudget
     ? timeBudgetSystemAddendum(input.timeBudget)
     : null;
+  const mentionBlock = connectorMentionAddendum(parseAppMentions(input.userText), {
+    hasDrive: input.hasDrive,
+    hasGitHub: input.hasGitHub,
+    hasGmail: input.hasGmail ?? input.hasDrive,
+  });
 
   const system = [
     input.hermesLive
@@ -317,6 +327,7 @@ export function composeChatSystem(input: ComposeChatSystemInput): ComposedChatSy
     input.hermesLive ? hermesSafeVerifyAddendum(verifyBlock) : verifyBlock,
     input.hermesLive ? null : input.toolsEnabled ? skillsBlock : null,
     playbooksBlock || null,
+    mentionBlock || null,
     input.continueSegment ? CONTINUE_SYSTEM_ADDENDUM : null,
     input.userSystem,
     input.memoryForPrompt,

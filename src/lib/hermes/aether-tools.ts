@@ -4,12 +4,13 @@
  * with the user's session. Not a streamText ToolSet.
  */
 
-import { saveArtifact } from "@/lib/artifacts/store";
+import { getArtifact, saveArtifact } from "@/lib/artifacts/store";
 import { searchProjectKnowledge } from "@/lib/projects/knowledge-store";
 import {
   driveReadTextForUser,
   driveSearchForUser,
 } from "@/lib/connectors/web-and-drive";
+import { driveUploadForUser } from "@/lib/connectors/drive-upload";
 import {
   githubGetRepoForUser,
   githubListContentsForUser,
@@ -49,6 +50,7 @@ import { buildDocumentPdf } from "@/lib/office/build-pdf";
 import {
   bufferToDataUrl,
   mimeForFilename,
+  parseDataUrl,
 } from "@/lib/office/file-artifact";
 import { fileToolResult } from "@/lib/artifacts/file-result";
 import { generateImageForUser } from "@/lib/connectors/image";
@@ -116,6 +118,27 @@ export type AetherToolDeps = {
     fileId: string,
     accessToken?: string,
   ) => Promise<unknown>;
+  driveUpload?: (
+    userId: string,
+    input: {
+      filename: string;
+      mimeType?: string;
+      buffer: Buffer;
+      folderId?: string;
+    },
+    accessToken?: string,
+  ) => Promise<{
+    ok: boolean;
+    error?: string;
+    fileId?: string;
+    name?: string;
+    webViewLink?: string;
+    folderId?: string;
+  }>;
+  getArtifact?: (
+    userId: string,
+    id: string,
+  ) => Promise<{ id: string; title: string; language?: string; content: string } | null>;
   githubGetRepo?: (
     userId: string,
     repo: string,
@@ -185,6 +208,8 @@ const AETHER_TOOL_NAMES = new Set<string>([
   TOOL_NAMES.requestConfirmation,
   TOOL_NAMES.driveSearch,
   TOOL_NAMES.driveRead,
+  TOOL_NAMES.driveUpload,
+  TOOL_NAMES.driveWrite,
   TOOL_NAMES.githubGetRepo,
   TOOL_NAMES.githubListContents,
   TOOL_NAMES.githubReadFile,
@@ -358,6 +383,10 @@ function wrapConnectorResult(out: unknown): AetherToolResult {
 
 function confirmActionForTool(name: string): ConfirmationRequest["action"] {
   if (name.includes("delete")) return "delete_resource";
+  if (name === TOOL_NAMES.gmailSend) return "send_message";
+  if (name === TOOL_NAMES.driveUpload || name === TOOL_NAMES.driveWrite) {
+    return "upload_file";
+  }
   if (name === TOOL_NAMES.createArtifact) return "other_side_effect";
   if (name === TOOL_NAMES.memoryWrite) return "other_side_effect";
   return "other_side_effect";
@@ -393,7 +422,11 @@ async function gateIfNeeded(
         ? "Save a memory"
         : name === TOOL_NAMES.createArtifact
           ? "Save an artifact"
-          : "Needs your confirmation");
+          : name === TOOL_NAMES.gmailSend
+            ? "Send email"
+            : name === TOOL_NAMES.driveUpload || name === TOOL_NAMES.driveWrite
+              ? "Save to Drive"
+              : "Needs your confirmation");
   const preview =
     str(args.preview) ||
     (name === TOOL_NAMES.generateImage
@@ -402,7 +435,11 @@ async function gateIfNeeded(
         ? `Save memory “${str(args.title) || "untitled"}” to your Aether account.`
         : name === TOOL_NAMES.createArtifact
           ? `Create artifact “${str(args.title) || "untitled"}”.`
-          : str(args.title) || name);
+          : name === TOOL_NAMES.gmailSend
+            ? `Send an email to ${str(args.to)}: “${str(args.subject)}”.`
+            : name === TOOL_NAMES.driveUpload || name === TOOL_NAMES.driveWrite
+              ? `Save “${str(args.filename) || "this file"}” to Drive${str(args.folderId) ? " in the chosen folder" : ""}.`
+              : str(args.title) || name);
   const action =
     (typeof args.action === "string" &&
     [
@@ -476,6 +513,61 @@ async function persistArtifact(
     console.warn("[artifact] persist failed", err);
     return { persisted: false };
   }
+}
+
+async function resolveDriveUploadSource(
+  args: Record<string, unknown>,
+  ctx: AetherToolContext,
+  filename: string,
+): Promise<
+  | { ok: true; buffer: Buffer; mimeType?: string }
+  | { ok: false; error: string }
+> {
+  const workspacePath = str(args.workspacePath);
+  if (workspacePath) {
+    const read = ctx.deps?.workspaceReadBinary ?? workspaceReadBinary;
+    const file = await read(
+      { userId: ctx.userId, conversationId: ctx.conversationId },
+      { path: workspacePath },
+    );
+    if (!file.ok) return { ok: false, error: file.error || "Could not read workspace file." };
+    return { ok: true, buffer: file.buffer, mimeType: mimeForFilename(filename) };
+  }
+
+  const artifactId = str(args.artifactId);
+  if (artifactId) {
+    if (!ctx.userId) return { ok: false, error: "Sign in to upload a saved file." };
+    const load = ctx.deps?.getArtifact ?? getArtifact;
+    const artifact = await load(ctx.userId, artifactId);
+    if (!artifact) return { ok: false, error: "That file is not in your artifacts." };
+    const parsed = parseDataUrl(artifact.content);
+    if (parsed) {
+      return { ok: true, buffer: parsed.buffer, mimeType: parsed.mime };
+    }
+    return {
+      ok: true,
+      buffer: Buffer.from(artifact.content, "utf8"),
+      mimeType: mimeForFilename(filename),
+    };
+  }
+
+  const content = str(args.content);
+  if (content) {
+    const parsed = parseDataUrl(content);
+    if (parsed) {
+      return { ok: true, buffer: parsed.buffer, mimeType: parsed.mime };
+    }
+    return {
+      ok: true,
+      buffer: Buffer.from(content, "utf8"),
+      mimeType: mimeForFilename(filename),
+    };
+  }
+
+  return {
+    ok: false,
+    error: "Pass workspacePath, artifactId, or content for the generated file.",
+  };
 }
 
 export async function executeAetherTool(input: {
@@ -1015,8 +1107,8 @@ export async function executeAetherTool(input: {
       return { ok: false, error: "Gmail is not connected." };
     }
     if (!ctx.skipGate) {
-      // Ask mode: email send waits on a card. Auto mode (or an approved
-      // replay) sends directly — the user picked that tradeoff.
+      // Always confirm send — Auto cannot silent-send. skipGate is the
+      // approved-card replay.
       const create =
         ctx.deps?.createConfirmation ??
         ((request: ConfirmationRequest, userId?: string | null) =>
@@ -1185,6 +1277,34 @@ export async function executeAetherTool(input: {
     const read = ctx.deps?.driveRead ?? driveReadTextForUser;
     const out = await read(ctx.userId, str(args.fileId), ctx.driveAccessToken);
     return wrapConnectorResult(out);
+  }
+
+  if (name === TOOL_NAMES.driveUpload || name === TOOL_NAMES.driveWrite) {
+    if (!ctx.userId || !ctx.hasDrive) {
+      return { ok: false, error: "Google Drive is not connected." };
+    }
+    const filename =
+      str(args.filename) ||
+      str(args.workspacePath).split("/").filter(Boolean).pop() ||
+      "";
+    if (!filename) {
+      return { ok: false, error: "filename is required." };
+    }
+    const resolved = await resolveDriveUploadSource(args, ctx, filename);
+    if (!resolved.ok) return resolved;
+    const upload = ctx.deps?.driveUpload ?? driveUploadForUser;
+    return wrapConnectorResult(
+      await upload(
+        ctx.userId,
+        {
+          filename,
+          mimeType: str(args.mimeType) || resolved.mimeType,
+          buffer: resolved.buffer,
+          folderId: str(args.folderId) || undefined,
+        },
+        ctx.driveAccessToken,
+      ),
+    );
   }
 
   if (name === TOOL_NAMES.githubGetRepo) {

@@ -189,6 +189,17 @@ export function activityLabelForTool(
     }
     case "drive_read":
       return running ? "Reading Drive file" : "Read Drive file";
+    case "drive_upload":
+    case "drive_write":
+      return running ? "Saving to Drive" : "Saved to Drive";
+    case "gmail_search":
+      return running ? "Searching mail" : "Searched mail";
+    case "gmail_read":
+      return running ? "Reading mail" : "Read mail";
+    case "gmail_create_draft":
+      return running ? "Saving draft" : "Saved draft";
+    case "gmail_send":
+      return running ? "Sending mail" : "Sent mail";
     case "fetch_url":
     case "browse_page":
     case "browser_snapshot":

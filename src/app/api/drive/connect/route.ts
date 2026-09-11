@@ -8,6 +8,8 @@ const DRIVE_SCOPES = [
   "email",
   "profile",
   "https://www.googleapis.com/auth/drive.readonly",
+  // Files Aether creates (generated pptx/xlsx/pdf/docx uploads).
+  "https://www.googleapis.com/auth/drive.file",
 ].join(" ");
 
 const STATE_COOKIE = "aether.drive.oauth_state";
