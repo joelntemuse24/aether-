@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
+  activityClockShouldRun,
   collectWebSearchHits,
   deriveAgentActivity,
   formatActivityElapsed,
@@ -319,6 +320,67 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(view.liveLine, "Continuing 2/5");
   });
 
+  it("does not show Paused while the worker is still running", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-web_search",
+              args: { query: "keep going" },
+              state: "input-available",
+            },
+          ],
+        },
+      ],
+      isRunning: true,
+      elapsedSeconds: 61,
+      continuePhase: "needs-continue",
+    });
+    assert.equal(view.mode, "live");
+    assert.equal(view.liveLine, "Searching keep going");
+    assert.doesNotMatch(view.liveLine ?? "", /Paused/);
+  });
+
+  it("keeps the elapsed clock ticking while tools are open and not paused", () => {
+    const openTools = [
+      {
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "tool-web_search",
+            args: { query: "keep going" },
+            state: "input-available",
+          },
+        ],
+      },
+    ];
+    assert.equal(
+      activityClockShouldRun({
+        isRunning: false,
+        messages: openTools,
+      }),
+      true,
+    );
+    assert.equal(
+      activityClockShouldRun({
+        isRunning: false,
+        continuePhase: "needs-continue",
+        messages: openTools,
+      }),
+      false,
+    );
+    assert.equal(
+      activityClockShouldRun({
+        isRunning: true,
+        continuePhase: "needs-continue",
+        messages: openTools,
+      }),
+      true,
+    );
+  });
+
   it("uses the real search query on the live line", () => {
     const query = "Dublin's current time zone and daylight saving status";
     const view = deriveAgentActivity({
@@ -469,6 +531,7 @@ describe("thread / composer copy stays honest", () => {
     assert.match(thread, /MessageSourceCards/);
     assert.doesNotMatch(thread, /ToolApprovalToggle/);
     assert.doesNotMatch(strip, /Mulling|Untangling|Churning/);
+    assert.match(strip, /activityClockShouldRun/);
     assert.match(
       strip,
       /continuePhase:\s*continueStatus\.phase/,

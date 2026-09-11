@@ -25,6 +25,7 @@ import {
 } from "@/lib/trigger/session-auth";
 import { bindDurableChatId } from "@/lib/trigger/thread-remote-id";
 import { DURABLE_HEAD_START_PATH } from "@/lib/trigger/head-start";
+import { wrapDurableChatTransport } from "@/lib/trigger/head-start-reconnect";
 import {
   createAetherThreadListAdapter,
   ACTIVE_THREAD_KEY,
@@ -341,8 +342,12 @@ function useChatThreadRuntime() {
     clientData: durableClientData,
   });
 
+  const durableTransport = useMemo(
+    () => wrapDurableChatTransport(triggerTransport),
+    [triggerTransport],
+  );
   const selectedTransport: ChatTransport<UIMessage> =
-    chatTransport === "durable" ? triggerTransport : httpTransport;
+    chatTransport === "durable" ? durableTransport : httpTransport;
   const selectedTransportRef = useRef(selectedTransport);
   selectedTransportRef.current = selectedTransport;
   const [transport] = useState<ChatTransport<UIMessage>>(() => ({

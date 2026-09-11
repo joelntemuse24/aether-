@@ -127,6 +127,7 @@ export type ContinueDecisionInput = {
   continueCount: number;
 };
 
+/** Fallback after live session follow ends with unfinished work. */
 export function shouldAutoContinue(input: ContinueDecisionInput): boolean {
   if (input.continueCount >= MAX_AUTO_CONTINUES) return false;
   const unfinished = looksLikeUnfinishedTurn(input.messages);

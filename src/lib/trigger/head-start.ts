@@ -9,6 +9,11 @@ export const DURABLE_HEAD_START_PATH = "/api/chat/head-start";
  * durable agent — do not use the 300s request-path cap.
  * Route files must copy this as a numeric literal (`export const maxDuration = 60`):
  * Next.js segment config cannot be an imported identifier.
+ *
+ * The SDK stitches `session.out` onto this HTTP response until
+ * `trigger:turn-complete`. Vercel still kills the function at 60s even when
+ * the worker is in tools. The client must follow `session.out` after this
+ * stream ends (see `wrapDurableChatTransport`).
  */
 export const HEAD_START_MAX_DURATION_SECONDS = 60;
 

@@ -19,6 +19,7 @@ import {
   applyHeadStartWireMetadata,
   splitHeadStartClientData,
 } from "@/lib/trigger/head-start";
+import { wrapHeadStartStreamResult } from "@/lib/trigger/head-start-handover";
 import { buildHeadStartToolSchemas } from "@/lib/harness/tool-schemas";
 import { resolveTurnLanguageModel } from "@/lib/chat-language-model";
 import { enrichModelMessagesWithAttachments } from "@/lib/chat-turn";
@@ -31,6 +32,9 @@ const turnStore = new AsyncLocalStorage<ChatClientData>();
 
 const headStartHandler = chat.headStart({
   agentId: CHAT_AGENT_TASK_ID,
+  // Wall-clock in the SDK (not reset on chunks). Keep aligned with maxDuration
+  // so Vercel kill and the idle abort land together; wrapHeadStartStreamResult
+  // turns that abort into handover instead of handover-skip.
   idleTimeoutInSeconds: 60,
   run: async ({ chat: helper, messages }) => {
     const clientData = turnStore.getStore();
@@ -78,12 +82,14 @@ const headStartHandler = chat.headStart({
       clientData.attachments ?? [],
       clientData.textPrefix,
     );
-    return streamText({
-      ...streamOpts,
-      messages: modelMessages,
-      model,
-      system: prepared.system,
-    });
+    return wrapHeadStartStreamResult(
+      streamText({
+        ...streamOpts,
+        messages: modelMessages,
+        model,
+        system: prepared.system,
+      }),
+    );
   },
 });
 

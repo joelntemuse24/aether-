@@ -326,7 +326,7 @@ export function deriveAgentActivity(
     };
   }
 
-  if (input.continuePhase === "needs-continue") {
+  if (input.continuePhase === "needs-continue" && !input.isRunning) {
     return {
       visible: true,
       mode: live || steps.length > 0 ? "live" : "elapsed",
@@ -418,6 +418,22 @@ const MAX_RENDERED_SOURCES = 8;
 /** Session-local elapsed clock so completed turns can say "Worked for Ns". */
 let liveStartedAt: number | null = null;
 const completedElapsed = new Map<string, number>();
+
+export function activityClockShouldRun(input: {
+  isRunning: boolean;
+  continuePhase?: ContinuePhase;
+  messages: ActivityMessage[];
+}): boolean {
+  if (input.isRunning) return true;
+  if (input.continuePhase === "continuing") return true;
+  // Truly paused — freeze the clock. Open tools without pause still tick
+  // because the durable worker may still own the turn after Head Start ends.
+  if (input.continuePhase === "needs-continue") return false;
+  const assistant = latestAssistant(input.messages);
+  return collectActivitySteps(assistant?.parts, false).some(
+    (step) => step.state === "running",
+  );
+}
 
 export function syncActivityClock(isRunning: boolean): number {
   if (!isRunning) {

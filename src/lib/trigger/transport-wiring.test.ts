@@ -27,6 +27,7 @@ describe("chat transport wiring contract", () => {
     assert.match(runtime, /\/api\/chat\/mint-token/);
     assert.match(runtime, /headStart:\s*DURABLE_HEAD_START_PATH/);
     assert.match(runtime, /DURABLE_HEAD_START_PATH/);
+    assert.match(runtime, /wrapDurableChatTransport/);
   });
 
   it("does not call start-session or mint-token on the first-send path", () => {

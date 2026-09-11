@@ -73,6 +73,7 @@ describe("head start route bundle isolation", () => {
     assert.match(route, /speedTier: prepared\.speedTier/);
     assert.match(route, /requestedModel: prepared\.requestedModel/);
     assert.match(route, /HOSTED_CLOUD_UNAVAILABLE_MESSAGE|hostedCloudUnavailable/);
+    assert.match(route, /wrapHeadStartStreamResult/);
     assert.match(route, /export const maxDuration = 60/);
     assert.equal(HEAD_START_MAX_DURATION_SECONDS, 60);
     assert.match(route, /sessionSafeChatClientData|splitHeadStartClientData/);

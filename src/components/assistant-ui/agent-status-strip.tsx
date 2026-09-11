@@ -10,6 +10,7 @@ import {
   collectWebSearchHits,
   deriveAgentActivity,
   formatActivityElapsed,
+  activityClockShouldRun,
   recalledActivityElapsed,
   syncActivityClock,
   type ActivityMessage,
@@ -206,7 +207,11 @@ export const AgentStatusStrip: FC = () => {
   );
   const continueStatus = useContinueStatus();
   const elapsed = useThreadActivityElapsed(
-    isRunning || continueStatus.phase === "continuing",
+    activityClockShouldRun({
+      isRunning,
+      continuePhase: continueStatus.phase,
+      messages,
+    }),
     lastAssistantId,
   );
 
@@ -297,7 +302,11 @@ export const MessageAgentActivity: FC = () => {
   const parts = useAuiState((s) => s.message.parts);
   const continueStatus = useContinueStatus();
   const elapsed = useThreadActivityElapsed(
-    isRunning || continueStatus.phase === "continuing",
+    activityClockShouldRun({
+      isRunning,
+      continuePhase: continueStatus.phase,
+      messages: [{ id: messageId, role: "assistant", parts }],
+    }),
     messageId,
   );
 
