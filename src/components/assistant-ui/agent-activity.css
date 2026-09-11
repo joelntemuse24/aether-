@@ -281,6 +281,102 @@
   text-decoration: underline;
 }
 
+.aether-cite {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15em;
+  margin: 0 0.12em;
+  padding: 0 0.28em;
+  border-radius: 999px;
+  background: var(--elevated);
+  color: var(--accent);
+  font-family: var(--font-ui), Inter, system-ui, sans-serif;
+  font-size: 0.7em;
+  font-weight: 600;
+  line-height: 1.4;
+  text-decoration: none;
+  vertical-align: super;
+}
+
+.aether-cite:hover {
+  text-decoration: underline;
+}
+
+.aether-file-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--canvas);
+  font-family: var(--font-ui), Inter, system-ui, sans-serif;
+}
+
+.aether-file-chip__icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.aether-file-chip__meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.aether-file-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.aether-file-chip__sub {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.aether-file-chip__download,
+.aether-file-chip__open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.aether-file-chip__download {
+  background: var(--accent);
+  color: #fff;
+}
+
+.aether-file-chip__download:hover {
+  background: var(--accent-hover);
+}
+
+.aether-file-chip__open {
+  color: var(--muted);
+}
+
+.aether-file-chip__open:hover {
+  color: var(--text);
+  background: var(--hover-overlay);
+}
+
+.aether-file-chip__missing {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 /* Send ↔ Stop: one terracotta circle, icon cross-fade. */
 .aether-send-stop {
   position: relative;

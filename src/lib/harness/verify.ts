@@ -80,7 +80,7 @@ export function verifySystemAddendum(input: {
     "Before your final user-facing answer on substantial work:",
     "1. Call verify_checklist with concrete checks (facts cited, prompt covered, tone/format, risks).",
     "2. If checks fail, fix or be explicit about limits — do not silently ship a weak draft.",
-    "3. For essays/docs, the deliverable should live in create_artifact when long.",
+    "3. For essays/docs, the deliverable should live in create_artifact when long. For decks, the deliverable is create_presentation (file chip), not markdown.",
   ];
 
   if (input.timeBudget?.forceEarlyDraft) {

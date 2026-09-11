@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { budgetForDepth } from "./budgets";
+import { heuristicClassify } from "./heuristic";
 import {
   PLAYBOOK_IDS,
   playbooksSystemAddendum,
@@ -9,9 +10,12 @@ import {
 } from "./playbooks";
 import { shouldConfirmAetherTool } from "../hermes/tool-approval";
 
-describe("four chat playbooks", () => {
-  it("exposes exactly research, write-doc, slides, and sheet", () => {
-    assert.deepEqual([...PLAYBOOK_IDS], ["research", "write-doc", "slides", "sheet"]);
+describe("chat playbooks", () => {
+  it("exposes research, write-doc, slides, sheet, and research-then-deck", () => {
+    assert.deepEqual(
+      [...PLAYBOOK_IDS],
+      ["research", "write-doc", "slides", "sheet", "research-then-deck"],
+    );
   });
 
   it("loads research when the user asks to search or research", () => {
@@ -36,6 +40,34 @@ describe("four chat playbooks", () => {
       text: "Make a 6-slide deck on the launch plan",
     }).map((p) => p.id);
     assert.ok(ids.includes("slides"));
+  });
+
+  it("loads research-then-deck for the Dublin pptx eval prompt", () => {
+    const playbooks = resolvePlaybooks({
+      text: "Research Dublin junior investment-ops market Sep 2026 and give me a real .pptx.",
+    });
+    const ids = playbooks.map((p) => p.id);
+    assert.ok(ids.includes("research-then-deck"));
+    assert.equal(ids.includes("research"), false);
+    assert.equal(ids.includes("slides"), false);
+    const block = playbooksSystemAddendum(playbooks);
+    assert.match(block, /research-then-deck/);
+    assert.match(block, /web_search/);
+    assert.match(block, /fetch_url/);
+    assert.match(block, /create_presentation/);
+    assert.match(block, /verify_checklist/);
+    assert.match(block, /file chip/i);
+    assert.doesNotMatch(block, /pip install/);
+  });
+
+  it("keeps deep research+deck on the worker with a pptx verify plan", () => {
+    const classification = heuristicClassify(
+      "Research Dublin junior investment-ops market Sep 2026 and give me a real .pptx.",
+    );
+    assert.equal(classification.intent, "research");
+    assert.equal(classification.depth, "deep");
+    assert.ok(classification.planSteps?.some((s) => /pptx|presentation|create_presentation/i.test(s)));
+    assert.ok(budgetForDepth(classification.depth).maxSteps >= 8);
   });
 
   it("loads sheet for a spreadsheet / table", () => {

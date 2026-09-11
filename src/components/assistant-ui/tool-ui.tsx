@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FC } from "react";
 import { useAuiState } from "@assistant-ui/react";
 import {
   ChevronDownIcon,
+  DownloadIcon,
   ExternalLinkIcon,
   FileIcon,
   PanelRightOpenIcon,
@@ -458,7 +459,10 @@ function guessImageMime(content: string): string | undefined {
   return undefined;
 }
 
-function toArtifact(id: string, input: CreateArtifactInput): Artifact {
+function toArtifact(
+  id: string,
+  input: CreateArtifactInput & { downloadPath?: string; mime?: string },
+): Artifact {
   const kind = (input.kind ?? "code") as ArtifactKind;
   return {
     id,
@@ -468,10 +472,90 @@ function toArtifact(id: string, input: CreateArtifactInput): Artifact {
     code: input.content ?? "",
     mime:
       kind === "image" || kind === "file"
-        ? guessImageMime(input.content ?? "") || undefined
+        ? input.mime || guessImageMime(input.content ?? "") || undefined
         : undefined,
+    downloadPath: input.downloadPath,
   };
 }
+
+function formatFileBytes(bytes?: number): string | null {
+  if (!bytes || bytes <= 0) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function triggerDownload(href: string, filename: string) {
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+const FileChip: FC<{
+  title?: string;
+  filename?: string;
+  bytes?: number;
+  downloadPath?: string;
+  content?: string;
+  persisted?: boolean;
+  hint?: string;
+  running?: boolean;
+  onOpen?: () => void;
+}> = ({
+  title,
+  filename,
+  bytes,
+  downloadPath,
+  content,
+  persisted,
+  hint,
+  running,
+  onOpen,
+}) => {
+  const label = filename || title || "Downloadable file";
+  const href =
+    downloadPath ||
+    (content && content.startsWith("data:") ? content : undefined);
+  const size = formatFileBytes(bytes);
+  return (
+    <div className="aether-file-chip">
+      <FileIcon className="aether-file-chip__icon" />
+      <div className="aether-file-chip__meta">
+        <div className="aether-file-chip__name">{label}</div>
+        <div className="aether-file-chip__sub">
+          {running ? "Building…" : persisted ? "Saved" : hint || "This thread"}
+          {size ? ` · ${size}` : ""}
+        </div>
+      </div>
+      {href ? (
+        <button
+          type="button"
+          className="aether-file-chip__download"
+          onClick={() => triggerDownload(href, label)}
+        >
+          <DownloadIcon className="size-3.5" />
+          Download
+        </button>
+      ) : (
+        <span className="aether-file-chip__missing">
+          {hint || "Sign in to download this file."}
+        </span>
+      )}
+      {onOpen && (
+        <button
+          type="button"
+          className="aether-file-chip__open"
+          onClick={onOpen}
+        >
+          Open
+        </button>
+      )}
+    </div>
+  );
+};
 
 const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const {
@@ -492,6 +576,10 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
         needs_confirmation?: boolean;
         confirmation_id?: string;
         filename?: string;
+        downloadPath?: string;
+        hint?: string;
+        bytes?: number;
+        persisted?: boolean;
       })
     | undefined;
   const confirm = confirmationFromResult(result);
@@ -503,11 +591,24 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     input?.title ||
     result?.title ||
     extractPartialJsonString(part.argsText, "title");
+  const downloadPath =
+    typeof result?.downloadPath === "string" ? result.downloadPath : undefined;
+  const isFileTool =
+    part.toolName === TOOL_NAMES.createPresentation ||
+    part.toolName === TOOL_NAMES.createSpreadsheet ||
+    part.toolName === TOOL_NAMES.workspacePublishFile;
+  const kindHint =
+    (input?.kind as string | undefined) ||
+    (result?.kind as string | undefined) ||
+    extractPartialJsonString(part.argsText, "kind") ||
+    part.argsText?.match(/"kind"\s*:\s*"(\w+)"/)?.[1] ||
+    (isFileTool ? "file" : undefined);
+  const fileReady = kindHint === "file" && !!bodyTitle && !!(bodyContent || downloadPath);
   const complete =
     part.result !== undefined &&
-    !!bodyContent &&
     !!bodyTitle &&
-    !confirm.needsConfirmation;
+    !confirm.needsConfirmation &&
+    (kindHint === "file" ? fileReady : !!bodyContent);
   const openedRef = useRef(false);
   const lastSyncedLen = useRef(0);
   /** True if this mount saw a live generation — used to open on complete without rehydrate pop. */
@@ -518,16 +619,6 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   }, [running, threadRunning]);
 
   const streamingTitle = bodyTitle;
-  const kindHint =
-    (input?.kind as string | undefined) ||
-    (result?.kind as string | undefined) ||
-    extractPartialJsonString(part.argsText, "kind") ||
-    part.argsText?.match(/"kind"\s*:\s*"(\w+)"/)?.[1] ||
-    (part.toolName === TOOL_NAMES.createPresentation ||
-    part.toolName === TOOL_NAMES.createSpreadsheet ||
-    part.toolName === TOOL_NAMES.workspacePublishFile
-      ? "file"
-      : undefined);
   const streamingContent = bodyContent;
   const streamingLanguage =
     input?.language ||
@@ -536,22 +627,26 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 
   const artifactId = result?.id || part.toolCallId;
   const draft: Artifact | null =
-    streamingTitle && streamingContent !== undefined
+    streamingTitle && (streamingContent !== undefined || downloadPath)
       ? toArtifact(artifactId, {
           title: streamingTitle,
           kind: (kindHint as ArtifactKind) || "code",
           language: streamingLanguage,
           content: streamingContent,
+          downloadPath,
+          mime: result?.mime,
         })
       : null;
 
   const completeArtifact =
-    complete && bodyContent && bodyTitle
+    complete && bodyTitle
       ? toArtifact(artifactId, {
           kind: (kindHint as ArtifactKind) || "document",
           title: bodyTitle,
           language: streamingLanguage,
           content: bodyContent,
+          downloadPath,
+          mime: result?.mime,
         })
       : null;
   const artifact = completeArtifact ?? draft;
@@ -629,18 +724,22 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       : undefined;
 
   const hasConstructingBody =
-    running &&
-    ((streamingContent !== undefined && streamingContent.length > 0) ||
-      !!part.argsText);
+    kindHint === "file"
+      ? !!(streamingTitle || downloadPath || complete)
+      : running &&
+        ((streamingContent !== undefined && streamingContent.length > 0) ||
+          !!part.argsText);
 
   return (
     <ToolShell
       name={TOOL_NAMES.createArtifact}
       running={running}
       expandWhileRunning={hasConstructingBody}
-      stayOpen={confirm.needsConfirmation}
+      stayOpen={confirm.needsConfirmation || kindHint === "file"}
       subtitle={
-        streamingTitle
+        kindHint === "file"
+          ? undefined
+          : streamingTitle
           ? result?.persisted
             ? `${streamingTitle} · saved`
             : running
@@ -653,7 +752,7 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
               : undefined
       }
       headerAction={
-        artifact ? (
+        artifact && kindHint !== "file" ? (
           <button
             type="button"
             onClick={() => openArtifact(artifact)}
@@ -677,10 +776,26 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
         </div>
       )}
       {kindHint === "file" && (
-        <div className="text-[11px] text-[var(--muted)]">
-          {streamingTitle || "Downloadable file"}
-          {streamingLanguage ? ` · ${streamingLanguage}` : ""}
-        </div>
+        <FileChip
+          title={streamingTitle}
+          filename={streamingLanguage || result?.filename}
+          bytes={result?.bytes}
+          downloadPath={downloadPath}
+          content={streamingContent}
+          persisted={result?.persisted}
+          hint={result?.hint}
+          running={running}
+          onOpen={
+            artifact
+              ? () =>
+                  openArtifact({
+                    ...artifact,
+                    persisted: !!result?.persisted,
+                    downloadPath,
+                  })
+              : undefined
+          }
+        />
       )}
       {streamingContent !== undefined &&
         streamingContent.length > 0 &&

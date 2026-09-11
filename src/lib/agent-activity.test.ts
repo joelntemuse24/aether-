@@ -311,6 +311,20 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(hits.length, 1);
     assert.equal(hits[0]?.title, "Time in Dublin");
     assert.equal(hits[0]?.url, "https://example.com/dublin");
+    assert.equal(hits[0]?.id, "1");
+    const fetched = collectWebSearchHits([
+      {
+        type: "tool-fetch_url",
+        result: {
+          ok: true,
+          title: "Central Bank",
+          url: "https://www.centralbank.ie/funds",
+        },
+      },
+    ]);
+    assert.equal(fetched.length, 1);
+    assert.equal(fetched[0]?.id, "1");
+    assert.equal(fetched[0]?.title, "Central Bank");
   });
 });
 

@@ -109,7 +109,15 @@ export function heuristicClassify(message: string): HarnessClassification {
 
   const planSteps =
     depth === "deep"
-      ? intent === "research"
+      ? intent === "research" &&
+        /\b(slides?|deck|presentation|powerpoint|keynote|pptx)\b/.test(lower)
+        ? [
+            "Search and fetch current sources",
+            "Synthesize with inline citations",
+            "Deliver a real .pptx via create_presentation",
+            "Verify the file is on this thread",
+          ]
+        : intent === "research"
         ? ["Search for current sources", "Synthesize with citations", "Flag uncertainties"]
         : intent === "study"
           ? ["Attend to the text", "Name tensions / ambiguities", "Offer one implication"]

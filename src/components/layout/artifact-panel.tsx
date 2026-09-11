@@ -607,8 +607,23 @@ export function ArtifactPanel() {
             ? artifact.language
             : `${slugify(artifact.title)}${artifact.language ? `.${artifact.language}` : ""}`
           : `${slugify(artifact.title)}`;
+      const href =
+        kind === "file"
+          ? artifact.downloadPath ||
+            (artifact.persisted && artifact.id
+              ? `/api/artifacts/${encodeURIComponent(artifact.id)}/download`
+              : content)
+          : content;
+      if (!href) {
+        window.dispatchEvent(
+          new CustomEvent("aether:notice", {
+            detail: "This file is not available to download. Sign in to keep downloads.",
+          }),
+        );
+        return;
+      }
       const a = document.createElement("a");
-      a.href = content;
+      a.href = href;
       a.download = filename;
       document.body.appendChild(a);
       a.click();

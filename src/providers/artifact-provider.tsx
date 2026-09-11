@@ -33,6 +33,8 @@ export type Artifact = {
   code: string;
   /** MIME type for image artifacts. */
   mime?: string;
+  /** Cloud download path for binary files (pptx/xlsx) when persisted. */
+  downloadPath?: string;
   /** True when loaded from /api/artifacts (cloud). */
   persisted?: boolean;
   /** True when saved in browser localStorage. */

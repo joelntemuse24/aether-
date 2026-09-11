@@ -79,6 +79,8 @@ describe("chat transport wiring contract", () => {
     assert.match(agent, /chat\.agent/);
     assert.doesNotMatch(agent, /headStart|Head Start|chat\.headStart/);
     assert.doesNotMatch(agent, /@trigger\.dev\/sdk\/chat-server/);
+    assert.match(agent, /executeAetherOwned/);
+    assert.match(agent, /executeAetherToolViaCallback/);
   });
 
   it("keeps POST /api/chat/start-session from persisting BYOK keys on the session", () => {

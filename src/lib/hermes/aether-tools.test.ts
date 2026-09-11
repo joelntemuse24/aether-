@@ -260,6 +260,43 @@ describe("executeAetherTool", () => {
     assert.equal((result as { kind?: string }).kind, "file");
     assert.match(String((result as { filename?: string }).filename), /\.pptx$/);
     assert.match(String((result as { content?: string }).content), /^data:.*base64,/);
+    assert.equal((result as { persisted?: boolean }).persisted, false);
+    assert.match(String((result as { hint?: string }).hint), /sign in/i);
+  });
+
+  it("persists a pptx for signed-in cloud users and returns a download path", async () => {
+    let savedContent = "";
+    const result = await executeAetherTool({
+      name: "create_presentation",
+      args: {
+        title: "Dublin junior investment-ops",
+        slides: [{ title: "Market", bullets: ["IFSC fund admin"] }],
+      },
+      ctx: baseCtx({
+        approvalMode: "ask",
+        userId: "user-1",
+        deps: {
+          saveArtifact: async (_userId, input) => {
+            savedContent = input.content;
+            assert.equal(input.kind, "file");
+            assert.match(input.content, /^data:.*base64,/);
+            return { id: "art-cloud-1" };
+          },
+          createConfirmation: async () => {
+            throw new Error("create_presentation must not pause in Ask");
+          },
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal((result as { persisted?: boolean }).persisted, true);
+    assert.equal((result as { id?: string }).id, "art-cloud-1");
+    assert.equal(
+      (result as { downloadPath?: string }).downloadPath,
+      "/api/artifacts/art-cloud-1/download",
+    );
+    assert.equal((result as { content?: string }).content, undefined);
+    assert.match(savedContent, /^data:.*base64,/);
   });
 
   it("surfaces the office-file fallback when workspace_exec cannot start", async () => {
