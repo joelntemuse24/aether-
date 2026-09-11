@@ -290,9 +290,14 @@ function toolTraceNoun(name: string): string {
     case TOOL_NAMES.githubReadFile:
       return "Repository";
     case TOOL_NAMES.fetchUrl:
+    case TOOL_NAMES.browsePage:
+    case TOOL_NAMES.browserSnapshot:
     case TOOL_NAMES.browserNavigate:
     case TOOL_NAMES.browserAct:
       return "Page";
+    case TOOL_NAMES.searchImages:
+    case TOOL_NAMES.generateImage:
+      return "Image";
     default:
       return "Result";
   }
@@ -613,7 +618,8 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     (result?.kind as string | undefined) ||
     extractPartialJsonString(part.argsText, "kind") ||
     part.argsText?.match(/"kind"\s*:\s*"(\w+)"/)?.[1] ||
-    (isFileTool ? "file" : undefined);
+    (isFileTool ? "file" : undefined) ||
+    (part.toolName === TOOL_NAMES.generateImage ? "image" : undefined);
   const fileReady = kindHint === "file" && !!bodyTitle && !!(bodyContent || downloadPath);
   const complete =
     part.result !== undefined &&
@@ -1279,20 +1285,38 @@ const GitHubReadFileToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 
 const FetchUrlToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const running = usePartRunning(part);
-  const input = part.args as { url?: string } | undefined;
+  const input = part.args as { url?: string; instructions?: string } | undefined;
   const output = part.result as {
     ok?: boolean;
     error?: string;
     title?: string;
     text?: string;
+    focused?: string;
     url?: string;
+    headings?: Array<{ level: number; text: string }>;
+    excerpts?: string[];
+    content?: string;
+    mime?: string;
+    screenshot?: boolean;
+    warning?: string;
   } | undefined;
   const error = part.isError || (output ? output.ok === false : false);
   const href = output?.url || input?.url;
+  const body = output?.focused || output?.text;
+  const imageSrc =
+    typeof output?.content === "string" && output.content.startsWith("data:image/")
+      ? output.content
+      : undefined;
+  const toolName =
+    part.toolName === TOOL_NAMES.browsePage
+      ? TOOL_NAMES.browsePage
+      : part.toolName === TOOL_NAMES.browserSnapshot
+        ? TOOL_NAMES.browserSnapshot
+        : TOOL_NAMES.fetchUrl;
 
   return (
     <ToolShell
-      name={TOOL_NAMES.fetchUrl}
+      name={toolName}
       running={running}
       error={error}
       subtitle={output?.title || href}
@@ -1313,12 +1337,87 @@ const FetchUrlToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
           {output.error}
         </div>
       )}
-      {output?.text && (
-        <p className="max-h-48 overflow-auto whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--muted)]">
-          {output.text.length > 2500
-            ? `${output.text.slice(0, 2500)}…`
-            : output.text}
+      {output?.warning && (
+        <p className="mb-2 text-[11px] text-[var(--muted)]">{output.warning}</p>
+      )}
+      {input?.instructions && (
+        <p className="mb-2 text-[11px] text-[var(--muted-soft)]">
+          Focus: {input.instructions}
         </p>
+      )}
+      {output?.headings && output.headings.length > 0 && (
+        <ul className="mb-2 space-y-0.5 text-[11px] text-[var(--muted)]">
+          {output.headings.slice(0, 8).map((h, i) => (
+            <li key={`${h.level}-${i}`}>{h.text}</li>
+          ))}
+        </ul>
+      )}
+      {imageSrc && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imageSrc}
+          alt={output?.title || "Page screenshot"}
+          className="mb-2 max-h-64 w-full rounded-lg object-contain"
+        />
+      )}
+      {body && (
+        <p className="max-h-48 overflow-auto whitespace-pre-wrap text-[12px] leading-relaxed text-[var(--muted)]">
+          {body.length > 2500 ? `${body.slice(0, 2500)}…` : body}
+        </p>
+      )}
+    </ToolShell>
+  );
+};
+
+const SearchImagesToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = usePartRunning(part);
+  const input = part.args as { query?: string } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    error?: string;
+    results?: Array<{
+      title?: string;
+      imageUrl?: string;
+      thumbnailUrl?: string;
+      pageUrl?: string;
+    }>;
+  } | undefined;
+  const error = part.isError || (output ? output.ok === false : false);
+  const results = output?.results ?? [];
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.searchImages}
+      running={running}
+      error={error}
+      subtitle={input?.query}
+    >
+      {output?.error && (
+        <div className="rounded-lg bg-[var(--error-bg)] p-2.5 text-[12px] text-[var(--error-text)]">
+          {output.error}
+        </div>
+      )}
+      {results.length > 0 && (
+        <div className="aether-image-carousel">
+          {results.map((hit, i) => {
+            const src = hit.thumbnailUrl || hit.imageUrl;
+            if (!src) return null;
+            const wrap = hit.pageUrl || hit.imageUrl;
+            return (
+              <a
+                key={`${src}-${i}`}
+                href={wrap}
+                target="_blank"
+                rel="noreferrer"
+                className="aether-image-carousel__item"
+                title={hit.title}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={src} alt={hit.title || "Image result"} />
+              </a>
+            );
+          })}
+        </div>
       )}
     </ToolShell>
   );
@@ -1646,7 +1745,13 @@ export const ToolCallPart: FC<{ part: ToolPartLike }> = ({ part }) => {
     case TOOL_NAMES.githubReadFile:
       return <GitHubReadFileToolCall part={part} />;
     case TOOL_NAMES.fetchUrl:
+    case TOOL_NAMES.browsePage:
+    case TOOL_NAMES.browserSnapshot:
       return <FetchUrlToolCall part={part} />;
+    case TOOL_NAMES.searchImages:
+      return <SearchImagesToolCall part={part} />;
+    case TOOL_NAMES.generateImage:
+      return <CreateArtifactToolCall part={part} />;
     case TOOL_NAMES.toolSearch:
       return <ToolSearchToolCall part={part} />;
     case TOOL_NAMES.verifyChecklist:

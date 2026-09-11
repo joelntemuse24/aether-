@@ -33,6 +33,7 @@ export function confirmActionCopy(input: {
 
   let confirm = "Allow this";
   if (tool === "create_artifact") confirm = "Save artifact";
+  else if (tool === "generate_image") confirm = "Generate image";
   else if (tool === "memory_write") confirm = "Save memory";
   else if (action.includes("delete") || tool.includes("delete")) {
     confirm = "Delete this";

@@ -51,6 +51,21 @@ describe("collectSourceCitations", () => {
     assert.equal(sources[1]?.url?.includes("centralbank"), true);
   });
 
+  it("collects browse_page results the same way as fetch_url", () => {
+    const sources = collectSourceCitations([
+      {
+        type: "tool-browse_page",
+        result: {
+          ok: true,
+          title: "Central Bank AIFMD",
+          url: "https://www.centralbank.ie/funds",
+        },
+      },
+    ]);
+    assert.equal(sources.length, 1);
+    assert.equal(sources[0]?.title, "Central Bank AIFMD");
+  });
+
   it("accepts a readonly parts array (assistant-ui message.parts)", () => {
     const parts = [
       {

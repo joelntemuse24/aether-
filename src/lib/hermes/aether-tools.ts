@@ -387,18 +387,22 @@ async function gateIfNeeded(
       }));
   const title =
     str(args.title) ||
-    (name === TOOL_NAMES.memoryWrite
-      ? "Save a memory"
-      : name === TOOL_NAMES.createArtifact
-        ? "Save an artifact"
-        : "Needs your confirmation");
+    (name === TOOL_NAMES.generateImage
+      ? "Generate an image"
+      : name === TOOL_NAMES.memoryWrite
+        ? "Save a memory"
+        : name === TOOL_NAMES.createArtifact
+          ? "Save an artifact"
+          : "Needs your confirmation");
   const preview =
     str(args.preview) ||
-    (name === TOOL_NAMES.memoryWrite
-      ? `Save memory “${str(args.title) || "untitled"}” to your Aether account.`
-      : name === TOOL_NAMES.createArtifact
-        ? `Create artifact “${str(args.title) || "untitled"}”.`
-        : str(args.title) || name);
+    (name === TOOL_NAMES.generateImage
+      ? `Create an image from “${str(args.prompt) || "your description"}”. This uses credits.`
+      : name === TOOL_NAMES.memoryWrite
+        ? `Save memory “${str(args.title) || "untitled"}” to your Aether account.`
+        : name === TOOL_NAMES.createArtifact
+          ? `Create artifact “${str(args.title) || "untitled"}”.`
+          : str(args.title) || name);
   const action =
     (typeof args.action === "string" &&
     [
@@ -801,13 +805,29 @@ export async function executeAetherTool(input: {
 
   if (name === TOOL_NAMES.generateImage) {
     const generate = ctx.deps?.generateImage ?? generateImageForUser;
-    return generate({
+    const generated = await generate({
       prompt: str(args.prompt),
       size:
         args.size === "square" || args.size === "portrait" || args.size === "landscape"
           ? args.size
           : undefined,
     });
+    if (!generated.ok) return generated;
+    const saved = await persistArtifact(ctx, {
+      kind: "image",
+      title: generated.title,
+      content: generated.content,
+      producedBy: [name],
+    });
+    return {
+      ok: true,
+      kind: "image",
+      title: generated.title,
+      content: generated.content,
+      mime: generated.mime,
+      id: saved.id,
+      persisted: saved.persisted,
+    };
   }
 
   if (name === TOOL_NAMES.githubListIssues) {

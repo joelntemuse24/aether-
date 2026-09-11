@@ -215,6 +215,75 @@ describe("executeAetherTool", () => {
     });
     assert.equal(generated, false);
     assert.equal(result.needs_confirmation, true);
+    assert.match(String(result.title), /image/i);
+    assert.match(String(result.preview), /credits/i);
+    assert.doesNotMatch(String(result.preview), /OpenRouter|Gemini|DALL/i);
+  });
+
+  it("persists generate_image after the user confirms spend", async () => {
+    let generated = false;
+    const result = await executeAetherTool({
+      name: "generate_image",
+      args: { prompt: "a calm cream workspace" },
+      ctx: baseCtx({
+        approvalMode: "ask",
+        skipGate: true,
+        deps: {
+          generateImage: async () => {
+            generated = true;
+            return {
+              ok: true as const,
+              kind: "image" as const,
+              title: "a calm cream workspace",
+              content: "data:image/png;base64,aaa",
+              mime: "image/png",
+            };
+          },
+          saveArtifact: async () => ({ id: "art-img-1" }),
+        },
+      }),
+    });
+    assert.equal(generated, true);
+    assert.equal(result.ok, true);
+    assert.equal(result.needs_confirmation, undefined);
+    assert.equal(result.kind, "image");
+    assert.equal(result.id, "art-img-1");
+    assert.equal(result.persisted, true);
+    assert.equal(result.content, "data:image/png;base64,aaa");
+  });
+
+  it("still confirms generate_image in Auto because it spends credits", async () => {
+    let generated = false;
+    const result = await executeAetherTool({
+      name: "generate_image",
+      args: { prompt: "spend" },
+      ctx: baseCtx({
+        approvalMode: "auto",
+        deps: {
+          generateImage: async () => {
+            generated = true;
+            return {
+              ok: true as const,
+              kind: "image" as const,
+              title: "x",
+              content: "y",
+              mime: "image/png",
+            };
+          },
+          createConfirmation: async (request) => ({
+            ok: true as const,
+            needs_confirmation: true as const,
+            confirmation_id: "img-auto",
+            action: request.action,
+            title: request.title,
+            preview: request.preview,
+            instruction: "wait",
+          }),
+        },
+      }),
+    });
+    assert.equal(generated, false);
+    assert.equal(result.needs_confirmation, true);
   });
 
   it("keeps Drive/GitHub unavailable when the connector is off", async () => {

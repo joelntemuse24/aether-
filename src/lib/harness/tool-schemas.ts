@@ -29,6 +29,9 @@ import {
   githubCreatePullRequestInput,
   githubMergePullRequestInput,
   fetchUrlInput,
+  browsePageInput,
+  browserSnapshotInput,
+  searchImagesInput,
   toolSearchInput,
   requestConfirmationInput,
   browserNavigateInput,
@@ -89,8 +92,23 @@ export function buildHeadStartToolSchemas(
     }),
     [TOOL_NAMES.fetchUrl]: tool({
       description:
-        "Fetch a public http(s) URL and return extracted text (HTML stripped). Soft-fails paywalls; PDF text is best-effort. Do not use for github.com repositories — use github_* tools.",
+        "Compat alias for browse_page without instructions. Prefer browse_page for a structured extract.",
       inputSchema: fetchUrlInput,
+    }),
+    [TOOL_NAMES.browsePage]: tool({
+      description:
+        "Read a public http(s) URL and return a structured extract (title, headings, excerpts, links) — not a raw innerText dump. Pass instructions to focus the extract. Soft-fails paywalls; PDF text is best-effort. Do not use for github.com repositories — use github_* tools.",
+      inputSchema: browsePageInput,
+    }),
+    [TOOL_NAMES.browserSnapshot]: tool({
+      description:
+        "Open a public URL, extract readable text, and optionally store a screenshot as an image artifact the next step can see. screenshot=true captures the page.",
+      inputSchema: browserSnapshotInput,
+    }),
+    [TOOL_NAMES.searchImages]: tool({
+      description:
+        "Search the public web for images. Returns carousel-ready image URLs (title, image, thumbnail, source page). Does not spend credits.",
+      inputSchema: searchImagesInput,
     }),
     [TOOL_NAMES.verifyChecklist]: tool({
       description:

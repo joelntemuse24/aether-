@@ -20,6 +20,9 @@ describe("head-start schema-only tools", () => {
     assert.ok(tools[TOOL_NAMES.createDocument]);
     assert.ok(tools[TOOL_NAMES.createPdf]);
     assert.ok(tools[TOOL_NAMES.generateImage]);
+    assert.ok(tools[TOOL_NAMES.browsePage]);
+    assert.ok(tools[TOOL_NAMES.browserSnapshot]);
+    assert.ok(tools[TOOL_NAMES.searchImages]);
     for (const tool of Object.values(tools)) {
       assert.equal(
         tool && typeof tool === "object" && "execute" in tool && tool.execute != null,

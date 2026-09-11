@@ -16,6 +16,8 @@ import {
   createConfirmationRequest,
   type ConfirmableAction,
 } from "@/lib/harness/confirmation";
+import { browsePage } from "@/lib/connectors/browse-page";
+import { dataUrlToMediaPart } from "@/lib/harness/vision-tool-output";
 
 export type BrowserNavigateResult = {
   ok: boolean;
@@ -24,6 +26,50 @@ export type BrowserNavigateResult = {
   title?: string;
   text?: string;
   mode?: "browserless" | "fetch";
+  warning?: string;
+};
+
+export type PersistImageInput = {
+  title: string;
+  dataUrl: string;
+  mime: string;
+};
+
+export type PersistImageResult = {
+  id?: string;
+  persisted: boolean;
+  kind?: string;
+  title?: string;
+  content?: string;
+};
+
+export type BrowserScreenshotArtifact = {
+  ok: true;
+  kind: "image";
+  title: string;
+  mime: string;
+  content?: string;
+  id?: string;
+  persisted: boolean;
+  url: string;
+  forNextModelStep: { mediaType: string; data: string };
+};
+
+export type BrowserSnapshotResult = {
+  ok: boolean;
+  error?: string;
+  url?: string;
+  title?: string;
+  text?: string;
+  headings?: { level: number; text: string }[];
+  excerpts?: string[];
+  screenshot?: boolean;
+  kind?: "image";
+  mime?: string;
+  content?: string;
+  id?: string;
+  persisted?: boolean;
+  forNextModelStep?: { mediaType: string; data: string };
   warning?: string;
 };
 
@@ -83,6 +129,141 @@ async function browserlessContent(
     return { title, text };
   } catch {
     return null;
+  }
+}
+
+function mimeFromDataUrl(dataUrl: string): string {
+  if (!dataUrl.startsWith("data:image/")) return "image/png";
+  const semi = dataUrl.indexOf(";");
+  return (semi > 5 ? dataUrl.slice(5, semi) : "") || "image/png";
+}
+
+export async function storeBrowserScreenshot(input: {
+  url: string;
+  title: string;
+  dataUrl: string;
+  persistImage?: (input: PersistImageInput) => Promise<PersistImageResult>;
+}): Promise<BrowserScreenshotArtifact> {
+  const mime = mimeFromDataUrl(input.dataUrl);
+  const media = dataUrlToMediaPart(input.dataUrl, mime);
+  if (!media) {
+    throw new Error("Screenshot is not a usable image.");
+  }
+  const title = input.title.slice(0, 80) || "Page screenshot";
+  const saved = input.persistImage
+    ? await input.persistImage({ title, dataUrl: input.dataUrl, mime })
+    : { persisted: false };
+  return {
+    ok: true,
+    kind: "image",
+    title,
+    mime,
+    content: saved.content || input.dataUrl,
+    id: saved.id,
+    persisted: !!saved.persisted,
+    url: input.url,
+    forNextModelStep: { mediaType: media.mediaType, data: media.data },
+  };
+}
+
+async function browserlessScreenshot(
+  url: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const endpoint = browserlessEndpoint();
+  if (!endpoint) return null;
+  const token = process.env.BROWSERLESS_TOKEN?.trim();
+  const shotUrl = token
+    ? `${endpoint}/screenshot?token=${encodeURIComponent(token)}`
+    : `${endpoint}/screenshot`;
+  try {
+    const res = await fetch(shotUrl, {
+      method: "POST",
+      signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        options: { type: "png", fullPage: false },
+        gotoOptions: { waitUntil: "networkidle2", timeout: 25000 },
+      }),
+    });
+    if (!res.ok) return null;
+    const ctype = res.headers.get("content-type") || "";
+    if (ctype.startsWith("data:image/")) {
+      return await res.text();
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.byteLength < 32) return null;
+    const mime = ctype.startsWith("image/") ? ctype.split(";")[0] : "image/png";
+    return `data:${mime};base64,${buf.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
+export async function browserSnapshot(input: {
+  url: string;
+  screenshot?: boolean;
+  userId?: string | null;
+  persistImage?: (input: PersistImageInput) => Promise<PersistImageResult>;
+}): Promise<BrowserSnapshotResult> {
+  void input.userId;
+  const page = await browsePage({ url: input.url });
+  if (!page.ok && !page.text) {
+    return { ok: false, error: page.error, url: page.url };
+  }
+
+  const base: BrowserSnapshotResult = {
+    ok: page.ok,
+    error: page.error,
+    url: page.url,
+    title: page.title,
+    text: page.focused || page.text,
+    headings: page.headings,
+    excerpts: page.excerpts,
+    screenshot: false,
+    warning: page.warning,
+  };
+
+  if (!input.screenshot) {
+    return base;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 28_000);
+  try {
+    const dataUrl = page.url
+      ? await browserlessScreenshot(page.url, controller.signal)
+      : null;
+    if (!dataUrl) {
+      return {
+        ...base,
+        ok: page.ok,
+        screenshot: false,
+        warning:
+          page.warning ||
+          "Screenshot is unavailable. Page text was extracted instead.",
+      };
+    }
+    const stored = await storeBrowserScreenshot({
+      url: page.url,
+      title: page.title || "Page screenshot",
+      dataUrl,
+      persistImage: input.persistImage,
+    });
+    return {
+      ...base,
+      ok: true,
+      screenshot: true,
+      kind: "image",
+      mime: stored.mime,
+      content: stored.content,
+      id: stored.id,
+      persisted: stored.persisted,
+      forNextModelStep: stored.forNextModelStep,
+    };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

@@ -73,7 +73,7 @@ export function collectSourceCitations(
           typeof row.id === "string" ? row.id : undefined,
         );
       }
-    } else if (name === "fetch_url") {
+    } else if (name === "fetch_url" || name === "browse_page" || name === "browser_snapshot") {
       if (result.ok === false) continue;
       const title =
         (typeof result.title === "string" && result.title.trim()) ||

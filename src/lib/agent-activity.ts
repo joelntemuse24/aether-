@@ -190,6 +190,8 @@ export function activityLabelForTool(
     case "drive_read":
       return running ? "Reading Drive file" : "Read Drive file";
     case "fetch_url":
+    case "browse_page":
+    case "browser_snapshot":
     case "browser_navigate": {
       const host = hostFromUrl(args.url);
       if (running) return host ? `Reading ${host}` : "Reading page";
@@ -197,6 +199,13 @@ export function activityLabelForTool(
     }
     case "browser_act":
       return running ? "Working on page" : "Worked on page";
+    case "search_images": {
+      const query = clipPhrase(args.query);
+      if (running) return query ? `Searching images for ${query}` : "Searching images";
+      return "Searched images";
+    }
+    case "generate_image":
+      return running ? "Generating image" : "Generated image";
     case "create_artifact": {
       const title = clipPhrase(args.title);
       const object = artifactObject(args);
