@@ -248,6 +248,31 @@ export const projectKnowledge = pgTable(
   ],
 );
 
+/** Recurring automations (Trigger scheduled.automation). Never auto-send. */
+export const scheduledJobs = pgTable(
+  "scheduled_jobs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    title: text("title").notNull(),
+    prompt: text("prompt").notNull(),
+    cron: text("cron").notNull(),
+    timezone: text("timezone").notNull().default("UTC"),
+    delivery: text("delivery").notNull().default("inbox"),
+    status: text("status").notNull().default("active"),
+    conversationId: text("conversation_id"),
+    triggerScheduleId: text("trigger_schedule_id"),
+    lastRunAt: text("last_run_at"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("scheduled_jobs_user_idx").on(t.userId, t.createdAt)],
+);
+
 export type MemoryRecordRow = typeof memoryRecords.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect;
 export type ArtifactRow = typeof artifacts.$inferSelect;
@@ -255,3 +280,4 @@ export type ProjectKnowledgeRow = typeof projectKnowledge.$inferSelect;
 export type VaultNoteRow = typeof vaultNotes.$inferSelect;
 export type PendingConfirmationDbRow = typeof pendingConfirmations.$inferSelect;
 export type UserPreferenceRow = typeof userPreferences.$inferSelect;
+export type ScheduledJobRow = typeof scheduledJobs.$inferSelect;

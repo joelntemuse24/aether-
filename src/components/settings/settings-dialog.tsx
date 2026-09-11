@@ -23,6 +23,10 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { MemorySettingsPanel } from "@/components/settings/memory-settings-panel";
+import {
+  OptionalServicesStatus,
+  SchedulesPanel,
+} from "@/components/settings/schedules-panel";
 
 const PROVIDERS: ProviderId[] = ["openrouter", "openai", "anthropic", "custom"];
 
@@ -219,7 +223,8 @@ export function SettingsDialog() {
               Voice
             </div>
             <p className="text-xs leading-relaxed text-[var(--muted)]">
-              How Aether should respond in conversation.
+              How Aether should respond in conversation. Listen on an answer
+              uses this device — if your browser cannot speak, it says so.
             </p>
             <div className="grid grid-cols-2 gap-2">
               {VOICE_OPTIONS.map((opt) => {
@@ -404,6 +409,14 @@ export function SettingsDialog() {
                 </div>
               </div>
             )}
+            <OptionalServicesStatus />
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-[var(--muted-soft)]">
+              Automations
+            </div>
+            <SchedulesPanel signedIn={isAuthenticated} />
           </div>
 
           <MemorySettingsPanel />

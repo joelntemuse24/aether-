@@ -21,6 +21,8 @@ const ALWAYS_CONFIRM_TOOLS = new Set<string>([
   TOOL_NAMES.driveUpload,
   TOOL_NAMES.driveWrite,
   TOOL_NAMES.gmailSend,
+  TOOL_NAMES.scheduleCreate,
+  TOOL_NAMES.scheduleCancel,
   // Publishing / finalizing actions are always visible to others.
   TOOL_NAMES.githubCreateIssue,
   TOOL_NAMES.githubAddIssueComment,
@@ -47,6 +49,12 @@ const SAFE_READ_TOOLS = new Set<string>([
   TOOL_NAMES.gmailRead,
   TOOL_NAMES.calendarListEvents,
   TOOL_NAMES.contactsSearch,
+  TOOL_NAMES.scheduleList,
+  TOOL_NAMES.designList,
+  TOOL_NAMES.designRead,
+  TOOL_NAMES.deploymentsList,
+  TOOL_NAMES.deploymentsRead,
+  TOOL_NAMES.socialSearch,
 ]);
 
 /**
@@ -78,6 +86,7 @@ const USER_DELIVERABLE_TOOLS = new Set<string>([
   TOOL_NAMES.createDocument,
   TOOL_NAMES.createPdf,
   TOOL_NAMES.workspaceExec,
+  TOOL_NAMES.workspaceFfmpeg,
   TOOL_NAMES.workspaceWriteFile,
   TOOL_NAMES.workspacePublishFile,
 ]);

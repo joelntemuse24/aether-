@@ -58,6 +58,15 @@ import {
   contactsSearchInput,
   contactsCreateInput,
   projectKnowledgeSearchInput,
+  workspaceFfmpegInput,
+  scheduleCreateInput,
+  scheduleListInput,
+  scheduleCancelInput,
+  designListInput,
+  designReadInput,
+  deploymentsListInput,
+  deploymentsReadInput,
+  socialSearchInput,
 } from "@/lib/tools";
 import { verifyChecklistInput } from "@/lib/harness/verify";
 
@@ -124,8 +133,51 @@ export function buildHeadStartToolSchemas(
     }),
     [TOOL_NAMES.workspaceExec]: tool({
       description:
-        "Run a shell command in the conversation's isolated Linux workspace. Use for coding, tests, package installation, data processing, and document generation. Files persist for this conversation.",
+        "Run a shell command in the conversation's isolated Linux workspace. Use for coding, tests, package installation, data processing, and document generation. Files persist for this conversation. For trim/concat/GIF/burned-in captions use workspace_ffmpeg. If ffmpeg is MISSING, say so — do not invent a video.",
       inputSchema: workspaceExecInput,
+    }),
+    [TOOL_NAMES.workspaceFfmpeg]: tool({
+      description:
+        "Trim, concat, make a GIF, or burn captions with ffmpeg in the isolated workspace. Returns MISSING if ffmpeg is not installed — do not invent media.",
+      inputSchema: workspaceFfmpegInput,
+    }),
+    [TOOL_NAMES.scheduleCreate]: tool({
+      description:
+        "Create a recurring automation (every morning / evening / 5-field cron). Always confirms first. When it fires it prepares a draft and waits on a confirm card — never silent-send.",
+      inputSchema: scheduleCreateInput,
+    }),
+    [TOOL_NAMES.scheduleList]: tool({
+      description: "List the user's recurring automations.",
+      inputSchema: scheduleListInput,
+    }),
+    [TOOL_NAMES.scheduleCancel]: tool({
+      description: "Cancel a recurring automation. Always confirms first.",
+      inputSchema: scheduleCancelInput,
+    }),
+    [TOOL_NAMES.designList]: tool({
+      description:
+        "List connected design files when a design token is configured. Honest unavailable otherwise — do not invent files.",
+      inputSchema: designListInput,
+    }),
+    [TOOL_NAMES.designRead]: tool({
+      description:
+        "Read title and page names for a design file key. Honest unavailable when design files are not connected.",
+      inputSchema: designReadInput,
+    }),
+    [TOOL_NAMES.deploymentsList]: tool({
+      description:
+        "List recent deployments when a deployments token is configured. Honest unavailable otherwise — do not invent statuses.",
+      inputSchema: deploymentsListInput,
+    }),
+    [TOOL_NAMES.deploymentsRead]: tool({
+      description:
+        "Read one deployment by id. Honest unavailable when deployments are not connected.",
+      inputSchema: deploymentsReadInput,
+    }),
+    [TOOL_NAMES.socialSearch]: tool({
+      description:
+        "Social feed search. Unavailable without an official API key. Never scrape.",
+      inputSchema: socialSearchInput,
     }),
     [TOOL_NAMES.workspaceReadFile]: tool({
       description:

@@ -68,6 +68,15 @@ export function resolveAvailableToolNames(ctx: {
     TOOL_NAMES.browserNavigate,
     TOOL_NAMES.browserAct,
     TOOL_NAMES.workspaceExec,
+    TOOL_NAMES.workspaceFfmpeg,
+    TOOL_NAMES.scheduleCreate,
+    TOOL_NAMES.scheduleList,
+    TOOL_NAMES.scheduleCancel,
+    TOOL_NAMES.designList,
+    TOOL_NAMES.designRead,
+    TOOL_NAMES.deploymentsList,
+    TOOL_NAMES.deploymentsRead,
+    TOOL_NAMES.socialSearch,
     TOOL_NAMES.workspaceReadFile,
     TOOL_NAMES.workspaceWriteFile,
     TOOL_NAMES.workspaceListFiles,
@@ -263,6 +272,42 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     [TOOL_NAMES.workspaceExec]: tool({
       ...schemas[TOOL_NAMES.workspaceExec],
       execute: async (input) => runAether(TOOL_NAMES.workspaceExec, input),
+    }),
+    [TOOL_NAMES.workspaceFfmpeg]: tool({
+      ...schemas[TOOL_NAMES.workspaceFfmpeg],
+      execute: async (input) => runAether(TOOL_NAMES.workspaceFfmpeg, input),
+    }),
+    [TOOL_NAMES.scheduleCreate]: tool({
+      ...schemas[TOOL_NAMES.scheduleCreate],
+      execute: async (input) => runAether(TOOL_NAMES.scheduleCreate, input),
+    }),
+    [TOOL_NAMES.scheduleList]: tool({
+      ...schemas[TOOL_NAMES.scheduleList],
+      execute: async (input) => runAether(TOOL_NAMES.scheduleList, input),
+    }),
+    [TOOL_NAMES.scheduleCancel]: tool({
+      ...schemas[TOOL_NAMES.scheduleCancel],
+      execute: async (input) => runAether(TOOL_NAMES.scheduleCancel, input),
+    }),
+    [TOOL_NAMES.designList]: tool({
+      ...schemas[TOOL_NAMES.designList],
+      execute: async (input) => runAether(TOOL_NAMES.designList, input),
+    }),
+    [TOOL_NAMES.designRead]: tool({
+      ...schemas[TOOL_NAMES.designRead],
+      execute: async (input) => runAether(TOOL_NAMES.designRead, input),
+    }),
+    [TOOL_NAMES.deploymentsList]: tool({
+      ...schemas[TOOL_NAMES.deploymentsList],
+      execute: async (input) => runAether(TOOL_NAMES.deploymentsList, input),
+    }),
+    [TOOL_NAMES.deploymentsRead]: tool({
+      ...schemas[TOOL_NAMES.deploymentsRead],
+      execute: async (input) => runAether(TOOL_NAMES.deploymentsRead, input),
+    }),
+    [TOOL_NAMES.socialSearch]: tool({
+      ...schemas[TOOL_NAMES.socialSearch],
+      execute: async (input) => runAether(TOOL_NAMES.socialSearch, input),
     }),
     [TOOL_NAMES.workspaceReadFile]: tool({
       ...schemas[TOOL_NAMES.workspaceReadFile],

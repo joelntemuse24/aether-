@@ -61,8 +61,18 @@ import {
   RefreshCwIcon,
   RotateCcwIcon,
   SquareIcon,
+  Volume2Icon,
+  VolumeXIcon,
   XIcon,
 } from "lucide-react";
+import {
+  PLAYBACK_UNAVAILABLE_MESSAGE,
+  isSpeaking,
+  plainTextFromMessage,
+  speakText,
+  speechSynthesisSupported,
+  stopSpeaking,
+} from "@/lib/tts";
 import { ClarifyCard } from "@/components/assistant-ui/clarify-card";
 import { useHarness } from "@/providers/harness-provider";
 import { useGitHub } from "@/providers/github-provider";
@@ -1306,6 +1316,7 @@ const AssistantActionBar: FC = () => {
       autohide="not-last"
       className="flex items-center gap-0.5 text-[var(--muted)]"
     >
+      <PlayAnswerButton />
       <ActionBarPrimitive.Copy asChild>
         <TooltipIconButton tooltip="Copy">
           <AuiIf condition={(s) => s.message.isCopied}>
@@ -1350,6 +1361,67 @@ const AssistantActionBar: FC = () => {
       )}
       <RestoreToHereButton />
     </ActionBarPrimitive.Root>
+  );
+};
+
+const PlayAnswerButton: FC = () => {
+  const [playing, setPlaying] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
+  const text = useAuiState((s) =>
+    plainTextFromMessage(
+      s.message as { parts?: Array<{ type?: string; text?: string }>; content?: unknown },
+    ),
+  );
+
+  useEffect(() => {
+    return () => stopSpeaking();
+  }, []);
+
+  if (!text) return null;
+
+  const tooltip = unavailable
+    ? PLAYBACK_UNAVAILABLE_MESSAGE
+    : playing
+      ? "Stop"
+      : "Listen";
+
+  return (
+    <TooltipIconButton
+      tooltip={tooltip}
+      aria-label={tooltip}
+      onClick={() => {
+        if (playing) {
+          stopSpeaking();
+          setPlaying(false);
+          return;
+        }
+        if (!speechSynthesisSupported()) {
+          setUnavailable(true);
+          return;
+        }
+        const result = speakText(text, {
+          onEnd: () => setPlaying(false),
+          onError: () => {
+            setPlaying(false);
+            setUnavailable(true);
+          },
+        });
+        if (!result.ok) {
+          setUnavailable(true);
+          return;
+        }
+        setPlaying(true);
+        window.setTimeout(() => {
+          if (!isSpeaking()) setPlaying(false);
+        }, 50);
+      }}
+    >
+      {playing ? (
+        <VolumeXIcon className="size-3.5" />
+      ) : (
+        <Volume2Icon className="size-3.5" />
+      )}
+    </TooltipIconButton>
   );
 };
 

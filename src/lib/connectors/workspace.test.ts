@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { FFMPEG_MISSING_MESSAGE } from "./workspace-media";
 import {
   classifyWorkspaceError,
   resolveWorkspacePath,
@@ -177,6 +178,27 @@ describe("workspace_exec happy path", () => {
     assert.match(String(result.stdout), /deck\.pptx/);
     assert.match(seen, /bash/);
     assert.match(seen, /pwd && ls/);
+  });
+
+  it("annotates a missing ffmpeg binary as MISSING", async () => {
+    const result = await workspaceExec(
+      { userId: "u1", conversationId: "c1" },
+      { command: "ffmpeg -i clip.mp4 out.gif" },
+      {
+        getSandbox: async () =>
+          fakeSandbox({
+            runCommand: async () => ({
+              exitCode: 127,
+              stdout: async () => "",
+              stderr: async () => "bash: ffmpeg: command not found",
+              durationMs: 4,
+            }),
+          }),
+      },
+    );
+    assert.equal(result.ok, false);
+    assert.equal((result as { missing?: string }).missing, "ffmpeg");
+    assert.equal(result.error, FFMPEG_MISSING_MESSAGE);
   });
 
   it("publishes a binary workspace file as a buffer", async () => {

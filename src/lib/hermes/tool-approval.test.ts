@@ -83,6 +83,38 @@ describe("Ask vs Auto policy", () => {
     }
   });
 
+  it("always confirms creating or cancelling a scheduled automation", () => {
+    for (const name of ["schedule_create", "schedule_cancel"]) {
+      for (const mode of ["ask", "auto"] as const) {
+        assert.equal(
+          shouldConfirmAetherTool({ name, mode }),
+          true,
+          `${name}/${mode}`,
+        );
+      }
+    }
+  });
+
+  it("lets schedule list and design/deploy reads run without a card", () => {
+    for (const name of [
+      "schedule_list",
+      "design_list",
+      "design_read",
+      "deployments_list",
+      "deployments_read",
+      "social_search",
+    ]) {
+      assert.equal(shouldConfirmAetherTool({ name, mode: "ask" }), false, name);
+    }
+  });
+
+  it("does not pause workspace_ffmpeg", () => {
+    assert.equal(
+      shouldConfirmAetherTool({ name: "workspace_ffmpeg", mode: "ask" }),
+      false,
+    );
+  });
+
   it("always confirms image generation (spend)", () => {
     for (const mode of ["ask", "auto"] as const) {
       assert.equal(shouldConfirmAetherTool({ name: "generate_image", mode }), true);
