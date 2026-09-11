@@ -4,6 +4,7 @@ export type SourceCitation = {
   url?: string;
 };
 
+/** Structural message-part shape used for citation harvest. */
 export type CitationPart = {
   type?: string;
   toolName?: string;
@@ -51,7 +52,7 @@ function pushUnique(
 
 /** Unique web_search + fetch_url sources, numbered for inline [n] citations. */
 export function collectSourceCitations(
-  parts: CitationPart[] | undefined,
+  parts: readonly CitationPart[] | undefined,
 ): SourceCitation[] {
   const out: SourceCitation[] = [];
   const seen = new Set<string>();

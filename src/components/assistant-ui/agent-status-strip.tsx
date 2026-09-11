@@ -234,7 +234,7 @@ function hostLabel(url?: string): string | null {
 }
 
 export const MessageSourceCards: FC = () => {
-  const parts = useAuiState((s) => s.message.parts as ActivityMessage["parts"]);
+  const parts = useAuiState((s) => s.message.parts);
   const hits = collectWebSearchHits(parts);
   if (hits.length === 0) return null;
 
@@ -292,7 +292,7 @@ export const MessageSourceCards: FC = () => {
 export const MessageAgentActivity: FC = () => {
   const isRunning = useAuiState((s) => s.message.status?.type === "running");
   const messageId = useAuiState((s) => s.message.id);
-  const parts = useAuiState((s) => s.message.parts as ActivityMessage["parts"]);
+  const parts = useAuiState((s) => s.message.parts);
   const elapsed = useThreadActivityElapsed(isRunning, messageId);
   const continueStatus = useContinueStatus();
 

@@ -22,7 +22,7 @@ export type ActivityPart = {
 export type ActivityMessage = {
   id?: string;
   role: string;
-  parts?: ActivityPart[];
+  parts?: readonly ActivityPart[];
 };
 
 export type ActivityStep = {
@@ -249,7 +249,7 @@ export function activityLabelForTool(
   }
 }
 
-function hasVisibleText(parts: ActivityPart[] | undefined): boolean {
+function hasVisibleText(parts: readonly ActivityPart[] | undefined): boolean {
   return (parts ?? []).some(
     (p) =>
       p.type === "text" &&
@@ -259,7 +259,7 @@ function hasVisibleText(parts: ActivityPart[] | undefined): boolean {
 }
 
 export function collectActivitySteps(
-  parts: ActivityPart[] | undefined,
+  parts: readonly ActivityPart[] | undefined,
   isRunning: boolean,
 ): ActivityStep[] {
   const steps: ActivityStep[] = [];
@@ -389,7 +389,7 @@ export type ActivitySearchHit = {
 
 /** Completed web_search + fetch_url hits — rendered as cards after the answer. */
 export function collectWebSearchHits(
-  parts: ActivityPart[] | undefined,
+  parts: readonly ActivityPart[] | undefined,
 ): ActivitySearchHit[] {
   return collectSourceCitations(parts).slice(0, MAX_RENDERED_SOURCES).map((source) => ({
     id: source.id,

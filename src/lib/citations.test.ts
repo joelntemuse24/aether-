@@ -50,6 +50,27 @@ describe("collectSourceCitations", () => {
     assert.equal(sources[1]?.id, "2");
     assert.equal(sources[1]?.url?.includes("centralbank"), true);
   });
+
+  it("accepts a readonly parts array (assistant-ui message.parts)", () => {
+    const parts = [
+      {
+        type: "tool-call",
+        toolName: "web_search",
+        result: {
+          results: [
+            {
+              id: "1",
+              title: "IDA Ireland",
+              url: "https://idaireland.com/funds",
+            },
+          ],
+        },
+      },
+    ] as const;
+    const sources = collectSourceCitations(parts);
+    assert.equal(sources.length, 1);
+    assert.equal(sources[0]?.id, "1");
+  });
 });
 
 describe("inline citation rendering", () => {
