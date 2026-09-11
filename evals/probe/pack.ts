@@ -2,17 +2,33 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SpeedTier } from "../../src/lib/hosted/speed-tiers";
-import { REQUIRED_CATEGORIES, type ProbePack, type ProbePrompt } from "./types";
+import {
+  REQUIRED_CATEGORIES,
+  type ProbePack,
+  type ProbePrompt,
+  type ProbeSurface,
+} from "./types";
 
 const PACK_DIR = dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_PACK_PATH = join(PACK_DIR, "prompts.json");
+
+function normalizePrompt(prompt: ProbePrompt): ProbePrompt {
+  return {
+    ...prompt,
+    surfaces: prompt.surfaces?.length ? prompt.surfaces : ["api", "ui"],
+  };
+}
 
 export function loadProbePack(path: string = DEFAULT_PACK_PATH): ProbePack {
   const raw = JSON.parse(readFileSync(path, "utf8")) as ProbePack;
   if (!Array.isArray(raw.seeds) || !Array.isArray(raw.harvested)) {
     throw new Error("prompts.json must have seeds[] and harvested[] arrays.");
   }
-  return raw;
+  return {
+    ...raw,
+    seeds: raw.seeds.map(normalizePrompt),
+    harvested: raw.harvested.map(normalizePrompt),
+  };
 }
 
 export function enabledPrompts(pack: ProbePack): ProbePrompt[] {
@@ -29,6 +45,7 @@ export function selectPrompts(
     smoke?: boolean;
     ids?: string[];
     categories?: string[];
+    surface?: ProbeSurface;
   },
 ): ProbePrompt[] {
   let list = enabledPrompts(pack);
@@ -40,6 +57,9 @@ export function selectPrompts(
   if (options.categories?.length) {
     const want = new Set(options.categories);
     list = list.filter((p) => want.has(p.category));
+  }
+  if (options.surface) {
+    list = list.filter((p) => (p.surfaces ?? ["api", "ui"]).includes(options.surface!));
   }
   return list;
 }
@@ -71,6 +91,13 @@ export function packCoverageErrors(pack: ProbePack): string[] {
   }
   if (!pack.harvested.some((h) => h.source === "grok-harvest")) {
     errors.push("harvested[] must include grok-harvest placeholders");
+  }
+  if (
+    !pack.harvested.some(
+      (h) => h.source === "grok-harvest" && (h.surfaces ?? []).includes("ui"),
+    )
+  ) {
+    errors.push("harvested[] grok-harvest rows must include the ui surface");
   }
   const smoke = pack.seeds.filter((s) => s.smoke);
   if (smoke.length === 0 || smoke.length > 4) {

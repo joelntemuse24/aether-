@@ -10,15 +10,20 @@ export type ProbeCategory =
   | "research-deep"
   | "blank-survival";
 
+export type ProbeSurface = "api" | "ui";
+
 export type ProbeFailureCode =
   | "empty_transcript"
   | "raw_tool_markup"
   | "client_exception"
   | "application_error"
   | "step_failed"
+  | "step_failed_no_recovery"
   | "zoneinfo_error"
   | "stuck_stop"
   | "duplicate_working"
+  | "missing_worked_for"
+  | "blank_howzit"
   | "no_answer_timeout"
   | "http_error";
 
@@ -32,6 +37,8 @@ export type ProbePrompt = {
   enabled?: boolean;
   source?: string;
   notes?: string;
+  /** Defaults to api+ui so harvested prompts drop in without a code change. */
+  surfaces?: ProbeSurface[];
 };
 
 export type ProbePack = {
@@ -74,7 +81,9 @@ export type ProbeCaseResult = {
   timedOut: boolean;
   httpStatus: number | null;
   excerpt: string;
-  transport: "request" | "head-start" | "fixture";
+  transport: "request" | "head-start" | "fixture" | "ui";
+  surface: ProbeSurface;
+  screenshot?: string | null;
 };
 
 export type ProbeReport = {

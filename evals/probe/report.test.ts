@@ -48,6 +48,7 @@ describe("probe report", () => {
     const md = renderMarkdown(report);
     assert.match(md, /time-dublin/);
     assert.match(md, /zoneinfo_error/);
+    assert.match(md, /Surface: api/);
     assert.doesNotMatch(md, /### blank-survival-hello/);
   });
 

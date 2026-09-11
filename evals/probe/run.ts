@@ -9,12 +9,16 @@ import { expandCases, loadProbePack, selectPrompts } from "./pack";
 import { buildReport, toCaseResult, writeReport } from "./report";
 import type { ProbeCaseResult, ProbeReport } from "./types";
 import type { SpeedTier } from "../../src/lib/hosted/speed-tiers";
+import { detectUiFailures, fixtureUiSnapshot } from "./ui-detectors";
+import { runUiTurn } from "./ui-client";
 
 export type ProbeCliOptions = {
   smoke?: boolean;
   all?: boolean;
   offline?: boolean;
   live?: boolean;
+  ui?: boolean;
+  uiOnly?: boolean;
   baseUrl?: string;
   tiers?: SpeedTier[];
   ids?: string[];
@@ -33,6 +37,11 @@ function parseArgs(argv: string[]): ProbeCliOptions {
     else if (arg === "--all") opts.all = true;
     else if (arg === "--offline") opts.offline = true;
     else if (arg === "--live") opts.live = true;
+    else if (arg === "--ui") opts.ui = true;
+    else if (arg === "--ui-only") {
+      opts.ui = true;
+      opts.uiOnly = true;
+    }
     else if (arg === "--base-url" && next) {
       opts.baseUrl = next;
       i += 1;
@@ -126,93 +135,174 @@ export async function runProbe(opts: ProbeCliOptions = {}): Promise<ProbeReport>
     }
   }
 
+  const wantUi =
+    opts.ui === true ||
+    process.env.AETHER_PROBE_UI === "1" ||
+    process.env.AETHER_PROBE_UI === "true";
+  const wantApi = opts.uiOnly !== true;
   const results: ProbeCaseResult[] = [];
   for (const { prompt, tier } of cases) {
-    if (mode === "offline-fixtures") {
-      const fixture = FIXTURES[prompt.id] ?? {
-        visibleText: `Fixture placeholder for ${prompt.id}.`,
-      };
-      const snap = fixtureSnapshot({
-        promptId: prompt.id,
-        category: prompt.category,
-        tier,
-        prompt: prompt.prompt,
-        visibleText: fixture.visibleText,
-        rawText: fixture.rawText ?? fixture.visibleText,
-        finished: fixture.finished ?? true,
-      });
-      results.push(
-        toCaseResult({
-          id: prompt.id,
-          category: prompt.category,
-          tier,
-          prompt: prompt.prompt,
-          findings: detectFailures(snap),
-          elapsedMs: snap.elapsedMs,
-          timedOut: snap.timedOut,
-          httpStatus: snap.httpStatus,
-          visibleText: snap.visibleText,
-          transport: "fixture",
-        }),
-      );
-      continue;
-    }
-
     const timeoutMs =
       opts.timeoutMs ??
       (Number(process.env.AETHER_PROBE_TIMEOUT_MS || "") ||
         prompt.timeoutMs ||
         90_000);
-    try {
-      const { snap, transport } = await runLiveTurn({
-        baseUrl: baseUrl!,
-        promptId: prompt.id,
-        category: prompt.category,
-        prompt: prompt.prompt,
-        tier,
-        timeoutMs,
-        auth,
-        preferHeadStart: chatTransport === "durable",
-      });
-      results.push(
-        toCaseResult({
-          id: prompt.id,
+
+    if (mode === "offline-fixtures") {
+      if (wantApi && (prompt.surfaces ?? ["api", "ui"]).includes("api")) {
+        const fixture = FIXTURES[prompt.id] ?? {
+          visibleText: `Fixture placeholder for ${prompt.id}.`,
+        };
+        const snap = fixtureSnapshot({
+          promptId: prompt.id,
           category: prompt.category,
           tier,
           prompt: prompt.prompt,
-          findings: detectFailures(snap),
-          elapsedMs: snap.elapsedMs,
-          timedOut: snap.timedOut,
-          httpStatus: snap.httpStatus,
-          visibleText: snap.visibleText,
-          transport,
-        }),
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      const snap = fixtureSnapshot({
-        promptId: prompt.id,
-        category: prompt.category,
-        tier,
-        prompt: prompt.prompt,
-        clientException: message,
-        httpStatus: null,
-        finished: false,
-      });
-      results.push(
-        toCaseResult({
-          id: prompt.id,
+          visibleText: fixture.visibleText,
+          rawText: fixture.rawText ?? fixture.visibleText,
+          finished: fixture.finished ?? true,
+        });
+        results.push(
+          toCaseResult({
+            id: prompt.id,
+            category: prompt.category,
+            tier,
+            prompt: prompt.prompt,
+            findings: detectFailures(snap),
+            elapsedMs: snap.elapsedMs,
+            timedOut: snap.timedOut,
+            httpStatus: snap.httpStatus,
+            visibleText: snap.visibleText,
+            transport: "fixture",
+            surface: "api",
+          }),
+        );
+      }
+      if (wantUi && (prompt.surfaces ?? ["api", "ui"]).includes("ui")) {
+        const uiSnap = fixtureUiSnapshot({
+          assistantVisibleText:
+            FIXTURES[prompt.id]?.visibleText ?? `Fixture placeholder for ${prompt.id}.`,
+        });
+        results.push(
+          toCaseResult({
+            id: prompt.id,
+            category: prompt.category,
+            tier,
+            prompt: prompt.prompt,
+            findings: detectUiFailures(uiSnap),
+            elapsedMs: uiSnap.elapsedMs,
+            timedOut: uiSnap.timedOut,
+            httpStatus: 200,
+            visibleText: uiSnap.assistantVisibleText,
+            transport: "ui",
+            surface: "ui",
+          }),
+        );
+      }
+      continue;
+    }
+
+    if (wantApi && (prompt.surfaces ?? ["api", "ui"]).includes("api")) {
+      try {
+        const { snap, transport } = await runLiveTurn({
+          baseUrl: baseUrl!,
+          promptId: prompt.id,
+          category: prompt.category,
+          prompt: prompt.prompt,
+          tier,
+          timeoutMs,
+          auth,
+          preferHeadStart: chatTransport === "durable",
+        });
+        results.push(
+          toCaseResult({
+            id: prompt.id,
+            category: prompt.category,
+            tier,
+            prompt: prompt.prompt,
+            findings: detectFailures(snap),
+            elapsedMs: snap.elapsedMs,
+            timedOut: snap.timedOut,
+            httpStatus: snap.httpStatus,
+            visibleText: snap.visibleText,
+            transport,
+            surface: "api",
+          }),
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const snap = fixtureSnapshot({
+          promptId: prompt.id,
           category: prompt.category,
           tier,
           prompt: prompt.prompt,
-          findings: detectFailures(snap),
-          elapsedMs: snap.elapsedMs,
-          timedOut: false,
+          clientException: message,
           httpStatus: null,
-          visibleText: "",
-          transport: chatTransport === "durable" ? "head-start" : "request",
-        }),
-      );
+          finished: false,
+        });
+        results.push(
+          toCaseResult({
+            id: prompt.id,
+            category: prompt.category,
+            tier,
+            prompt: prompt.prompt,
+            findings: detectFailures(snap),
+            elapsedMs: snap.elapsedMs,
+            timedOut: false,
+            httpStatus: null,
+            visibleText: "",
+            transport: chatTransport === "durable" ? "head-start" : "request",
+            surface: "api",
+          }),
+        );
+      }
+    }
+
+    if (wantUi && (prompt.surfaces ?? ["api", "ui"]).includes("ui")) {
+      try {
+        const { snap, screenshot } = await runUiTurn({
+          baseUrl: baseUrl!,
+          promptId: prompt.id,
+          category: prompt.category,
+          prompt: prompt.prompt,
+          tier,
+          timeoutMs,
+          auth,
+        });
+        results.push(
+          toCaseResult({
+            id: prompt.id,
+            category: prompt.category,
+            tier,
+            prompt: prompt.prompt,
+            findings: detectUiFailures(snap),
+            elapsedMs: snap.elapsedMs,
+            timedOut: snap.timedOut,
+            httpStatus: 200,
+            visibleText: snap.assistantVisibleText,
+            transport: "ui",
+            surface: "ui",
+            screenshot,
+          }),
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        results.push(
+          toCaseResult({
+            id: prompt.id,
+            category: prompt.category,
+            tier,
+            prompt: prompt.prompt,
+            findings: [{ code: "client_exception", detail: message.slice(0, 400) }],
+            elapsedMs: 0,
+            timedOut: false,
+            httpStatus: null,
+            visibleText: "",
+            transport: "ui",
+            surface: "ui",
+          }),
+        );
+      }
     }
   }
 
@@ -235,7 +325,10 @@ async function main() {
   const report = await runProbe(opts);
   const md = report.failures.length
     ? report.failures
-        .map((f) => `- ${f.id} (${f.tier}): ${f.findings.map((x) => x.code).join(", ")}`)
+        .map(
+          (f) =>
+            `- ${f.id} (${f.tier}/${f.surface}): ${f.findings.map((x) => x.code).join(", ")}`,
+        )
         .join("\n")
     : "No failures.";
   console.log(

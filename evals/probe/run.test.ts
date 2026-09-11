@@ -18,4 +18,12 @@ describe("probe runner", () => {
     assert.equal(json.totals.failed, 0);
     assert.match(readFileSync(DEFAULT_REPORT_MD, "utf8"), /No failures/);
   });
+
+  it("runs UI fixture assertions alongside API fixtures when --ui is set", async () => {
+    const report = await runProbe({ smoke: true, offline: true, ui: true });
+    assert.ok(report.results.some((r) => r.surface === "api"));
+    assert.ok(report.results.some((r) => r.surface === "ui"));
+    assert.equal(report.totals.failed, 0);
+    assert.ok(report.results.filter((r) => r.surface === "ui").length >= 1);
+  });
 });

@@ -51,11 +51,13 @@ export function renderMarkdown(report: ProbeReport): string {
     lines.push(`### ${fail.id} (${fail.tier})`);
     lines.push(``);
     lines.push(`- Category: ${fail.category}`);
+    lines.push(`- Surface: ${fail.surface}`);
     lines.push(`- Transport: ${fail.transport}`);
     lines.push(`- Elapsed: ${fail.elapsedMs}ms${fail.timedOut ? " (timed out)" : ""}`);
     for (const finding of fail.findings) {
       lines.push(`- \`${finding.code}\`: ${finding.detail}`);
     }
+    if (fail.screenshot) lines.push(`- Screenshot: \`${fail.screenshot}\``);
     if (fail.excerpt) lines.push(`- Excerpt: ${fail.excerpt}`);
     lines.push(``);
   }
@@ -74,15 +76,18 @@ export function writeReport(
 }
 
 export function toCaseResult(
-  result: Omit<ProbeCaseResult, "passed" | "excerpt"> & {
+  result: Omit<ProbeCaseResult, "passed" | "excerpt" | "surface"> & {
     excerpt?: string;
     visibleText?: string;
+    surface?: ProbeCaseResult["surface"];
   },
 ): ProbeCaseResult {
   const { visibleText, excerpt, ...rest } = result;
   return {
     ...rest,
+    surface: rest.surface ?? "api",
     passed: rest.findings.length === 0,
     excerpt: excerpt ?? excerptOf(visibleText ?? ""),
+    screenshot: rest.screenshot ?? null,
   };
 }

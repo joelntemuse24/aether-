@@ -96,9 +96,10 @@ npm run build    # production build
 npm run start    # serve production build
 npm run lint     # eslint
 npm run probe    # Aether breakage probe (offline smoke; live with AETHER_PROBE_BASE_URL)
+npm run probe:ui # same + UI detector fixtures (Playwright when --live)
 ```
 
-Hosted Fast/Expert probe pack: `evals/probe/README.md`.
+Hosted Fast/Expert API + UI probe pack: `evals/probe/README.md`.
 
 ## Authentication & Google Drive
 

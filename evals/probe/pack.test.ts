@@ -15,6 +15,10 @@ describe("probe pack", () => {
     assert.ok(pack.harvested.length >= 2);
     assert.ok(pack.harvested.every((h) => h.enabled === false));
     assert.ok(pack.harvested.every((h) => h.prompt === ""));
+    assert.ok(
+      pack.harvested.every((h) => (h.surfaces ?? []).includes("ui")),
+      "harvested rows must accept a UI drop-in",
+    );
   });
 
   it("keeps the smoke subset small", () => {
