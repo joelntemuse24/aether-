@@ -10,7 +10,7 @@ UI (Playwright against the wired chrome): blank **Howzit?** after send, duplicat
 
 | Path | What |
 | --- | --- |
-| `prompts.json` | Seed prompts + `harvested[]` placeholders (`surfaces: ["api", "ui"]`) |
+| `prompts.json` | Capability-gap seeds + Joel’s Grok-history harvest (`surfaces: ["api", "ui"]`) |
 | `run.ts` | CLI (`npm run probe` / `probe:ui`) |
 | `detectors.ts` | API/SSE pass/fail heuristics |
 | `ui-detectors.ts` | DOM snapshot heuristics (Howzit, Working, Stop, Worked for) |
@@ -19,7 +19,9 @@ UI (Playwright against the wired chrome): blank **Howzit?** after send, duplicat
 | `last-report.json` / `last-report.md` | Latest run (gitignored) |
 | `artifacts/` | UI failure screenshots (gitignored) |
 
-Categories: `math`, `cite-search`, `fetch-extract`, `pptx-xlsx`, `github-list`, `time-dublin`, `research-deep`, `blank-survival`.
+Seed categories: `math`, `cite-search`, `fetch-extract`, `pptx-xlsx`, `github-list`, `time-dublin`, `research-deep`, `blank-survival`.
+
+Harvest categories (kept as labeled): `tools/code`, `research`, `long-reasoning`, `other`, `files/office`, `simple`.
 
 ## How to run
 
@@ -92,18 +94,11 @@ Hosted keys stay on the **server** you point at. The probe never embeds keys.
 
 ## Grok harvest
 
-Leave `harvested[]` rows with `"enabled": false` and an empty `prompt`. When hard prompts land:
+`harvested[]` holds Joel’s Grok-history set (`harvestedAt: 2026-09-11T16:56:00Z`, 23 prompts). Categories stay as harvested (`tools/code`, `research`, `long-reasoning`, `other`, `files/office`, `simple`) — they are not remapped onto seed cats. Truncated `…` tails are intentional. Every row is `enabled: true` with `surfaces: ["api", "ui"]`. Harvest stays off the smoke subset; `npm run probe:full` / `--all` fires seeds + harvest.
 
-```json
-{
-  "id": "grok-harvest-placeholder-1",
-  "enabled": true,
-  "prompt": "…paste harvested text…",
-  "surfaces": ["api", "ui"]
-}
-```
+Overlap with seeds is OK (Ireland unemployment, Dublin time) — keep both wordings.
 
-The runner picks them up on the next `--all` run. No code change.
+To add more later, append a row with `source: "grok-history"`, a unique `id`, and `surfaces: ["api", "ui"]`. The runner picks them up on the next `--all` run.
 
 ## Figma Make / failure chrome
 

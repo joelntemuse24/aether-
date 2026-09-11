@@ -26,4 +26,16 @@ describe("probe runner", () => {
     assert.equal(report.totals.failed, 0);
     assert.ok(report.results.filter((r) => r.surface === "ui").length >= 1);
   });
+
+  it("includes harvested grok-history prompts on offline --all", async () => {
+    const report = await runProbe({ all: true, offline: true, ui: true });
+    assert.equal(report.subset, "full");
+    assert.equal(report.totals.failed, 0);
+    assert.ok(report.results.some((r) => r.id === "grok-head-start-bullets"));
+    assert.ok(report.results.some((r) => r.id === "grok-time-dublin" && r.surface === "ui"));
+    assert.ok(report.results.some((r) => r.category === "long-reasoning"));
+    assert.ok(report.results.some((r) => r.category === "files/office"));
+    assert.ok(report.results.some((r) => r.category === "simple"));
+  });
 });
+

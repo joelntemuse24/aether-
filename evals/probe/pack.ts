@@ -3,7 +3,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SpeedTier } from "../../src/lib/hosted/speed-tiers";
 import {
+  HARVEST_SOURCES,
+  MIN_HARVESTED_PROMPTS,
   REQUIRED_CATEGORIES,
+  REQUIRED_HARVEST_CATEGORIES,
   type ProbePack,
   type ProbePrompt,
   type ProbeSurface,
@@ -89,15 +92,32 @@ export function packCoverageErrors(pack: ProbePack): string[] {
   for (const cat of REQUIRED_CATEGORIES) {
     if (!cats.has(cat)) errors.push(`missing category ${cat}`);
   }
-  if (!pack.harvested.some((h) => h.source === "grok-harvest")) {
-    errors.push("harvested[] must include grok-harvest placeholders");
+  const harvestSources = new Set<string>(HARVEST_SOURCES);
+  const harvested = pack.harvested.filter((h) =>
+    harvestSources.has(h.source ?? ""),
+  );
+  if (harvested.length < MIN_HARVESTED_PROMPTS) {
+    errors.push(
+      `harvested[] must include ≥${MIN_HARVESTED_PROMPTS} grok-history prompts, found ${harvested.length}`,
+    );
   }
-  if (
-    !pack.harvested.some(
-      (h) => h.source === "grok-harvest" && (h.surfaces ?? []).includes("ui"),
-    )
-  ) {
-    errors.push("harvested[] grok-harvest rows must include the ui surface");
+  const filled = harvested.filter(
+    (h) => h.enabled !== false && h.prompt.trim().length > 0,
+  );
+  if (filled.length < MIN_HARVESTED_PROMPTS) {
+    errors.push(
+      `harvested[] must ship ≥${MIN_HARVESTED_PROMPTS} enabled non-empty grok-history prompts, found ${filled.length}`,
+    );
+  }
+  if (harvested.some((h) => !(h.surfaces ?? []).includes("ui"))) {
+    errors.push("harvested[] grok-history rows must include the ui surface");
+  }
+  if (harvested.some((h) => h.smoke === true)) {
+    errors.push("harvested[] must stay off the smoke subset");
+  }
+  const harvestCats = new Set(harvested.map((h) => h.category));
+  for (const cat of REQUIRED_HARVEST_CATEGORIES) {
+    if (!harvestCats.has(cat)) errors.push(`missing harvest category ${cat}`);
   }
   const smoke = pack.seeds.filter((s) => s.smoke);
   if (smoke.length === 0 || smoke.length > 4) {

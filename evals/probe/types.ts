@@ -8,7 +8,13 @@ export type ProbeCategory =
   | "github-list"
   | "time-dublin"
   | "research-deep"
-  | "blank-survival";
+  | "blank-survival"
+  | "tools/code"
+  | "research"
+  | "long-reasoning"
+  | "other"
+  | "files/office"
+  | "simple";
 
 export type ProbeSurface = "api" | "ui";
 
@@ -44,6 +50,8 @@ export type ProbePrompt = {
 export type ProbePack = {
   version: number;
   notes?: string;
+  harvestedAt?: string;
+  harvestSource?: string;
   seeds: ProbePrompt[];
   harvested: ProbePrompt[];
 };
@@ -109,3 +117,16 @@ export const REQUIRED_CATEGORIES: readonly ProbeCategory[] = [
   "research-deep",
   "blank-survival",
 ];
+
+/** Joel’s Grok-history harvest — keep these labels; do not remap onto seed cats. */
+export const REQUIRED_HARVEST_CATEGORIES: readonly ProbeCategory[] = [
+  "tools/code",
+  "research",
+  "long-reasoning",
+  "other",
+  "files/office",
+  "simple",
+];
+
+export const HARVEST_SOURCES = ["grok-history", "grok-harvest"] as const;
+export const MIN_HARVESTED_PROMPTS = 22;
