@@ -63,6 +63,7 @@ import {
   shouldReplaceLiveWithStored,
 } from "@/lib/chat-transcript";
 import { clearFirstSendDraft, mergeSeedWithDraft } from "@/lib/chat-turn-draft";
+import { resetActivityClock } from "@/lib/agent-activity";
 import {
   shouldHydrateThreadMessages,
   shouldPersistMessagesImmediately,
@@ -197,12 +198,9 @@ function useChatThreadRuntime() {
         prepareSendMessagesRequest: async (options) => {
           let remoteId = threadIdRef.current ?? readThreadStorageKey(aui);
           if (!remoteId) {
-            try {
-              const initialized = await aui.threadListItem().initialize();
-              remoteId = initialized.remoteId;
-            } catch {
-              remoteId = readThreadIdFromLocation();
-            }
+            // Do not initialize() here — assigning remoteId remounts useChat
+            // and blanks a live Expert/guest turn. Bind after the turn persists.
+            remoteId = readThreadIdFromLocation();
           }
           if (remoteId) {
             threadIdRef.current = remoteId;
@@ -304,13 +302,6 @@ function useChatThreadRuntime() {
       }
       if (!threadIdRef.current) {
         threadIdRef.current = readThreadIdFromLocation() || chatId;
-        void currentAui
-          .threadListItem()
-          .initialize()
-          .then((initialized) => {
-            threadIdRef.current = initialized.remoteId || threadIdRef.current;
-          })
-          .catch(() => {});
       }
       const conversationId = threadIdRef.current || chatId;
       const turn = buildTurnBodyRef.current();
@@ -681,6 +672,7 @@ function useChatThreadRuntime() {
         setMessages([]);
         setHistoryReady(true);
         clearFirstSendDraft();
+        resetActivityClock();
         return;
       }
       hydrate(

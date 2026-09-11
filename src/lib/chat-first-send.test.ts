@@ -161,6 +161,21 @@ describe("composer send never silent-blanks a turn", () => {
     });
     assert.equal(plan.action, "ignore");
   });
+
+  it("does not show Preferences after a turn already started", () => {
+    const plan = planComposerSend({
+      hasKey: false,
+      canSend: false,
+      hostedLoading: true,
+      isRunning: false,
+      classifying: false,
+      hasText: true,
+      turnAlreadyStarted: true,
+    });
+    assert.equal(plan.action, "keep-and-explain");
+    assert.doesNotMatch(plan.message, /Preferences/);
+    assert.match(plan.message, /couldn.t send|still here|try again/i);
+  });
 });
 
 describe("composer send wiring", () => {
@@ -213,11 +228,19 @@ describe("composer send wiring", () => {
     assert.match(runtime, /mergeSeedWithDraft/);
     assert.match(runtime, /shouldReplaceLiveWithStored/);
     assert.match(runtime, /do not initialize\(\) while a turn is/);
+    const startAt = runtime.indexOf("startSession:");
+    const startFn = runtime.slice(startAt, startAt + 1600);
+    assert.doesNotMatch(startFn, /\.initialize\(\)/);
+    const prepareAt = runtime.indexOf("prepareSendMessagesRequest:");
+    const prepareFn = runtime.slice(prepareAt, prepareAt + 900);
+    assert.doesNotMatch(prepareFn, /\.initialize\(\)/);
   });
 
   it("never silent-skips composer.send — plans a keep-and-explain path", () => {
     assert.match(thread, /planComposerSend/);
     assert.match(thread, /keep-and-explain/);
+    assert.match(thread, /turnAlreadyStarted:\s*true/);
+    assert.match(thread, /isHiddenToolMarkup/);
   });
 
   it("stashes the first-send draft before initialize can remount", () => {

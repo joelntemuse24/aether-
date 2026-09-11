@@ -3,9 +3,14 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   activityClockShouldRun,
+  closeActivityClock,
+  collectActivitySteps,
   collectWebSearchHits,
   deriveAgentActivity,
   formatActivityElapsed,
+  recalledActivityElapsed,
+  resetActivityClock,
+  syncActivityClock,
 } from "./agent-activity";
 
 describe("deriveAgentActivity — honesty", () => {
@@ -448,6 +453,86 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(fetched[0]?.id, "1");
     assert.equal(fetched[0]?.title, "Central Bank");
   });
+
+  it("treats raw DSML tool_search text as a real tool step, not visible prose", () => {
+    const dsml =
+      '<|DSML| tool_search query="current time Dublin Ireland"><|/DSML| tool_search>';
+    const live = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [{ type: "text", text: dsml }],
+        },
+      ],
+      isRunning: true,
+      elapsedSeconds: 3,
+    });
+    assert.equal(live.mode, "live");
+    assert.equal(live.steps[0]?.toolName, "tool_search");
+    assert.match(live.steps[0]?.label ?? "", /Looking up tools|Searching/i);
+    assert.equal(live.elapsedLabel, "Working for 3s");
+    assert.doesNotMatch(JSON.stringify(live), /DSML|tool_search query=/);
+
+    const done = deriveAgentActivity({
+      messages: [
+        {
+          id: "a-dsml",
+          role: "assistant",
+          parts: [{ type: "text", text: dsml }],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 7,
+    });
+    assert.equal(done.mode, "collapsed");
+    assert.equal(done.summaryLabel, "Worked for 7s");
+  });
+
+  it("keeps Worked for Ns after the live clock is interrupted", () => {
+    resetActivityClock();
+    syncActivityClock(true);
+    const seconds = closeActivityClock("asst-turn-1");
+    assert.ok(seconds >= 1);
+    assert.equal(recalledActivityElapsed("asst-turn-1"), seconds);
+    const afterRemount = syncActivityClock(false);
+    assert.equal(afterRemount, seconds);
+    assert.equal(recalledActivityElapsed("new-id-after-remount"), seconds);
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          id: "new-id-after-remount",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-web_search",
+              args: { query: "Ireland unemployment" },
+              result: { ok: true },
+              status: { type: "complete" },
+            },
+          ],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 0,
+    });
+    assert.equal(view.mode, "collapsed");
+    assert.equal(view.summaryLabel, `Worked for ${seconds}s`);
+    resetActivityClock();
+  });
+
+  it("collects DSML tool_search from a text part", () => {
+    const steps = collectActivitySteps(
+      [
+        {
+          type: "text",
+          text: '<|DSML| tool_search query="current time Dublin Ireland">',
+        },
+      ],
+      true,
+    );
+    assert.equal(steps.length, 1);
+    assert.equal(steps[0]?.toolName, "tool_search");
+  });
 });
 
 describe("formatActivityElapsed", () => {
@@ -532,6 +617,7 @@ describe("thread / composer copy stays honest", () => {
     assert.doesNotMatch(toolUi, /Mulling|Untangling/);
     assert.doesNotMatch(toolUi, /ToolApprovalToggle/);
     assert.match(strip, /aether-inline-source/);
+    assert.match(strip, /aether-source-tray__pill/);
     assert.match(strip, /aether-activity__chip/);
     assert.match(strip, /MessageSourceCards/);
     assert.match(thread, /MessageSourceCards/);

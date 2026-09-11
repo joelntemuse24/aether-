@@ -72,10 +72,15 @@ export function planComposerSend(input: {
   isRunning: boolean;
   classifying: boolean;
   hasText: boolean;
+  /** User turn already left the composer — never swap it for Preferences. */
+  turnAlreadyStarted?: boolean;
 }): ComposerSendPlan {
   if (input.isRunning || input.classifying) return { action: "ignore" };
   if (!input.hasText) return { action: "ignore" };
-  if (input.hostedLoading || !input.hasKey) {
+  if (
+    !input.turnAlreadyStarted &&
+    (input.hostedLoading || !input.hasKey)
+  ) {
     return {
       action: "keep-and-explain",
       keepComposerText: true,

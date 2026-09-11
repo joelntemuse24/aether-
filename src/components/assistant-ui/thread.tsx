@@ -94,6 +94,7 @@ import {
 import { persistThreadUIMessages } from "@/lib/local-thread-adapter";
 import { stashFirstSendDraft } from "@/lib/chat-turn-draft";
 import { resolveInitializedRemoteId } from "@/lib/trigger/thread-remote-id";
+import { isHiddenToolMarkup } from "@/lib/visible-chat-text";
 
 /**
  * True only for a settled empty chat. Avoid welcome flash while history is
@@ -629,6 +630,7 @@ const Composer: FC = () => {
       isRunning,
       classifying: false,
       hasText: !!text,
+      turnAlreadyStarted: true,
     });
     if (ready.action === "send") {
       composerRuntime.send();
@@ -760,7 +762,7 @@ const Composer: FC = () => {
 
   return (
     <ComposerPrimitive.Root className="relative flex w-full flex-col border-0 bg-transparent">
-      {!hasKey && (
+      {!hasKey && !isRunning && isFirstTurn && (
         <button
           type="button"
           onClick={() => setOpenSettings(true)}
@@ -1290,7 +1292,12 @@ const AssistantMessage: FC = () => {
         <MessageAgentActivity />
         <MessagePrimitive.Parts>
           {({ part }) => {
-            if (part.type === "text") return <MarkdownText />;
+            if (part.type === "text") {
+              const raw =
+                "text" in part && typeof part.text === "string" ? part.text : "";
+              if (!raw.trim() || isHiddenToolMarkup(raw)) return null;
+              return <MarkdownText />;
+            }
             if (part.type === "tool-call")
               return <ToolCallPart part={part as unknown as ToolPartLike} />;
             return null;

@@ -18,6 +18,7 @@ import {
   type ContinuePhase,
 } from "@/lib/agent-activity";
 import { cn } from "@/lib/utils";
+import { sanitizeVisibleAssistantText } from "@/lib/visible-chat-text";
 import "@/components/assistant-ui/agent-activity.css";
 
 type ContinueStatusDetail = {
@@ -56,7 +57,8 @@ function useThreadActivityElapsed(isRunning: boolean, messageId?: string) {
       if (wasRunningRef.current) {
         setElapsed(closeActivityClock(messageId));
       } else {
-        setElapsed(recalledActivityElapsed(messageId));
+        const recalled = recalledActivityElapsed(messageId);
+        setElapsed(recalled > 0 ? recalled : closeActivityClock(messageId));
       }
       wasRunningRef.current = false;
       return;
@@ -212,6 +214,15 @@ export const AgentStatusStrip: FC = () => {
     const last = s.thread.messages[s.thread.messages.length - 1];
     return !!last && last.role === "assistant";
   });
+  const hasVisibleAssistantText = useAuiState((s) => {
+    const last = s.thread.messages[s.thread.messages.length - 1];
+    if (!last || last.role !== "assistant") return false;
+    return (last.parts ?? []).some((part) => {
+      if (part.type !== "text") return false;
+      const text = "text" in part && typeof part.text === "string" ? part.text : "";
+      return sanitizeVisibleAssistantText(text).length > 0;
+    });
+  });
   const messages = useAuiState((s) =>
     threadMessagesFromState(s.thread.messages),
   );
@@ -235,8 +246,9 @@ export const AgentStatusStrip: FC = () => {
     continueMax: continueStatus.max ?? MAX_AUTO_CONTINUES,
   });
 
-  if (hasLiveAssistant) return null;
-  if (view.mode === "collapsed") return null;
+  // Keep the composer clock ticking while the assistant is markup-only / empty.
+  if (hasVisibleAssistantText) return null;
+  if (view.mode === "collapsed" && hasLiveAssistant) return null;
 
   return <AgentActivityPanel view={view} className="mb-1.5 px-2.5" />;
 };
@@ -264,7 +276,7 @@ export const MessageSourceCards: FC = () => {
         </span>
         <span className="aether-source-tray__hosts">
           {hits.slice(0, 4).map((hit, i) => (
-            <span key={`host:${i}`} className="aether-source-tray__host">
+            <span key={`host:${i}`} className="aether-source-tray__pill">
               {hostLabel(hit.url) ?? hit.title.slice(0, 24)}
             </span>
           ))}

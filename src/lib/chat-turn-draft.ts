@@ -40,9 +40,14 @@ export function stashFirstSendDraft(input: {
 export function peekFirstSendDraft(key?: string | null): UIMessage[] {
   const live = prune();
   if (!live) return [];
-  if (key && !live.keys.has(key)) return [];
   if (!key) return live.messages;
-  return live.messages;
+  if (live.keys.has(key)) return live.messages;
+  return [];
+}
+
+/** In-flight first send — remount may mint a new id that was not stashed. */
+export function peekInFlightFirstSendDraft(): UIMessage[] {
+  return prune()?.messages ?? [];
 }
 
 export function clearFirstSendDraft(): void {
@@ -54,7 +59,12 @@ export function mergeSeedWithDraft(
   key: string | undefined,
   stored: UIMessage[],
 ): UIMessage[] {
-  const pending = peekFirstSendDraft(key);
+  const pending =
+    peekFirstSendDraft(key).length > 0
+      ? peekFirstSendDraft(key)
+      : stored.length === 0
+        ? peekInFlightFirstSendDraft()
+        : [];
   if (pending.length === 0) return stored;
   if (stored.length === 0) return pending;
   const seen = new Set(stored.map((m) => m.id).filter(Boolean));

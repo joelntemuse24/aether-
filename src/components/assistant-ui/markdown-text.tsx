@@ -19,6 +19,7 @@ import {
   collectSourceCitations,
   remarkInlineCitations,
 } from "@/lib/citations";
+import { sanitizeVisibleAssistantText } from "@/lib/visible-chat-text";
 
 const ARTIFACT_LANGS = new Set([
   "html",
@@ -66,6 +67,7 @@ const MarkdownTextImpl = () => {
       remarkPlugins={plugins}
       className="aui-md prose-aether"
       components={defaultComponents}
+      preprocess={sanitizeVisibleAssistantText}
       defer
     />
   );

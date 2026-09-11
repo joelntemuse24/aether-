@@ -118,6 +118,14 @@ describe("chat transcript client helpers", () => {
     assert.equal(seeded.length, 1);
     const text = seeded[0]?.parts.find((p) => p.type === "text");
     assert.equal(text && "text" in text ? text.text : "", "What time is it in Dublin?");
+
+    const remounted = mergeSeedWithDraft("brand-new-after-initialize", []);
+    assert.equal(remounted.length, 1);
+    const remountText = remounted[0]?.parts.find((p) => p.type === "text");
+    assert.equal(
+      remountText && "text" in remountText ? remountText.text : "",
+      "What time is it in Dublin?",
+    );
     clearFirstSendDraft();
   });
 

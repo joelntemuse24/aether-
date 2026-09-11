@@ -270,8 +270,22 @@
   white-space: nowrap;
 }
 
-.aether-source-tray__host {
+.aether-source-tray__host,
+.aether-source-tray__pill {
   color: var(--muted);
+}
+
+.aether-source-tray__pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 8px;
+  border: 1px solid var(--border-subtle, var(--border));
+  border-radius: 999px;
+  background: var(--elevated);
+  color: var(--text-secondary);
 }
 
 .aether-source-tray[open] summary {
