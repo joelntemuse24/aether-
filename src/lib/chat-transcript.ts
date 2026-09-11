@@ -13,6 +13,18 @@ export function shouldBlockSend(input: {
 }
 
 /** First durable id for this chat — copy the in-memory draft onto that key. */
+/** Remount / first-send must not replace a live user turn with empty storage. */
+export function shouldReplaceLiveWithStored(input: {
+  switched: boolean;
+  liveCount: number;
+  storedCount: number;
+  newChat?: boolean;
+}): boolean {
+  if (input.newChat) return true;
+  if (input.storedCount === 0 && input.liveCount > 0) return false;
+  return input.switched && input.storedCount > 0;
+}
+
 export function shouldCopyDraftToRemoteId(input: {
   previousKey: string | undefined;
   nextKey: string | undefined;

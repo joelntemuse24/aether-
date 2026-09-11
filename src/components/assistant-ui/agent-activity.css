@@ -27,9 +27,46 @@
 
 .aether-activity__line {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   min-height: 1.25rem;
+}
+
+@keyframes aether-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.aether-activity__spinner {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border: 1.5px solid color-mix(in oklab, var(--accent) 28%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 999px;
+  animation: aether-spin 700ms linear infinite;
+}
+
+.aether-activity__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aether-activity__step {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.aether-activity__step--live {
+  color: var(--text-secondary);
 }
 
 .aether-activity__words {
@@ -527,10 +564,41 @@
   }
 }
 
+.aether-composer-dock {
+  flex-shrink: 0;
+  position: relative;
+  background: var(--canvas);
+}
+
+@media (max-width: 640px) {
+  .aether-activity {
+    font-size: 11px;
+  }
+
+  .aether-activity__line {
+    gap: 6px;
+    min-height: 1.1rem;
+  }
+
+  .aether-activity__spinner {
+    width: 10px;
+    height: 10px;
+  }
+
+  .aether-activity__steps {
+    margin-top: 4px;
+  }
+
+  .aether-composer-dock {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .aether-activity--enter,
   .aether-activity__named-item,
-  .aether-activity__chip {
+  .aether-activity__chip,
+  .aether-activity__spinner {
     animation: none;
   }
 

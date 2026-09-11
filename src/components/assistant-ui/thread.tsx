@@ -88,9 +88,13 @@ import { isChatHistoryReady, waitForChatHistoryReady } from "@/lib/chat-history-
 import {
   HISTORY_WAIT_BEFORE_SEND_MS,
   planClassifyBeforeSend,
+  planComposerSend,
   shouldAwaitHistoryBeforeSend,
   shouldAwaitThreadInitializeBeforeSend,
 } from "@/lib/chat-first-send";
+import { persistThreadUIMessages } from "@/lib/local-thread-adapter";
+import { stashFirstSendDraft } from "@/lib/chat-turn-draft";
+import { resolveInitializedRemoteId } from "@/lib/trigger/thread-remote-id";
 
 /**
  * True only for a settled empty chat. Avoid welcome flash while history is
@@ -133,8 +137,8 @@ export const Thread: FC = () => {
   const { isEmpty, isHydrating, hasMessages } = useThreadEmptyState();
   const showThread = hasMessages || isHydrating;
 
-  // Empty layout mirrors Figma Make ThreadViewport:
-  // one column with justify-center so Welcome + Composer sit together mid-screen.
+  // Composer stays docked at the bottom (Grok motion). Welcome centers
+  // in the remaining scroll area so first send does not jump the input.
   return (
     <ThreadPrimitive.Root
       className="flex h-full flex-col bg-[var(--canvas)]"
@@ -147,17 +151,16 @@ export const Thread: FC = () => {
         className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth"
       >
         {showThread && <ThreadHeader />}
-        <div
-          className={cn(
-            "mx-auto flex w-full max-w-[var(--thread-max-width)] flex-1 flex-col px-4 sm:px-6",
-            isEmpty ? "justify-center py-12" : "pt-2 sm:pt-4",
-          )}
-        >
-          {isEmpty ? <ThreadWelcome /> : null}
+        <div className="mx-auto flex w-full max-w-[var(--thread-max-width)] flex-1 flex-col px-4 pt-2 sm:px-6 sm:pt-4">
+          {isEmpty ? (
+            <div className="flex flex-1 flex-col justify-center py-12">
+              <ThreadWelcome />
+            </div>
+          ) : null}
 
           {isHydrating && (
             <div
-              className="mb-16 flex min-h-[8rem] items-start pt-2"
+              className="flex min-h-[8rem] items-start pt-2"
               aria-busy="true"
               aria-label="Loading conversation"
             >
@@ -169,30 +172,24 @@ export const Thread: FC = () => {
           )}
 
           {hasMessages && (
-            <div className="mb-16 flex flex-col gap-y-6 empty:hidden">
+            <div className="flex flex-col gap-y-6 pb-4 empty:hidden">
               <ThreadPrimitive.Messages>
                 {() => <ThreadMessage />}
               </ThreadPrimitive.Messages>
             </div>
           )}
-
-          <div
-            className={cn(
-              "flex flex-col gap-2 pb-4 md:pb-6",
-              showThread && "sticky bottom-0 mt-auto",
-            )}
-          >
-            {showThread && (
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-x-0 -top-12 h-12 bg-gradient-to-b from-transparent to-[var(--canvas)]"
-              />
-            )}
-            {showThread && <ThreadScrollToBottom />}
-            <Composer />
-          </div>
         </div>
       </ThreadPrimitive.Viewport>
+      <div className="aether-composer-dock mx-auto w-full max-w-[var(--thread-max-width)] px-4 pb-4 md:pb-6 sm:px-6">
+        {showThread && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 -top-10 h-10 bg-gradient-to-b from-transparent to-[var(--canvas)]"
+          />
+        )}
+        {showThread && <ThreadScrollToBottom />}
+        <Composer />
+      </div>
     </ThreadPrimitive.Root>
   );
 };
@@ -419,8 +416,13 @@ const ContinuePausedBar: FC = () => {
 /* ─── Composer ─── */
 
 const Composer: FC = () => {
-  const { hasKey, setOpenSettings, openConnectedAccounts, chatHeaders } =
-    useSettings();
+  const {
+    hasKey,
+    hostedLoading,
+    setOpenSettings,
+    openConnectedAccounts,
+    chatHeaders,
+  } = useSettings();
   const { addFiles, hasAttachments, attachments } = useAttachments();
   const {
     connected: driveConnected,
@@ -475,13 +477,56 @@ const Composer: FC = () => {
     clarifications?: Record<string, string>;
     skipClassify?: boolean;
   }) => {
-    if (!hasKey || isRunning || classifying || resumeBusy) return;
-    let listState: { remoteId?: string } = {};
+    if (isRunning || classifying || resumeBusy) return;
+    let listState: { id?: string; remoteId?: string } = {};
     try {
       listState = aui.threadListItem().getState();
     } catch {
       listState = {};
     }
+    const state = composerRuntime.getState();
+    let text = (opts?.text ?? state.text).trim();
+    // Attachments live in AttachmentsProvider, not composerRuntime — allow
+    // attach-only sends by synthesizing a short prompt when needed.
+    if (!text && !hasAttachments && !state.attachments?.length) return;
+    if (!text && hasAttachments) {
+      text =
+        attachments.length === 1
+          ? `Please review the attached file: ${attachments[0].name}`
+          : `Please review the ${attachments.length} attached files.`;
+    }
+
+    const sendPlan = planComposerSend({
+      hasKey,
+      canSend: state.canSend || !!text,
+      hostedLoading,
+      isRunning,
+      classifying: classifying || resumeBusy,
+      hasText: !!text,
+    });
+    if (sendPlan.action === "ignore") return;
+    if (sendPlan.action === "keep-and-explain") {
+      setErrors([sendPlan.message]);
+      return;
+    }
+
+    const userDraft = {
+      id: `user-${Date.now()}`,
+      role: "user" as const,
+      parts: [{ type: "text" as const, text }],
+    };
+    const localId = listState.id?.trim() || "";
+    const remoteGuess = localId
+      ? resolveInitializedRemoteId(localId)
+      : listState.remoteId || readThreadIdFromLocation();
+    stashFirstSendDraft({
+      keys: [localId, remoteGuess, listState.remoteId, readThreadIdFromLocation()],
+      messages: [userDraft],
+    });
+    if (remoteGuess && !remoteGuess.startsWith("__LOCALID_")) {
+      persistThreadUIMessages(remoteGuess, [userDraft]);
+    }
+
     const pathnameHasThread = !!readThreadIdFromLocation();
     if (
       shouldAwaitHistoryBeforeSend({
@@ -499,17 +544,6 @@ const Composer: FC = () => {
       }
     } catch {
       // send still proceeds — URL / remoteId update in the background
-    }
-    const state = composerRuntime.getState();
-    let text = (opts?.text ?? state.text).trim();
-    // Attachments live in AttachmentsProvider, not composerRuntime — allow
-    // attach-only sends by synthesizing a short prompt when needed.
-    if (!text && !hasAttachments && !state.attachments?.length) return;
-    if (!text && hasAttachments) {
-      text =
-        attachments.length === 1
-          ? `Please review the attached file: ${attachments[0].name}`
-          : `Please review the ${attachments.length} attached files.`;
     }
 
     let classification = opts?.classification;
@@ -594,8 +628,20 @@ const Composer: FC = () => {
     if (opts?.text != null || composerRuntime.getState().text.trim() !== text) {
       composerRuntime.setText(text);
     }
-    if (composerRuntime.getState().canSend) {
+    const ready = planComposerSend({
+      hasKey,
+      canSend: composerRuntime.getState().canSend,
+      hostedLoading,
+      isRunning,
+      classifying: false,
+      hasText: !!text,
+    });
+    if (ready.action === "send") {
       composerRuntime.send();
+      return;
+    }
+    if (ready.action === "keep-and-explain") {
+      setErrors([ready.message]);
     }
   };
 

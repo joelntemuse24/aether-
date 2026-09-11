@@ -60,7 +60,9 @@ import {
   prepareOutgoingChatMessages,
   shouldBlockSend,
   shouldCopyDraftToRemoteId,
+  shouldReplaceLiveWithStored,
 } from "@/lib/chat-transcript";
+import { clearFirstSendDraft, mergeSeedWithDraft } from "@/lib/chat-turn-draft";
 import {
   shouldHydrateThreadMessages,
   shouldPersistMessagesImmediately,
@@ -131,7 +133,8 @@ function useChatThreadRuntime() {
   const [seedMessages] = useState<UIMessage[]>(() => {
     const key =
       readThreadStorageKey(aui) ?? readThreadIdFromLocation() ?? undefined;
-    return key ? loadThreadUIMessages(key) : [];
+    const stored = key ? loadThreadUIMessages(key) : [];
+    return mergeSeedWithDraft(key, stored);
   });
   const storedCountRef = useRef(seedMessages.length);
   const messagesRef = useRef<UIMessage[]>(seedMessages);
@@ -625,9 +628,10 @@ function useChatThreadRuntime() {
       if (loadedKeyRef.current !== key) {
         setHistoryReady(false);
       }
-      void loadThreadUIMessagesAsync(key).then((stored) => {
+      void loadThreadUIMessagesAsync(key).then((rawStored) => {
         if (cancelled) return;
-        storedCountRef.current = stored.length;
+        const stored = mergeSeedWithDraft(key, rawStored);
+        storedCountRef.current = Math.max(rawStored.length, stored.length);
         const switched =
           switchedThread ||
           (loadedKeyRef.current != null && loadedKeyRef.current !== key);
@@ -642,7 +646,13 @@ function useChatThreadRuntime() {
           setHistoryReady(true);
           return;
         }
-        if (switched) {
+        if (
+          shouldReplaceLiveWithStored({
+            switched,
+            liveCount: messagesRef.current.length,
+            storedCount: stored.length,
+          })
+        ) {
           setMessages(stored);
         } else if (stored.length > 0) {
           const next = mergeStoredThreadWithIncoming(
@@ -670,6 +680,7 @@ function useChatThreadRuntime() {
         messagesRef.current = [];
         setMessages([]);
         setHistoryReady(true);
+        clearFirstSendDraft();
         return;
       }
       hydrate(
@@ -740,7 +751,10 @@ function useChatThreadRuntime() {
   // Token streaming and in-flight tool results share a debounce so long
   // research turns cannot PUT the whole repo on every chunk.
   useEffect(() => {
-    const key = threadIdRef.current ?? readThreadStorageKey(auiRef.current);
+    const key =
+      threadIdRef.current ??
+      readThreadStorageKey(auiRef.current) ??
+      durableChatId;
     if (!key || messages.length === 0) return;
     const last = messages[messages.length - 1];
     if (
@@ -759,7 +773,7 @@ function useChatThreadRuntime() {
       persistedKeyRef.current = key;
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [messages, status]);
+  }, [messages, status, durableChatId]);
 
   // Flush on tab close / refresh so the last streamed tokens aren't lost to the debounce.
   useEffect(() => {

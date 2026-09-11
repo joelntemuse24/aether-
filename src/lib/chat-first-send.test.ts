@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   HISTORY_WAIT_BEFORE_SEND_MS,
   planClassifyBeforeSend,
+  planComposerSend,
   shouldAwaitHistoryBeforeSend,
   shouldAwaitThreadInitializeBeforeSend,
 } from "./chat-first-send";
@@ -108,6 +109,60 @@ describe("first send must not wait on classify", () => {
   });
 });
 
+describe("composer send never silent-blanks a turn", () => {
+  it("blocks with a visible reason when chat is not ready", () => {
+    const plan = planComposerSend({
+      hasKey: false,
+      canSend: false,
+      hostedLoading: true,
+      isRunning: false,
+      classifying: false,
+      hasText: true,
+    });
+    assert.equal(plan.action, "keep-and-explain");
+    assert.equal(plan.keepComposerText, true);
+    assert.match(plan.message, /ready|connecting|Preferences/i);
+  });
+
+  it("blocks with a visible reason when the runtime cannot send", () => {
+    const plan = planComposerSend({
+      hasKey: true,
+      canSend: false,
+      hostedLoading: false,
+      isRunning: false,
+      classifying: false,
+      hasText: true,
+    });
+    assert.equal(plan.action, "keep-and-explain");
+    assert.equal(plan.keepComposerText, true);
+    assert.match(plan.message, /couldn.t send|try again|still here/i);
+  });
+
+  it("sends when the composer is ready", () => {
+    const plan = planComposerSend({
+      hasKey: true,
+      canSend: true,
+      hostedLoading: false,
+      isRunning: false,
+      classifying: false,
+      hasText: true,
+    });
+    assert.equal(plan.action, "send");
+  });
+
+  it("does not start a second turn while one is already running", () => {
+    const plan = planComposerSend({
+      hasKey: true,
+      canSend: true,
+      hostedLoading: false,
+      isRunning: true,
+      classifying: false,
+      hasText: true,
+    });
+    assert.equal(plan.action, "ignore");
+  });
+});
+
 describe("composer send wiring", () => {
   const thread = readFileSync(
     new URL("../components/assistant-ui/thread.tsx", import.meta.url),
@@ -134,6 +189,41 @@ describe("composer send wiring", () => {
     assert.ok(initAt >= 0 && sendAt > initAt);
     assert.doesNotMatch(sendFn, /await aui\.threadListItem\(\)\.initialize\(\)/);
     assert.doesNotMatch(sendFn, /router\.(push|replace)/);
+  });
+
+  it("pins the composer on empty welcome so first send does not jump", () => {
+    assert.match(thread, /aether-composer-dock/);
+    assert.doesNotMatch(
+      thread,
+      /isEmpty \? "justify-center py-12" : "pt-2 sm:pt-4"/,
+    );
+  });
+
+  it("seeds remounts from the first-send draft", () => {
+    const runtime = readFileSync(
+      new URL("../providers/runtime-provider.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.match(runtime, /mergeSeedWithDraft/);
+    assert.match(runtime, /shouldReplaceLiveWithStored/);
+  });
+
+  it("never silent-skips composer.send — plans a keep-and-explain path", () => {
+    assert.match(thread, /planComposerSend/);
+    assert.match(thread, /keep-and-explain/);
+  });
+
+  it("stashes the first-send draft before initialize can remount", () => {
+    const sendFn = thread.slice(
+      thread.indexOf("const sendWithHarness"),
+      thread.indexOf("const onClarifySubmit"),
+    );
+    assert.match(sendFn, /stashFirstSendDraft/);
+    const stashAt = sendFn.indexOf("stashFirstSendDraft");
+    const initAt = sendFn.indexOf("threadListItem().initialize()");
+    const sendAt = sendFn.indexOf("composerRuntime.send()");
+    assert.ok(stashAt >= 0 && sendAt > stashAt);
+    if (initAt >= 0) assert.ok(stashAt < initAt);
   });
 
   it("gates model classify so first send does not await /api/harness/classify", () => {

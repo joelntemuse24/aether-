@@ -89,41 +89,51 @@ function ElapsedTicks({
   );
 }
 
-function MutatingLine({
+function WorkingHeader({ view }: { view: ActivityView }) {
+  return (
+    <div className="aether-activity__line">
+      <span className="aether-activity__spinner" aria-hidden />
+      {view.elapsedSeconds > 0 ? (
+        <ElapsedTicks seconds={view.elapsedSeconds} prefix="Working for" />
+      ) : (
+        <span className="aether-activity__words">Working</span>
+      )}
+    </div>
+  );
+}
+
+function LiveActivity({
   view,
   className,
 }: {
   view: ActivityView;
   className?: string;
 }) {
-  const working = view.mode === "elapsed";
-  const words = working ? "Working" : view.liveLine;
-
-  if (!words) return null;
-
-  const showTicks =
-    view.elapsedSeconds > 0 &&
-    (view.mode === "live" || view.mode === "elapsed");
-
   return (
     <div
       className={cn(
-        "aether-activity aether-activity--enter aether-activity__line",
+        "aether-activity aether-activity--enter",
         className,
       )}
       role="status"
       aria-live="polite"
     >
-      <span
-        key={view.lineKey ?? words}
-        className="aether-activity__words aether-activity--enter"
-      >
-        {words}
-      </span>
-      {showTicks ? (
-        <span className="aether-activity__ticks">
-          {formatActivityElapsed(view.elapsedSeconds)}
-        </span>
+      <WorkingHeader view={view} />
+      {view.steps.length > 0 ? (
+        <ol className="aether-activity__steps" aria-label="Work in this turn">
+          {view.steps.map((step) => (
+            <li
+              key={step.id}
+              className={cn(
+                "aether-activity__step",
+                step.state === "running" && "aether-activity__step--live",
+              )}
+              title={step.label}
+            >
+              {step.label}
+            </li>
+          ))}
+        </ol>
       ) : null}
     </div>
   );
@@ -177,7 +187,7 @@ export function AgentActivityPanel({
     );
   }
 
-  return <MutatingLine view={view} className={className} />;
+  return <LiveActivity view={view} className={className} />;
 }
 
 function threadMessagesFromState(messages: unknown): ActivityMessage[] {

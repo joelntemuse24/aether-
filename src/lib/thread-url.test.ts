@@ -237,6 +237,31 @@ describe("URL → thread", () => {
       "switch-new",
     );
   });
+
+  it("does not wipe a first send while /c/<id> is still in flight", () => {
+    // initialize() flips itemIsNew→false while the URL is still `/`.
+    // Treating that as switch-new blanks the guest turn.
+    assert.equal(
+      planUrlToThread({
+        pathname: "/",
+        urlThreadId: null,
+        pendingPath: "/c/thread-new",
+        pendingNewChat: false,
+        itemIsNew: false,
+      }),
+      "ignore",
+    );
+    assert.equal(
+      planUrlToThread({
+        pathname: "/",
+        urlThreadId: null,
+        pendingPath: "/c/thread-new",
+        pendingNewChat: true,
+        itemIsNew: false,
+      }),
+      "ignore",
+    );
+  });
 });
 
 describe("latches arm from the live URL during render", () => {

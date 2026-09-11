@@ -280,15 +280,6 @@ export function activityLabelForTool(
   }
 }
 
-function hasVisibleText(parts: readonly ActivityPart[] | undefined): boolean {
-  return (parts ?? []).some(
-    (p) =>
-      p.type === "text" &&
-      typeof p.text === "string" &&
-      p.text.trim().length > 0,
-  );
-}
-
 export function collectActivitySteps(
   parts: readonly ActivityPart[] | undefined,
   isRunning: boolean,
@@ -382,7 +373,7 @@ export function deriveAgentActivity(
         liveLine: current,
         lineKey: live?.id ?? steps[steps.length - 1]!.id,
         elapsedSeconds: elapsed,
-        elapsedLabel: elapsedText,
+        elapsedLabel: elapsedText ? `Working for ${elapsedText}` : "Working",
         summaryLabel: null,
       };
     }
@@ -395,20 +386,14 @@ export function deriveAgentActivity(
       lineKey: "collapsed",
       elapsedSeconds: elapsed,
       elapsedLabel: elapsedText,
-      summaryLabel:
-        steps.length === 1
-          ? (steps[0]?.label ?? null)
-          : elapsedText
-            ? `Worked for ${elapsedText}`
-            : (steps[0]?.label ?? null),
+      summaryLabel: elapsedText
+        ? `Worked for ${elapsedText}`
+        : (steps[0]?.label ?? null),
     };
   }
 
   if (input.isRunning) {
-    if (hasVisibleText(assistant?.parts)) {
-      return hidden(elapsed);
-    }
-    // Honest gerund while the model is actually generating — not a costume stack.
+    // Keep the Grok-style clock up until the turn ends — tokens do not hide it.
     return {
       visible: true,
       mode: "elapsed",
@@ -417,8 +402,22 @@ export function deriveAgentActivity(
       liveLine: "Working",
       lineKey: "elapsed",
       elapsedSeconds: elapsed,
-      elapsedLabel: elapsedText ? `Working ${elapsedText}` : "Working",
+      elapsedLabel: elapsedText ? `Working for ${elapsedText}` : "Working",
       summaryLabel: null,
+    };
+  }
+
+  if (elapsed > 0) {
+    return {
+      visible: true,
+      mode: "collapsed",
+      steps: [],
+      liveStepId: null,
+      liveLine: null,
+      lineKey: "collapsed",
+      elapsedSeconds: elapsed,
+      elapsedLabel: elapsedText,
+      summaryLabel: `Worked for ${elapsedText}`,
     };
   }
 

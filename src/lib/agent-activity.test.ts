@@ -98,7 +98,7 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(empty.steps.filter((s) => s.kind === "tool").length, 0);
     assert.equal(empty.mode, "elapsed");
     assert.equal(empty.liveLine, "Working");
-    assert.equal(empty.elapsedLabel, "Working 5s");
+    assert.equal(empty.elapsedLabel, "Working for 5s");
     assert.doesNotMatch(JSON.stringify(empty), /search|Planning|Thinking|Mulling|Untangling/i);
 
     const tokensOnScreen = deriveAgentActivity({
@@ -111,8 +111,9 @@ describe("deriveAgentActivity — honesty", () => {
       isRunning: true,
       elapsedSeconds: 5,
     });
-    assert.equal(tokensOnScreen.visible, false);
-    assert.equal(tokensOnScreen.mode, "hidden");
+    assert.equal(tokensOnScreen.visible, true);
+    assert.equal(tokensOnScreen.mode, "elapsed");
+    assert.equal(tokensOnScreen.elapsedLabel, "Working for 5s");
     assert.equal(tokensOnScreen.steps.length, 0);
 
     const finishedTextOnly = deriveAgentActivity({
@@ -125,7 +126,9 @@ describe("deriveAgentActivity — honesty", () => {
       isRunning: false,
       elapsedSeconds: 8,
     });
-    assert.equal(finishedTextOnly.visible, false);
+    assert.equal(finishedTextOnly.visible, true);
+    assert.equal(finishedTextOnly.mode, "collapsed");
+    assert.equal(finishedTextOnly.summaryLabel, "Worked for 8s");
     assert.equal(finishedTextOnly.steps.length, 0);
   });
 
@@ -188,7 +191,7 @@ describe("deriveAgentActivity — honesty", () => {
 
     assert.equal(view.visible, true);
     assert.equal(view.mode, "collapsed");
-    assert.equal(view.summaryLabel, "Searched the web");
+    assert.equal(view.summaryLabel, "Worked for 12s");
     assert.equal(view.elapsedSeconds, 12);
     assert.equal(view.steps.length, 1);
     assert.equal(view.steps[0]?.label, "Searched the web");
@@ -481,6 +484,7 @@ describe("thread / composer copy stays honest", () => {
       /bg-\[var\(--text\)\] px-3 text-\[var\(--canvas\)\]/,
     );
     assert.match(thread, /aether-send-stop/);
+    assert.match(thread, /aether-composer-dock/);
     const activity = readFileSync(
       new URL(
         "../components/assistant-ui/agent-status-strip.tsx",
@@ -531,6 +535,9 @@ describe("thread / composer copy stays honest", () => {
     assert.match(thread, /MessageSourceCards/);
     assert.doesNotMatch(thread, /ToolApprovalToggle/);
     assert.doesNotMatch(strip, /Mulling|Untangling|Churning/);
+    assert.match(strip, /Working for/);
+    assert.match(strip, /aether-activity__steps/);
+    assert.match(strip, /aether-activity__spinner/);
     assert.match(strip, /activityClockShouldRun/);
     assert.match(
       strip,
