@@ -198,7 +198,6 @@ export const AgentStatusStrip: FC = () => {
     return undefined;
   });
   const hasLiveAssistant = useAuiState((s) => {
-    if (!s.thread.isRunning) return false;
     const last = s.thread.messages[s.thread.messages.length - 1];
     return !!last && last.role === "assistant";
   });
@@ -206,7 +205,10 @@ export const AgentStatusStrip: FC = () => {
     threadMessagesFromState(s.thread.messages),
   );
   const continueStatus = useContinueStatus();
-  const elapsed = useThreadActivityElapsed(isRunning, lastAssistantId);
+  const elapsed = useThreadActivityElapsed(
+    isRunning || continueStatus.phase === "continuing",
+    lastAssistantId,
+  );
 
   const view = deriveAgentActivity({
     messages,
@@ -293,8 +295,11 @@ export const MessageAgentActivity: FC = () => {
   const isRunning = useAuiState((s) => s.message.status?.type === "running");
   const messageId = useAuiState((s) => s.message.id);
   const parts = useAuiState((s) => s.message.parts);
-  const elapsed = useThreadActivityElapsed(isRunning, messageId);
   const continueStatus = useContinueStatus();
+  const elapsed = useThreadActivityElapsed(
+    isRunning || continueStatus.phase === "continuing",
+    messageId,
+  );
 
   const view = deriveAgentActivity({
     messages: [{ id: messageId, role: "assistant", parts }],
@@ -302,7 +307,7 @@ export const MessageAgentActivity: FC = () => {
     elapsedSeconds: isRunning
       ? elapsed
       : elapsed || recalledActivityElapsed(messageId),
-    continuePhase: isRunning ? continueStatus.phase : "idle",
+    continuePhase: continueStatus.phase,
     continueSegment: continueStatus.segment,
     continueMax: continueStatus.max ?? MAX_AUTO_CONTINUES,
   });

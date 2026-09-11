@@ -50,16 +50,20 @@ import {
   hasContinuableAssistant,
   isServerTimeoutError,
   shouldAutoContinue,
+  shouldOfferContinue,
 } from "@/lib/chat-continue";
 import type { HarnessChatContext } from "@/lib/harness/types";
 import { mergeStoredThreadWithIncoming } from "@/lib/chat-history-merge";
 import { setChatHistoryReady } from "@/lib/chat-history-gate";
 import {
-  hasCompletedToolResult,
   prepareOutgoingChatMessages,
   shouldBlockSend,
   shouldCopyDraftToRemoteId,
 } from "@/lib/chat-transcript";
+import {
+  shouldHydrateThreadMessages,
+  shouldPersistMessagesImmediately,
+} from "@/lib/conversation-persist";
 
 function loadInitialThreadIdFromUrl(): string | undefined {
   // Only the URL selects the chat on boot. Bare `/` is always a new conversation.
@@ -409,7 +413,12 @@ function useChatThreadRuntime() {
           console.error("[chat] auto-continue failed", err);
           continueSegmentRef.current = false;
           continueScheduledRef.current = false;
-          emitContinueStatus({ phase: "idle" });
+          emitContinueStatus({
+            phase: "needs-continue",
+            reason: "timeout",
+            segment: continueCountRef.current,
+            max: MAX_AUTO_CONTINUES,
+          });
           window.dispatchEvent(
             new CustomEvent("aether:notice", {
               detail:
@@ -465,18 +474,18 @@ function useChatThreadRuntime() {
           scheduleAutoContinue("onError"));
       if (continuing) return;
 
-      const timeoutish = shouldAutoContinue({
-        isAbort: false,
-        isDisconnect: false,
-        isError: true,
-        error,
-        messages: messagesRef.current,
-        runDurationMs,
-        // Probe as if we still had budget — surfaces the Continue CTA.
-        continueCount: 0,
-      });
+      const offerContinue =
+        shouldOfferContinue({
+          isAbort: false,
+          isDisconnect: false,
+          isError: true,
+          error,
+          messages: messagesRef.current,
+          runDurationMs,
+          continueCount: continueCountRef.current,
+        }) || isServerTimeoutError(error);
       emitContinueStatus(
-        timeoutish || isServerTimeoutError(error)
+        offerContinue
           ? {
               phase: "needs-continue",
               reason: "timeout",
@@ -487,7 +496,7 @@ function useChatThreadRuntime() {
       );
       clearChatContext();
       // Timeouts surface Continue in-thread — skip toast pile for those.
-      if (timeoutish || isServerTimeoutError(error)) return;
+      if (offerContinue) return;
       void import("@/lib/chat-errors").then(({ friendlyChatError }) => {
         const detail = friendlyChatError(error);
         if (!detail) return;
@@ -524,18 +533,25 @@ function useChatThreadRuntime() {
           continueCount: continueCountRef.current,
         }) &&
           scheduleAutoContinue(
-            isDisconnect ? "onFinish:disconnect" : "onFinish:error",
+            isDisconnect
+              ? "onFinish:disconnect"
+              : isAbort
+                ? "onFinish:abort"
+                : isError
+                  ? "onFinish:error"
+                  : "onFinish:unfinished",
           ));
       if (continuing) return;
 
-      // Only offer Continue when the run actually failed/cut off — not after
-      // a successful long reply (runDuration alone is not a signal).
-      const offerContinue =
-        !isAbort &&
-        hasContinuableAssistant(messagesRef.current) &&
-        (isDisconnect ||
-          isError ||
-          isServerTimeoutError(errorRef.current));
+      const offerContinue = shouldOfferContinue({
+        isAbort,
+        isDisconnect,
+        isError,
+        error: errorRef.current,
+        messages: messagesRef.current,
+        runDurationMs,
+        continueCount: continueCountRef.current,
+      });
       emitContinueStatus(
         offerContinue
           ? {
@@ -547,7 +563,7 @@ function useChatThreadRuntime() {
           : { phase: "idle" },
       );
 
-      if (!isAbort && !isDisconnect && !isError) {
+      if (!isAbort && !isDisconnect && !isError && !offerContinue) {
         continueCountRef.current = 0;
         lastHarnessRef.current = null;
       }
@@ -594,7 +610,7 @@ function useChatThreadRuntime() {
   useEffect(() => {
     let cancelled = false;
 
-    const hydrate = (key: string | undefined) => {
+    const hydrate = (key: string | undefined, switchedThread = false) => {
       if (!key) {
         loadedKeyRef.current = null;
         storedCountRef.current = 0;
@@ -608,7 +624,19 @@ function useChatThreadRuntime() {
         if (cancelled) return;
         storedCountRef.current = stored.length;
         const switched =
-          loadedKeyRef.current != null && loadedKeyRef.current !== key;
+          switchedThread ||
+          (loadedKeyRef.current != null && loadedKeyRef.current !== key);
+        if (
+          !shouldHydrateThreadMessages({
+            status: statusRef.current,
+            switched,
+          })
+        ) {
+          loadedKeyRef.current = key;
+          threadIdRef.current = key;
+          setHistoryReady(true);
+          return;
+        }
         if (switched) {
           setMessages(stored);
         } else if (stored.length > 0) {
@@ -626,7 +654,7 @@ function useChatThreadRuntime() {
       });
     };
 
-    hydrate(readThreadStorageKey(aui) ?? readThreadIdFromLocation());
+    hydrate(readThreadStorageKey(auiRef.current) ?? readThreadIdFromLocation());
     const onSwitch = (event: Event) => {
       const detail = (event as CustomEvent<{ newChat?: boolean }>).detail;
       if (detail?.newChat) {
@@ -639,7 +667,10 @@ function useChatThreadRuntime() {
         setHistoryReady(true);
         return;
       }
-      hydrate(readThreadStorageKey(aui) ?? readThreadIdFromLocation());
+      hydrate(
+        readThreadStorageKey(auiRef.current) ?? readThreadIdFromLocation(),
+        true,
+      );
     };
     window.addEventListener("aether:thread-switched", onSwitch);
 
@@ -647,7 +678,7 @@ function useChatThreadRuntime() {
       cancelled = true;
       window.removeEventListener("aether:thread-switched", onSwitch);
     };
-  }, [aui, setMessages]);
+  }, [setMessages]);
 
   // Track per-segment run start; unlock further continues once a segment is live.
   useEffect(() => {
@@ -700,18 +731,19 @@ function useChatThreadRuntime() {
     };
   }, [status, aui, durableChatId]);
 
-  // Persist the full linear transcript: user append, tool result, and ready/error
-  // are sync. Token streaming stays debounced so we don't write every chunk.
+  // Persist the full linear transcript: user append and ready/error are sync.
+  // Token streaming and in-flight tool results share a debounce so long
+  // research turns cannot PUT the whole repo on every chunk.
   useEffect(() => {
-    const key = threadIdRef.current ?? readThreadStorageKey(aui);
+    const key = threadIdRef.current ?? readThreadStorageKey(auiRef.current);
     if (!key || messages.length === 0) return;
     const last = messages[messages.length - 1];
-    const persistNow =
-      last?.role === "user" ||
-      hasCompletedToolResult(last) ||
-      status === "ready" ||
-      status === "error";
-    if (persistNow) {
+    if (
+      shouldPersistMessagesImmediately({
+        status,
+        lastRole: last?.role,
+      })
+    ) {
       persistThreadUIMessages(key, messages);
       persistedKeyRef.current = key;
       return;
@@ -722,7 +754,7 @@ function useChatThreadRuntime() {
       persistedKeyRef.current = key;
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [messages, status, aui]);
+  }, [messages, status]);
 
   // Flush on tab close / refresh so the last streamed tokens aren't lost to the debounce.
   useEffect(() => {

@@ -135,6 +135,7 @@ function partLooksRunning(part: ActivityPart, isRunning: boolean): boolean {
   ) {
     return true;
   }
+  if (toolNameFromActivityPart(part)) return true;
   return isRunning;
 }
 
@@ -325,8 +326,22 @@ export function deriveAgentActivity(
     };
   }
 
+  if (input.continuePhase === "needs-continue") {
+    return {
+      visible: true,
+      mode: live || steps.length > 0 ? "live" : "elapsed",
+      steps,
+      liveStepId: live?.id ?? null,
+      liveLine: live?.label ?? "Paused — continue",
+      lineKey: live?.id ?? "needs-continue",
+      elapsedSeconds: elapsed,
+      elapsedLabel: "Paused — continue",
+      summaryLabel: null,
+    };
+  }
+
   if (steps.length > 0) {
-    if (input.isRunning) {
+    if (input.isRunning || live) {
       const current =
         live?.label ?? steps[steps.length - 1]?.label ?? null;
       return {

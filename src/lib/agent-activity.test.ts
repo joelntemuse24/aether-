@@ -262,6 +262,63 @@ describe("deriveAgentActivity — honesty", () => {
     assert.doesNotMatch(JSON.stringify(view), /Mulling|Untangling|Searching/i);
   });
 
+  it("stays live when tools are still open after isRunning flips false", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-web_search",
+              args: { query: "keep going" },
+              state: "input-available",
+            },
+          ],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 61,
+    });
+    assert.equal(view.visible, true);
+    assert.equal(view.mode, "live");
+    assert.equal(view.liveLine, "Searching keep going");
+    assert.equal(view.steps[0]?.state, "running");
+  });
+
+  it("shows a paused continue line when the run is waiting on the user", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [{ type: "text", text: "Partial draft…" }],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 62,
+      continuePhase: "needs-continue",
+      continueSegment: 5,
+      continueMax: 5,
+    });
+    assert.equal(view.visible, true);
+    assert.match(view.liveLine ?? "", /Paused/);
+    assert.match(view.elapsedLabel ?? "", /continue/i);
+    assert.doesNotMatch(JSON.stringify(view), /Thinking|Planning|ChatGPT/i);
+  });
+
+  it("keeps Continuing visible even when the stream is not marked running", () => {
+    const view = deriveAgentActivity({
+      messages: [{ role: "assistant", parts: [] }],
+      isRunning: false,
+      elapsedSeconds: 4,
+      continuePhase: "continuing",
+      continueSegment: 2,
+      continueMax: 5,
+    });
+    assert.equal(view.visible, true);
+    assert.equal(view.elapsedLabel, "Continuing 2/5");
+    assert.equal(view.liveLine, "Continuing 2/5");
+  });
+
   it("uses the real search query on the live line", () => {
     const query = "Dublin's current time zone and daylight saving status";
     const view = deriveAgentActivity({
@@ -412,5 +469,13 @@ describe("thread / composer copy stays honest", () => {
     assert.match(thread, /MessageSourceCards/);
     assert.doesNotMatch(thread, /ToolApprovalToggle/);
     assert.doesNotMatch(strip, /Mulling|Untangling|Churning/);
+    assert.match(
+      strip,
+      /continuePhase:\s*continueStatus\.phase/,
+    );
+    assert.doesNotMatch(
+      strip,
+      /continuePhase:\s*isRunning \? continueStatus\.phase : "idle"/,
+    );
   });
 });
