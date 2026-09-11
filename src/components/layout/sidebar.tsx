@@ -67,6 +67,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { saved, openSavedById, refreshSaved } = useArtifact();
   const vault = useVault();
   const router = useRouter();
+  const aui = useAui();
   const user = session?.user;
   const isAuthenticated = status === "authenticated" && !!user;
   const isLoadingSession = status === "loading";
@@ -80,6 +81,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   const goNewChat = () => {
     beginNewChatSession();
+    aui.threads().switchToNewThread();
     router.push(NEW_CHAT_PATH);
   };
 

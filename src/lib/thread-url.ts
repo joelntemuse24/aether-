@@ -100,10 +100,16 @@ export function planUrlToThread(input: {
   urlThreadId: string | null;
   pendingPath: string | null;
   pendingNewChat: boolean;
+  itemIsNew: boolean;
 }): UrlToThreadAction {
-  if (input.pendingPath === input.pathname) return "ignore";
-  if (input.urlThreadId) return "switch-thread";
-  if (input.pendingNewChat) return "ignore";
+  if (input.urlThreadId) {
+    if (input.pendingPath === input.pathname) return "ignore";
+    return "switch-thread";
+  }
+  // `/` must switch unless the runtime is already a new empty chat.
+  // Skipping whenever pendingNewChat is set left the old thread mounted
+  // (sidebar New conversation does not switchToNewThread itself).
+  if (input.itemIsNew) return "ignore";
   return "switch-new";
 }
 

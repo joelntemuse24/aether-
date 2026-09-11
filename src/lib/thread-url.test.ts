@@ -180,6 +180,7 @@ describe("URL → thread", () => {
         urlThreadId: "thread-9",
         pendingPath: "/c/thread-9",
         pendingNewChat: false,
+        itemIsNew: false,
       }),
       "ignore",
     );
@@ -192,20 +193,35 @@ describe("URL → thread", () => {
         urlThreadId: "thread-9",
         pendingPath: null,
         pendingNewChat: false,
+        itemIsNew: false,
       }),
       "switch-thread",
     );
   });
 
-  it("does not switchToNewThread again when a new-chat switch is already in flight", () => {
+  it("does not remount when the runtime is already a new empty chat", () => {
     assert.equal(
       planUrlToThread({
         pathname: "/",
         urlThreadId: null,
-        pendingPath: null,
+        pendingPath: "/",
         pendingNewChat: true,
+        itemIsNew: true,
       }),
       "ignore",
+    );
+  });
+
+  it("still switchToNewThread from / when the old thread is mounted", () => {
+    assert.equal(
+      planUrlToThread({
+        pathname: "/",
+        urlThreadId: null,
+        pendingPath: "/",
+        pendingNewChat: true,
+        itemIsNew: false,
+      }),
+      "switch-new",
     );
   });
 
@@ -216,6 +232,7 @@ describe("URL → thread", () => {
         urlThreadId: null,
         pendingPath: null,
         pendingNewChat: false,
+        itemIsNew: false,
       }),
       "switch-new",
     );
@@ -340,6 +357,20 @@ describe("sync wiring stays fire-and-forget for first send", () => {
     assert.match(emptyState, /shouldHoldEmptyWelcome/);
     assert.match(emptyState, /usePathname/);
     assert.doesNotMatch(emptyState, /useState\(\(\) => readThreadIdFromLocation/);
+  });
+
+  it("sidebar New conversation switches the runtime, not only the URL", () => {
+    const sidebar = readFileSync(
+      new URL("../components/layout/sidebar.tsx", import.meta.url),
+      "utf8",
+    );
+    const go = sidebar.slice(
+      sidebar.indexOf("const goNewChat"),
+      sidebar.indexOf("const openVault"),
+    );
+    assert.match(go, /switchToNewThread\(\)/);
+    assert.match(go, /beginNewChatSession\(\)/);
+    assert.match(go, /router\.push\(NEW_CHAT_PATH\)/);
   });
 
   it("composer send still does not await router navigation", () => {
