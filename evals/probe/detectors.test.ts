@@ -122,6 +122,17 @@ describe("probe failure detectors", () => {
     assert.equal(findings.some((f) => f.code === "stuck_stop"), true);
   });
 
+  it("flags a leaked upstream auth error even when HTTP is 200", () => {
+    const findings = detectFailures(
+      snap({
+        visibleText: "Missing Authentication header",
+        httpStatus: 200,
+        httpError: null,
+      }),
+    );
+    assert.equal(findings.some((f) => f.code === "http_error"), true);
+  });
+
   it("does not treat a time answer as a ZoneInfo failure", () => {
     const findings = detectFailures(
       snap({

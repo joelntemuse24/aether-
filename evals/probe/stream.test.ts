@@ -25,6 +25,18 @@ describe("probe stream parser", () => {
     assert.equal(parsed.visibleText.includes("DSML"), false);
   });
 
+  it("keeps stream error frames out of visible prose", () => {
+    const body = [
+      'data: {"type":"error","errorText":"Missing Authentication header"}',
+      'data: {"type":"finish"}',
+      "",
+    ].join("\n\n");
+    const parsed = parseChatResponseBody(body);
+    assert.equal(parsed.visibleText, "");
+    assert.equal(parsed.errorText, "Missing Authentication header");
+    assert.equal(parsed.finished, true);
+  });
+
   it("parses a JSON error body from /api/chat", () => {
     const parsed = parseChatResponseBody(
       JSON.stringify({ error: "Hosted chat is not configured." }),

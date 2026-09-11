@@ -9,6 +9,8 @@ const STEP_FAILED = /this step failed/i;
 const ZONEINFO = /zoneinfonotfounderror/i;
 const STUCK_STOP = /\bstuck stop\b|\bstop stuck\b/i;
 const WORKING_LINE = /^(?:working(?: for \S+)?)$/i;
+const UPSTREAM_LEAK =
+  /missing authentication header|incorrect api key|invalid api key|ai_apicallerror|aether cloud isn't available/i;
 
 export function countWorkingStrips(text: string): number {
   if (!text) return 0;
@@ -36,17 +38,17 @@ export function detectFailures(snap: TranscriptSnapshot): ProbeFinding[] {
     });
   }
 
-  if (
-    snap.httpStatus !== null &&
-    snap.httpStatus >= 400 &&
-    !findings.some((f) => f.code === "client_exception")
-  ) {
+  if (snap.httpError?.trim() || (snap.httpStatus !== null && snap.httpStatus >= 400)) {
     findings.push({
       code: "http_error",
-      detail: `${snap.httpStatus}${snap.httpError ? ` ${snap.httpError}` : ""}`.slice(
-        0,
-        400,
-      ),
+      detail: `${snap.httpStatus ?? ""} ${snap.httpError ?? ""}`.trim().slice(0, 400),
+    });
+  }
+
+  if (UPSTREAM_LEAK.test(haystack)) {
+    findings.push({
+      code: "http_error",
+      detail: "Upstream / auth error leaked into the transcript.",
     });
   }
 

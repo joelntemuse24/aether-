@@ -93,3 +93,5 @@ cat evals/probe/last-report.md
 ```
 
 Exit code 1 only on **live** failures. Offline smoke stays green so CI does not spend tokens.
+
+A hosted 200 that still leaks `Missing Authentication header` / `ZoneInfoNotFoundError` / raw DSML is a **fail**. Point `--live` at a preview/prod box whose server keys actually work.

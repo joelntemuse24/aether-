@@ -160,9 +160,9 @@ export async function runProbe(opts: ProbeCliOptions = {}): Promise<ProbeReport>
 
     const timeoutMs =
       opts.timeoutMs ??
-      Number(process.env.AETHER_PROBE_TIMEOUT_MS || "") ||
-      prompt.timeoutMs ||
-      90_000;
+      (Number(process.env.AETHER_PROBE_TIMEOUT_MS || "") ||
+        prompt.timeoutMs ||
+        90_000);
     try {
       const { snap, transport } = await runLiveTurn({
         baseUrl: baseUrl!,

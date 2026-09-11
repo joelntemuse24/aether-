@@ -79,9 +79,10 @@ export function toCaseResult(
     visibleText?: string;
   },
 ): ProbeCaseResult {
+  const { visibleText, excerpt, ...rest } = result;
   return {
-    ...result,
-    passed: result.findings.length === 0,
-    excerpt: result.excerpt ?? excerptOf(result.visibleText ?? ""),
+    ...rest,
+    passed: rest.findings.length === 0,
+    excerpt: excerpt ?? excerptOf(visibleText ?? ""),
   };
 }

@@ -78,6 +78,7 @@ export function parseChatResponseBody(body: string): ParsedChatStream {
     if (type === "error" || type === "tool-output-error") {
       const err = collectTextDelta(rec) || "stream error";
       errorText = errorText ? `${errorText}\n${err}` : err;
+      continue;
     }
     const delta = collectTextDelta(rec);
     if (delta) rawChunks.push(delta);
