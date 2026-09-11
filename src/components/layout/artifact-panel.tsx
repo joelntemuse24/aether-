@@ -30,6 +30,11 @@ import { useTheme } from "@/providers/theme-provider";
 import type { ArtifactKind } from "@/lib/tools";
 import { cn } from "@/lib/utils";
 import { fonts } from "@/lib/tokens";
+import {
+  filePreviewMode,
+  parseCsvTable,
+  textFromArtifactContent,
+} from "@/lib/artifacts/table-preview";
 
 const EXT_BY_LANG: Record<string, string> = {
   javascript: "js",
@@ -501,7 +506,12 @@ export function ArtifactPanel() {
   const tabs = useMemo<Tab[]>(() => {
     if (!artifact) return [];
     if (kind === "image") return [];
-    if (kind === "file") return [];
+    if (kind === "file") {
+      if (filePreviewMode(artifact.language) !== "table") return [];
+      const text = textFromArtifactContent(artifact.code);
+      const table = text ? parseCsvTable(text) : null;
+      return table?.rows.length ? ["table"] : [];
+    }
     if (kind === "svg") return ["preview", "code"];
     if (kind === "document") return ["preview", "edit"];
     if (kind === "data") {
@@ -716,6 +726,14 @@ export function ArtifactPanel() {
       : "";
 
   const parsed = kind === "data" ? parseData(content) : null;
+  const csvTable =
+    kind === "file" && filePreviewMode(artifact.language) === "table"
+      ? (() => {
+          const text = textFromArtifactContent(content);
+          return text ? parseCsvTable(text) : null;
+        })()
+      : null;
+  const hasCsvPreview = !!(csvTable && csvTable.rows.length > 0);
 
   return (
     <aside
@@ -874,7 +892,12 @@ export function ArtifactPanel() {
             />
           </div>
         )}
-        {kind === "file" && (
+        {kind === "file" && hasCsvPreview && tab === "table" && csvTable && (
+          <div className="flex h-full flex-col">
+            <DataTable rows={csvTable.rows} columns={csvTable.columns} />
+          </div>
+        )}
+        {kind === "file" && !hasCsvPreview && (
           <div className="flex h-full flex-col items-center justify-center gap-4 bg-[var(--elevated)] px-6 text-center">
             <FileIcon className="size-10 text-[var(--accent)]" />
             <div>
