@@ -42,6 +42,8 @@ export function confirmActionCopy(input: {
   else if (tool === "drive_upload" || tool === "drive_write") {
     confirm = "Save to Drive";
   } else if (tool === "gmail_send") confirm = "Send this";
+  else if (tool === "schedule_create") confirm = "Schedule this";
+  else if (tool === "schedule_cancel") confirm = "Remove this";
   else if (action.includes("delete") || tool.includes("delete")) {
     confirm = "Delete this";
   } else if (

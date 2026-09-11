@@ -13,6 +13,8 @@ describe("confirmActionCopy", () => {
     assert.equal(confirmActionCopy({ tool: "generate_image" }).confirm, "Generate image");
     assert.equal(confirmActionCopy({ tool: "drive_upload" }).confirm, "Save to Drive");
     assert.equal(confirmActionCopy({ tool: "gmail_send" }).confirm, "Send this");
+    assert.equal(confirmActionCopy({ tool: "schedule_create" }).confirm, "Schedule this");
+    assert.equal(confirmActionCopy({ tool: "schedule_cancel" }).confirm, "Remove this");
     assert.equal(confirmActionCopy({}).confirm, "Allow this");
     for (const row of [
       confirmActionCopy({ tool: "create_artifact" }),

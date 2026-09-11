@@ -43,6 +43,14 @@ import {
   workspaceReadFile,
   workspaceWriteFile,
 } from "@/lib/connectors/workspace";
+import { buildFfmpegCommand } from "@/lib/connectors/workspace-media";
+import { listDesignFiles, readDesignFile } from "@/lib/connectors/design";
+import { listDeployments, readDeployment } from "@/lib/connectors/deployments";
+import { searchSocialFeed } from "@/lib/connectors/social";
+import { registerScheduledJob } from "@/lib/schedules/register";
+import { getScheduleStore } from "@/lib/schedules/store";
+import type { ScheduleStore } from "@/lib/schedules/store";
+import type { ScheduledJob } from "@/lib/schedules/types";
 import { buildPresentationPptx } from "@/lib/office/build-pptx";
 import { buildSpreadsheetXlsx } from "@/lib/office/build-xlsx";
 import { buildDocumentDocx } from "@/lib/office/build-docx";
@@ -163,6 +171,15 @@ export type AetherToolDeps = {
     userId?: string | null,
   ) => Promise<ConfirmationToolResult>;
   workspaceExec?: typeof workspaceExec;
+  registerSchedule?: typeof registerScheduledJob;
+  listSchedules?: (userId: string) => Promise<ScheduledJob[]>;
+  cancelSchedule?: (userId: string, id: string) => Promise<ScheduledJob | null>;
+  scheduleStore?: ScheduleStore;
+  designList?: typeof listDesignFiles;
+  designRead?: typeof readDesignFile;
+  deploymentsList?: typeof listDeployments;
+  deploymentsRead?: typeof readDeployment;
+  socialSearch?: typeof searchSocialFeed;
   workspaceReadFile?: typeof workspaceReadFile;
   workspaceWriteFile?: typeof workspaceWriteFile;
   workspaceListFiles?: typeof workspaceListFiles;
@@ -225,6 +242,15 @@ const AETHER_TOOL_NAMES = new Set<string>([
   TOOL_NAMES.githubCreatePullRequest,
   TOOL_NAMES.githubMergePullRequest,
   TOOL_NAMES.workspaceExec,
+  TOOL_NAMES.workspaceFfmpeg,
+  TOOL_NAMES.scheduleCreate,
+  TOOL_NAMES.scheduleList,
+  TOOL_NAMES.scheduleCancel,
+  TOOL_NAMES.designList,
+  TOOL_NAMES.designRead,
+  TOOL_NAMES.deploymentsList,
+  TOOL_NAMES.deploymentsRead,
+  TOOL_NAMES.socialSearch,
   TOOL_NAMES.workspaceReadFile,
   TOOL_NAMES.workspaceWriteFile,
   TOOL_NAMES.workspaceListFiles,
@@ -424,6 +450,10 @@ async function gateIfNeeded(
           ? "Save an artifact"
           : name === TOOL_NAMES.gmailSend
             ? "Send email"
+            : name === TOOL_NAMES.scheduleCreate
+              ? "Schedule this"
+              : name === TOOL_NAMES.scheduleCancel
+                ? "Remove this automation"
             : name === TOOL_NAMES.driveUpload || name === TOOL_NAMES.driveWrite
               ? "Save to Drive"
               : "Needs your confirmation");
@@ -437,6 +467,10 @@ async function gateIfNeeded(
           ? `Create artifact “${str(args.title) || "untitled"}”.`
           : name === TOOL_NAMES.gmailSend
             ? `Send an email to ${str(args.to)}: “${str(args.subject)}”.`
+            : name === TOOL_NAMES.scheduleCreate
+              ? `Schedule “${str(args.title) || "this automation"}” (${str(args.when) || "recurring"}). Sends still wait on a card.`
+              : name === TOOL_NAMES.scheduleCancel
+                ? `Remove automation ${str(args.id) || ""}.`
             : name === TOOL_NAMES.driveUpload || name === TOOL_NAMES.driveWrite
               ? `Save “${str(args.filename) || "this file"}” to Drive${str(args.folderId) ? " in the chosen folder" : ""}.`
               : str(args.title) || name);
@@ -692,6 +726,101 @@ export async function executeAetherTool(input: {
       timeoutMs:
         typeof args.timeoutMs === "number" ? args.timeoutMs : undefined,
     });
+  }
+
+  if (name === TOOL_NAMES.workspaceFfmpeg) {
+    const built = buildFfmpegCommand({
+      action: str(args.action) as "trim" | "concat" | "gif" | "burn_subs",
+      inputPath: str(args.inputPath),
+      outputPath: str(args.outputPath),
+      extraInputs: Array.isArray(args.extraInputs)
+        ? args.extraInputs.filter((p): p is string => typeof p === "string")
+        : undefined,
+      start: str(args.start) || undefined,
+      duration: str(args.duration) || undefined,
+      subsPath: str(args.subsPath) || undefined,
+    });
+    if (!built.ok) return { ok: false, error: built.error };
+    const exec = ctx.deps?.workspaceExec ?? workspaceExec;
+    return exec(workspaceIdentity, { command: built.command, timeoutMs: 60_000 });
+  }
+
+  if (name === TOOL_NAMES.scheduleCreate) {
+    if (!ctx.userId) {
+      return { ok: false, error: "Sign in to create a scheduled automation." };
+    }
+    const register = ctx.deps?.registerSchedule ?? registerScheduledJob;
+    const created = await register({
+      userId: ctx.userId,
+      title: str(args.title) || "Scheduled job",
+      prompt: str(args.prompt),
+      when: str(args.when),
+      delivery: args.delivery === "email" ? "email" : "inbox",
+      timezone: str(args.timezone) || "UTC",
+      conversationId: ctx.conversationId,
+    });
+    if (!created.ok) return created;
+    return {
+      ok: true,
+      job: created.job,
+      fires: created.fires,
+      note: created.note,
+      sent: false,
+    };
+  }
+
+  if (name === TOOL_NAMES.scheduleList) {
+    if (!ctx.userId) {
+      return { ok: false, error: "Sign in to list scheduled automations." };
+    }
+    const list =
+      ctx.deps?.listSchedules ?? ((userId: string) => getScheduleStore().list(userId));
+    const jobs = await list(ctx.userId);
+    return { ok: true, jobs };
+  }
+
+  if (name === TOOL_NAMES.scheduleCancel) {
+    if (!ctx.userId) {
+      return { ok: false, error: "Sign in to cancel a scheduled automation." };
+    }
+    const cancel =
+      ctx.deps?.cancelSchedule ??
+      ((userId: string, id: string) => getScheduleStore().cancel(userId, id));
+    const job = await cancel(ctx.userId, str(args.id));
+    if (!job) return { ok: false, error: "That automation was not found." };
+    return { ok: true, job };
+  }
+
+  if (name === TOOL_NAMES.designList) {
+    const list = ctx.deps?.designList ?? listDesignFiles;
+    return wrapConnectorResult(
+      await list({ query: str(args.query) || undefined, teamId: str(args.teamId) || undefined }),
+    );
+  }
+
+  if (name === TOOL_NAMES.designRead) {
+    const read = ctx.deps?.designRead ?? readDesignFile;
+    return wrapConnectorResult(await read({ fileKey: str(args.fileKey) }));
+  }
+
+  if (name === TOOL_NAMES.deploymentsList) {
+    const list = ctx.deps?.deploymentsList ?? listDeployments;
+    return wrapConnectorResult(
+      await list({
+        projectId: str(args.projectId) || undefined,
+        limit: typeof args.limit === "number" ? args.limit : undefined,
+      }),
+    );
+  }
+
+  if (name === TOOL_NAMES.deploymentsRead) {
+    const read = ctx.deps?.deploymentsRead ?? readDeployment;
+    return wrapConnectorResult(await read({ id: str(args.id) }));
+  }
+
+  if (name === TOOL_NAMES.socialSearch) {
+    const search = ctx.deps?.socialSearch ?? searchSocialFeed;
+    return wrapConnectorResult(await search({ query: str(args.query) }));
   }
 
   if (name === TOOL_NAMES.workspaceReadFile) {

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { Sandbox } from "@vercel/sandbox";
+import { annotateWorkspaceCommandResult } from "@/lib/connectors/workspace-media";
 
 const WORKSPACE_ROOT = "/vercel/sandbox/workspace";
 const MAX_COMMAND_TIMEOUT_MS = 60_000;
@@ -214,13 +215,21 @@ export async function workspaceExec(
     ]);
     const stdout = capped(stdoutRaw);
     const stderr = capped(stderrRaw);
-    return {
-      ok: result.exitCode === 0,
+    const annotated = annotateWorkspaceCommandResult({
+      command,
       exitCode: result.exitCode,
+      stdout: stdout.text,
+      stderr: stderr.text,
+    });
+    return {
+      ok: annotated.ok,
+      exitCode: annotated.exitCode,
       stdout: stdout.text,
       stderr: stderr.text,
       truncated: stdout.truncated || stderr.truncated,
       durationMs: result.durationMs,
+      missing: annotated.missing,
+      error: annotated.error,
     };
   } catch (err) {
     logWorkspaceFailure("exec", err);

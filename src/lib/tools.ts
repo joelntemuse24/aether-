@@ -72,6 +72,15 @@ export const TOOL_NAMES = {
   contactsSearch: "contacts_search",
   contactsCreate: "contacts_create",
   projectKnowledgeSearch: "project_knowledge_search",
+  workspaceFfmpeg: "workspace_ffmpeg",
+  scheduleCreate: "schedule_create",
+  scheduleList: "schedule_list",
+  scheduleCancel: "schedule_cancel",
+  designList: "design_list",
+  designRead: "design_read",
+  deploymentsList: "deployments_list",
+  deploymentsRead: "deployments_read",
+  socialSearch: "social_search",
 } as const;
 
 export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -556,6 +565,62 @@ export const generateImageInput = z.object({
     .describe("Aspect ratio: square (default), portrait, or landscape."),
 });
 
+export const workspaceFfmpegInput = z.object({
+  action: z
+    .enum(["trim", "concat", "gif", "burn_subs"])
+    .describe("trim, concat, gif, or burn_subs. Runs ffmpeg in the isolated workspace when it is installed."),
+  inputPath: z.string().describe("Workspace-relative input media path."),
+  outputPath: z.string().describe("Workspace-relative output path."),
+  extraInputs: z
+    .array(z.string())
+    .optional()
+    .describe("Additional workspace-relative inputs for concat."),
+  start: z.string().optional().describe("Trim start timestamp (HH:MM:SS)."),
+  duration: z.string().optional().describe("Trim duration in seconds or HH:MM:SS."),
+  subsPath: z.string().optional().describe("Workspace-relative captions file for burn_subs."),
+});
+
+export const scheduleCreateInput = z.object({
+  title: z.string().describe("Short name for the automation."),
+  prompt: z.string().describe("What to prepare when it fires."),
+  when: z
+    .string()
+    .describe('When to run: "every morning", "every weekday morning", "every evening", or a 5-field cron.'),
+  delivery: z
+    .enum(["inbox", "email"])
+    .optional()
+    .describe("inbox = chat draft; email = email draft. Both wait on a confirm card before send."),
+  timezone: z.string().optional().describe("IANA timezone, default UTC."),
+});
+
+export const scheduleListInput = z.object({});
+
+export const scheduleCancelInput = z.object({
+  id: z.string().describe("Schedule id from schedule_list."),
+});
+
+export const designListInput = z.object({
+  query: z.string().optional().describe("Optional name filter."),
+  teamId: z.string().optional().describe("Operator team id when listing projects."),
+});
+
+export const designReadInput = z.object({
+  fileKey: z.string().describe("Design file key to read (pages and title only)."),
+});
+
+export const deploymentsListInput = z.object({
+  projectId: z.string().optional(),
+  limit: z.number().int().min(1).max(25).optional(),
+});
+
+export const deploymentsReadInput = z.object({
+  id: z.string().describe("Deployment id from deployments_list."),
+});
+
+export const socialSearchInput = z.object({
+  query: z.string().describe("Social feed query. Requires an official API key — there is no scrape path."),
+});
+
 export const browserActInput = z.object({
   url: z.string().url().describe("Page URL for the action."),
   action: z
@@ -787,6 +852,42 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Contacts",
     runningLabel: "Creating contact…",
   },
+  [TOOL_NAMES.workspaceFfmpeg]: {
+    label: "Media",
+    runningLabel: "Processing media…",
+  },
+  [TOOL_NAMES.scheduleCreate]: {
+    label: "Automation",
+    runningLabel: "Scheduling…",
+  },
+  [TOOL_NAMES.scheduleList]: {
+    label: "Automation",
+    runningLabel: "Listing automations…",
+  },
+  [TOOL_NAMES.scheduleCancel]: {
+    label: "Automation",
+    runningLabel: "Removing automation…",
+  },
+  [TOOL_NAMES.designList]: {
+    label: "Design",
+    runningLabel: "Listing design files…",
+  },
+  [TOOL_NAMES.designRead]: {
+    label: "Design",
+    runningLabel: "Reading design file…",
+  },
+  [TOOL_NAMES.deploymentsList]: {
+    label: "Deployments",
+    runningLabel: "Listing deployments…",
+  },
+  [TOOL_NAMES.deploymentsRead]: {
+    label: "Deployments",
+    runningLabel: "Reading deployment…",
+  },
+  [TOOL_NAMES.socialSearch]: {
+    label: "Social",
+    runningLabel: "Searching social…",
+  },
 };
 
 export function getToolDisplay(name: string): ToolDisplay {
@@ -822,8 +923,13 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 - "browser_snapshot": open a public URL and optionally store a screenshot as an image artifact the next step can see.
 - "browser_act": extract / fill_preview / click / submit on a page. submit always returns needs_confirmation.
 - "search_images": web image search. Returns carousel-ready image URLs (no spend).
-- "workspace_exec": run shell commands in an isolated per-conversation Linux workspace. If it reports the workspace unavailable, use create_presentation / create_spreadsheet / create_document / create_pdf for office files instead of retrying pip.
+- "workspace_exec": run shell commands in an isolated per-conversation Linux workspace. If it reports the workspace unavailable, use create_presentation / create_spreadsheet / create_document / create_pdf for office files instead of retrying pip. For trim/concat/GIF/burned-in captions prefer workspace_ffmpeg. If ffmpeg is MISSING, say so — do not invent a video.
+- "workspace_ffmpeg": trim, concat, GIF, or burn captions via ffmpeg in that workspace. Honest MISSING if the binary is not installed.
 - "workspace_read_file" / "workspace_write_file" / "workspace_list_files": inspect and edit files in that isolated workspace.
+- "schedule_create" / "schedule_list" / "schedule_cancel": recurring automations (“every morning…”). Creating always confirms. When a job fires it prepares a draft and waits on a confirm card — never silent-send.
+- "design_list" / "design_read": read connected design files. If not connected, say so.
+- "deployments_list" / "deployments_read": read connected deployments. If not connected, say so.
+- "social_search": social feed lookup. Unavailable without an official API key — never scrape.
 - "workspace_publish_file": attach a binary from the isolated workspace (csv, png, zip, or other generated files) as a downloadable file in this thread. Do not use this to rebuild Word/PDF/Excel — use create_document / create_pdf / create_spreadsheet.
 - "generate_image": generate a bitmap image from a description. Confirms before spending — the user sees a card.
 - "tool_search": unlock optional tools (memory, Drive, GitHub) by keyword when needed.

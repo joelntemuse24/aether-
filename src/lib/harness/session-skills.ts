@@ -75,6 +75,22 @@ export function resolveSessionSkills(input: {
       promptHint: "User is signed in — memory tools may be available.",
       available: !!input.signedIn,
     },
+    {
+      id: "workspace_media",
+      label: "Media",
+      description: "Trim, concat, GIF, or burn captions in the workspace",
+      promptHint:
+        "Use workspace_ffmpeg for trim/concat/GIF/burned-in captions. If it reports MISSING, say so — do not invent a video.",
+      available: true,
+    },
+    {
+      id: "scheduled_jobs",
+      label: "Automations",
+      description: "Recurring drafts that confirm before send",
+      promptHint:
+        "schedule_create always confirms. When a job fires it prepares a draft and waits on a card — never silent-send.",
+      available: !!input.signedIn,
+    },
   ];
 
   return skills.filter((s) => s.available);

@@ -714,4 +714,73 @@ describe("executeAetherTool", () => {
     assert.equal(result.needs_confirmation, true);
     assert.match(String(result.preview), /a@b\.com/);
   });
+
+  it("always confirms schedule_create and does not register until approved", async () => {
+    let registered = false;
+    const result = await executeAetherTool({
+      name: "schedule_create",
+      args: {
+        title: "Morning brief",
+        prompt: "Summarize overnight notes",
+        when: "every morning",
+        delivery: "email",
+      },
+      ctx: baseCtx({
+        approvalMode: "auto",
+        deps: {
+          registerSchedule: async () => {
+            registered = true;
+            return { ok: true as const, job: {} as never, fires: false };
+          },
+          createConfirmation: async (request) => ({
+            ok: true as const,
+            needs_confirmation: true as const,
+            confirmation_id: "sched-1",
+            action: request.action,
+            title: request.title,
+            preview: request.preview,
+            instruction: "wait",
+          }),
+        },
+      }),
+    });
+    assert.equal(registered, false);
+    assert.equal(result.needs_confirmation, true);
+    assert.match(String(result.preview), /Schedule|morning|confirm/i);
+  });
+
+  it("is honest when design files are not connected", async () => {
+    const result = await executeAetherTool({
+      name: "design_list",
+      args: { query: "brand" },
+      ctx: baseCtx({
+        deps: {
+          designList: async () => ({
+            ok: false as const,
+            error: "Design files are not connected.",
+          }),
+        },
+      }),
+    });
+    assert.equal(result.ok, false);
+    assert.match(String(result.error), /not connected/i);
+    assert.doesNotMatch(String(result.error), /Figma/i);
+  });
+
+  it("never scrapes a social feed", async () => {
+    const result = await executeAetherTool({
+      name: "social_search",
+      args: { query: "aether" },
+      ctx: baseCtx({
+        deps: {
+          socialSearch: async () => ({
+            ok: false as const,
+            error: "Social feed search is unavailable without an official API key.",
+          }),
+        },
+      }),
+    });
+    assert.equal(result.ok, false);
+    assert.match(String(result.error), /official API key/i);
+  });
 });

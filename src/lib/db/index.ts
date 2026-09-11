@@ -192,6 +192,27 @@ async function ensureSchema(db: AppDb): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS scheduled_jobs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      cron TEXT NOT NULL,
+      timezone TEXT NOT NULL DEFAULT 'UTC',
+      delivery TEXT NOT NULL DEFAULT 'inbox',
+      status TEXT NOT NULL DEFAULT 'active',
+      conversation_id TEXT,
+      trigger_schedule_id TEXT,
+      last_run_at TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS scheduled_jobs_user_idx
+      ON scheduled_jobs (user_id, created_at DESC)
+  `);
     })().catch((err) => {
       schemaPromise = null;
       throw err;

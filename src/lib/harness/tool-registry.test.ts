@@ -20,6 +20,11 @@ describe("tool availability vs Fast/Expert", () => {
       TOOL_NAMES.searchImages,
       TOOL_NAMES.generateImage,
       TOOL_NAMES.fetchUrl,
+      TOOL_NAMES.workspaceFfmpeg,
+      TOOL_NAMES.scheduleCreate,
+      TOOL_NAMES.designList,
+      TOOL_NAMES.deploymentsList,
+      TOOL_NAMES.socialSearch,
     ]) {
       assert.ok(names.includes(name), name);
     }
