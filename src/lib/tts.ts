@@ -61,9 +61,17 @@ export type SpeechUtteranceLike = {
 
 export type SpeechSynthesisLike = {
   speaking: boolean;
+  pending?: boolean;
   cancel: () => void;
   speak: (utterance: SpeechUtteranceLike) => void;
 };
+
+/** True only if the engine accepted the utterance. Silent APIs count as unavailable. */
+export function utteranceStarted(
+  synth: SpeechSynthesisLike | null | undefined,
+): boolean {
+  return synth?.speaking === true || synth?.pending === true;
+}
 
 type SpeechSynthesisCtor = new (text: string) => SpeechUtteranceLike;
 
@@ -131,5 +139,5 @@ export function stopSpeaking(
 export function isSpeaking(
   scope: Window | null = typeof window === "undefined" ? null : window,
 ): boolean {
-  return getSynthesis(scope)?.speaking === true;
+  return utteranceStarted(getSynthesis(scope));
 }

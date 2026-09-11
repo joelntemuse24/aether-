@@ -5,6 +5,7 @@ import {
   plainTextForSpeech,
   plainTextFromMessage,
   speechSynthesisSupported,
+  utteranceStarted,
 } from "./tts";
 
 describe("TTS playback helpers", () => {
@@ -41,5 +42,17 @@ describe("TTS playback helpers", () => {
     assert.equal(speechSynthesisSupported(), false);
     assert.match(PLAYBACK_UNAVAILABLE_MESSAGE, /isn.t available/i);
     assert.doesNotMatch(PLAYBACK_UNAVAILABLE_MESSAGE, /Google|Eleven|OpenAI|vendor/i);
+  });
+
+  it("treats a silent speech engine as not started", () => {
+    assert.equal(utteranceStarted(null), false);
+    assert.equal(
+      utteranceStarted({ speaking: false, pending: false, cancel() {}, speak() {} }),
+      false,
+    );
+    assert.equal(
+      utteranceStarted({ speaking: false, pending: true, cancel() {}, speak() {} }),
+      true,
+    );
   });
 });

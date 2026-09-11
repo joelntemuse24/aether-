@@ -1386,6 +1386,7 @@ const PlayAnswerButton: FC = () => {
       : "Listen";
 
   return (
+    <>
     <TooltipIconButton
       tooltip={tooltip}
       aria-label={tooltip}
@@ -1412,8 +1413,11 @@ const PlayAnswerButton: FC = () => {
         }
         setPlaying(true);
         window.setTimeout(() => {
-          if (!isSpeaking()) setPlaying(false);
-        }, 50);
+          if (isSpeaking()) return;
+          stopSpeaking();
+          setPlaying(false);
+          setUnavailable(true);
+        }, 250);
       }}
     >
       {playing ? (
@@ -1422,6 +1426,12 @@ const PlayAnswerButton: FC = () => {
         <Volume2Icon className="size-3.5" />
       )}
     </TooltipIconButton>
+    {unavailable ? (
+      <span className="max-w-[16rem] text-[11px] leading-snug text-[var(--muted)]">
+        {PLAYBACK_UNAVAILABLE_MESSAGE}
+      </span>
+    ) : null}
+  </>
   );
 };
 
