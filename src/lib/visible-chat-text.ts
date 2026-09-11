@@ -22,24 +22,30 @@ const RECOVER_TOOL =
 
 const ARG_PAIR = /([a-zA-Z_][\w]*)\s*=\s*"([^"]*)"/g;
 
-export function looksLikeRawToolMarkup(text: string): boolean {
-  if (!text) return false;
+function asText(text: unknown): string {
+  return typeof text === "string" ? text : "";
+}
+
+export function looksLikeRawToolMarkup(text: unknown): boolean {
+  const value = asText(text);
+  if (!value) return false;
   return (
-    /<\s*\|\s*DSML\s*\|/i.test(text) ||
-    /<\/\s*\|\s*DSML\s*\|/i.test(text) ||
-    /<(?:tool_call|function_call|invoke)\b/i.test(text)
+    /<\s*\|\s*DSML\s*\|/i.test(value) ||
+    /<\/\s*\|\s*DSML\s*\|/i.test(value) ||
+    /<(?:tool_call|function_call|invoke)\b/i.test(value)
   );
 }
 
-export function recoverToolCallsFromMarkup(text: string): RecoveredToolCall[] {
-  if (!text || !looksLikeRawToolMarkup(text)) return [];
+export function recoverToolCallsFromMarkup(text: unknown): RecoveredToolCall[] {
+  const value = asText(text);
+  if (!value || !looksLikeRawToolMarkup(value)) return [];
   const found: RecoveredToolCall[] = [];
   const seen = new Set<string>();
 
   const interiors = [
-    ...text.matchAll(/<\s*\/?\s*\|\s*\/?\s*DSML\s*\|([^>]*)>/gi),
+    ...value.matchAll(/<\s*\/?\s*\|\s*\/?\s*DSML\s*\|([^>]*)>/gi),
   ].map((m) => m[1] ?? "");
-  const haystacks = interiors.length > 0 ? interiors : [text];
+  const haystacks = interiors.length > 0 ? interiors : [value];
 
   for (const chunk of haystacks) {
     const named = chunk.match(RECOVER_TOOL);
@@ -59,9 +65,10 @@ export function recoverToolCallsFromMarkup(text: string): RecoveredToolCall[] {
 }
 
 /** Prose only — raw DSML / tool XML removed. Empty when the part was markup. */
-export function sanitizeVisibleAssistantText(text: string): string {
-  if (!text) return "";
-  let next = text.replace(DSML_BLOCK, " ");
+export function sanitizeVisibleAssistantText(text: unknown): string {
+  const value = asText(text);
+  if (!value) return "";
+  let next = value.replace(DSML_BLOCK, " ");
   next = next.replace(DSML_TAG, " ");
   next = next.replace(TOOL_XML_BLOCK, " ");
   next = next.replace(/<\s*\|\s*\/?\s*DSML[\s\S]*/gi, " ");
@@ -69,7 +76,8 @@ export function sanitizeVisibleAssistantText(text: string): string {
   return next;
 }
 
-export function isHiddenToolMarkup(text: string): boolean {
-  if (!looksLikeRawToolMarkup(text)) return false;
-  return sanitizeVisibleAssistantText(text).length === 0;
+export function isHiddenToolMarkup(text: unknown): boolean {
+  const value = asText(text);
+  if (!looksLikeRawToolMarkup(value)) return false;
+  return sanitizeVisibleAssistantText(value).length === 0;
 }

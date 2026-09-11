@@ -10,7 +10,7 @@ import {
   type FC,
 } from "react";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
-import { ToolCallPart, type ToolPartLike } from "@/components/assistant-ui/tool-ui";
+import { ToolCallPart } from "@/components/assistant-ui/tool-ui";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { ThreadHeader } from "@/components/assistant-ui/thread-header";
 import {
@@ -18,6 +18,8 @@ import {
   MessageSourceCards,
   MessageAgentActivity,
 } from "@/components/assistant-ui/agent-status-strip";
+import { ChatRenderErrorBoundary } from "@/components/chat-render-error";
+import { toToolPartLike } from "@/lib/tool-part";
 import "@/components/assistant-ui/agent-activity.css";
 import { ModelPicker } from "@/components/model-picker";
 import {
@@ -1220,7 +1222,7 @@ const ComposerAction: FC<{
 
 const MessageError: FC = () => {
   const errorText = useAuiState((s) => {
-    const status = s.message.status as
+    const status = s.message?.status as
       | { type?: string; reason?: string; error?: unknown }
       | undefined;
     if (status?.type !== "incomplete" || status.reason !== "error") return "";
@@ -1283,7 +1285,7 @@ const MessageError: FC = () => {
 
 const AssistantMessage: FC = () => {
   // Animate only while this message is actively generating — not on rehydrate.
-  const isLive = useAuiState((s) => s.message.status?.type === "running");
+  const isLive = useAuiState((s) => s.message?.status?.type === "running");
   return (
     <MessagePrimitive.Root
       data-role="assistant"
@@ -1299,22 +1301,37 @@ const AssistantMessage: FC = () => {
           "[&_.prose-aether]:font-[family-name:var(--font-serif)]",
         )}
       >
-        <MessageAgentActivity />
-        <MessagePrimitive.Parts>
-          {({ part }) => {
-            if (part.type === "text") {
-              const raw =
-                "text" in part && typeof part.text === "string" ? part.text : "";
-              if (!raw.trim() || isHiddenToolMarkup(raw)) return null;
-              return <MarkdownText />;
-            }
-            if (part.type === "tool-call")
-              return <ToolCallPart part={part as unknown as ToolPartLike} />;
-            return null;
-          }}
-        </MessagePrimitive.Parts>
-        <MessageSourceCards />
-        <MessageError />
+        <ChatRenderErrorBoundary>
+          <MessageAgentActivity />
+          <MessagePrimitive.Parts>
+            {({ part }) => {
+              if (!part || typeof part !== "object") return null;
+              const type =
+                "type" in part && typeof part.type === "string" ? part.type : "";
+              if (type === "text") {
+                const raw =
+                  "text" in part && typeof part.text === "string" ? part.text : "";
+                if (!raw.trim() || isHiddenToolMarkup(raw)) return null;
+                return (
+                  <ChatRenderErrorBoundary fallback={null}>
+                    <MarkdownText />
+                  </ChatRenderErrorBoundary>
+                );
+              }
+              const tool = toToolPartLike(part);
+              if (tool) {
+                return (
+                  <ChatRenderErrorBoundary fallback={null}>
+                    <ToolCallPart part={tool} />
+                  </ChatRenderErrorBoundary>
+                );
+              }
+              return null;
+            }}
+          </MessagePrimitive.Parts>
+          <MessageSourceCards />
+          <MessageError />
+        </ChatRenderErrorBoundary>
       </div>
 
       <div className="mt-1.5 flex min-h-8 items-center gap-1 opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover/message:opacity-100 md:focus-within:opacity-100 data-[running=true]:opacity-0">
@@ -1328,10 +1345,10 @@ const AssistantMessage: FC = () => {
 const AssistantActionBar: FC = () => {
   const [needsContinue, setNeedsContinue] = useState(false);
   const preferContinue = useAuiState((s) => {
-    const messages = s.thread.messages;
+    const messages = Array.isArray(s.thread?.messages) ? s.thread.messages : [];
     const last = messages[messages.length - 1];
-    if (!last || last.id !== s.message.id) return false;
-    const status = s.message.status as
+    if (!last || last.id !== s.message?.id) return false;
+    const status = s.message?.status as
       | { type?: string; reason?: string; error?: unknown }
       | undefined;
     if (isContinuableStatus(status?.type, status?.reason)) return true;

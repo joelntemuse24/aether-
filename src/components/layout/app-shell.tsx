@@ -15,6 +15,7 @@ import { useAttachments } from "@/providers/attachments-provider";
 import { useDrive } from "@/providers/drive-provider";
 import { cn } from "@/lib/utils";
 import { ArtifactDraftingPeek } from "@/components/layout/artifact-drafting-peek";
+import { ChatRenderErrorBoundary } from "@/components/chat-render-error";
 
 // Lazy-loaded: pulls in highlight.js + marked only when an artifact is shown.
 const ArtifactPanel = dynamic(
@@ -138,7 +139,9 @@ export function AppShell() {
               artifactOpen && "hidden lg:block",
             )}
           >
-            <Thread />
+            <ChatRenderErrorBoundary>
+              <Thread />
+            </ChatRenderErrorBoundary>
           </div>
           <ArtifactPanel />
         </div>

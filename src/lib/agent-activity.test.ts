@@ -10,6 +10,8 @@ import {
   formatActivityElapsed,
   recalledActivityElapsed,
   resetActivityClock,
+  shouldShowComposerActivity,
+  sourceChipLabel,
   syncActivityClock,
 } from "./agent-activity";
 
@@ -520,6 +522,92 @@ describe("deriveAgentActivity — honesty", () => {
     resetActivityClock();
   });
 
+  it("collapses a failed Dublin-time tool turn instead of staying live", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          id: "a-dublin",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-web_search",
+              state: "output-available",
+              output: {
+                ok: true,
+                results: [
+                  { title: "Time and Date", url: "https://www.timeanddate.com" },
+                ],
+              },
+            },
+            {
+              type: "tool-execute_python",
+              state: "output-error",
+              errorText: "Python failed",
+              output: { ok: false, error: "Python failed" },
+              isError: true,
+            },
+          ],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 31,
+    });
+    assert.equal(view.mode, "collapsed");
+    assert.equal(view.summaryLabel, "Worked for 31s");
+    assert.equal(view.steps.every((step) => step.state === "complete"), true);
+    assert.equal(
+      activityClockShouldRun({
+        isRunning: false,
+        messages: [
+          {
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-execute_python",
+                state: "output-error",
+                errorText: "Python failed",
+                isError: true,
+              },
+            ],
+          },
+        ],
+      }),
+      false,
+    );
+  });
+
+  it("hides the composer clock once an assistant message exists", () => {
+    assert.equal(
+      shouldShowComposerActivity({
+        hasAssistantMessage: true,
+        visible: true,
+        mode: "live",
+      }),
+      false,
+    );
+    assert.equal(
+      shouldShowComposerActivity({
+        hasAssistantMessage: false,
+        visible: true,
+        mode: "live",
+      }),
+      true,
+    );
+    assert.equal(
+      shouldShowComposerActivity({
+        hasAssistantMessage: false,
+        visible: true,
+        mode: "collapsed",
+      }),
+      false,
+    );
+  });
+
+  it("source chips survive missing titles", () => {
+    assert.equal(sourceChipLabel({ title: undefined, url: "https://time.is" }), "time.is");
+    assert.equal(sourceChipLabel({ title: undefined }), "");
+  });
+
   it("collects DSML tool_search from a text part", () => {
     const steps = collectActivitySteps(
       [
@@ -627,6 +715,8 @@ describe("thread / composer copy stays honest", () => {
     assert.match(strip, /aether-activity__steps/);
     assert.match(strip, /aether-activity__spinner/);
     assert.match(strip, /activityClockShouldRun/);
+    assert.match(strip, /shouldShowComposerActivity/);
+    assert.match(strip, /sourceChipLabel/);
     assert.match(
       strip,
       /continuePhase:\s*continueStatus\.phase/,

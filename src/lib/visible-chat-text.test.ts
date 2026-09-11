@@ -46,6 +46,14 @@ describe("visible assistant text never dumps raw tool XML", () => {
     assert.equal(looksLikeRawToolMarkup(prose), false);
     assert.equal(sanitizeVisibleAssistantText(prose), prose);
   });
+
+  it("never throws on non-string preprocess input", () => {
+    for (const value of [undefined, null, 12, { text: "x" }, ["<|DSML|"]]) {
+      assert.equal(sanitizeVisibleAssistantText(value as never), "");
+      assert.equal(looksLikeRawToolMarkup(value as never), false);
+      assert.equal(isHiddenToolMarkup(value as never), false);
+    }
+  });
 });
 
 describe("visible-text wiring", () => {
