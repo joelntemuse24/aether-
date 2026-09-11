@@ -41,6 +41,8 @@ import { buildTextAttachmentPrefix } from "@/lib/attachments";
 import { getAttachmentPayload } from "@/lib/attachment-payloads";
 import { resolveVoicePrompt } from "@/lib/voice";
 import { runPython } from "@/lib/pyodide";
+import { resolveCurrentTime } from "@/lib/current-time";
+import { persistThreadSpeedTier } from "@/lib/thread-speed";
 import { TOOL_NAMES, type ExecutePythonInput } from "@/lib/tools";
 import { useHarness } from "./harness-provider";
 import { useProjects } from "./projects-provider";
@@ -223,6 +225,10 @@ function useChatThreadRuntime() {
           });
           if (remoteId && outgoing.length > 0) {
             persistThreadUIMessages(remoteId, outgoing);
+            persistThreadSpeedTier(
+              remoteId,
+              settingsRef.current.speedTier === "expert" ? "expert" : "fast",
+            );
             persistedKeyRef.current = remoteId;
           }
           return {
@@ -436,9 +442,23 @@ function useChatThreadRuntime() {
     transport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onToolCall: async ({ toolCall }) => {
-      if (toolCall.toolName !== TOOL_NAMES.executePython) return;
       const add = addToolResultRef.current;
       if (!add) return;
+      if (toolCall.toolName === TOOL_NAMES.currentTime) {
+        const timeZone =
+          toolCall.input &&
+          typeof toolCall.input === "object" &&
+          "timeZone" in toolCall.input
+            ? String((toolCall.input as { timeZone?: unknown }).timeZone ?? "")
+            : "";
+        add({
+          tool: TOOL_NAMES.currentTime,
+          toolCallId: toolCall.toolCallId,
+          output: resolveCurrentTime({ timeZone }),
+        });
+        return;
+      }
+      if (toolCall.toolName !== TOOL_NAMES.executePython) return;
 
       const { code } = toolCall.input as ExecutePythonInput;
       const output = await runPython(code);

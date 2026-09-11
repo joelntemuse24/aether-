@@ -1,8 +1,11 @@
 "use client";
 
+import { useEffect } from "react";
 import { CheckIcon } from "lucide-react";
 import { useSettings } from "@/providers/settings-provider";
 import { cn } from "@/lib/utils";
+import { readThreadIdFromLocation } from "@/lib/thread-url";
+import { loadThreadSpeedTier, persistThreadSpeedTier } from "@/lib/thread-speed";
 
 const TIERS: Array<{
   id: "fast" | "expert";
@@ -23,6 +26,20 @@ export function ModelPicker({ className }: { className?: string }) {
   const { settings, updateSettings } = useSettings();
   const tier = settings.speedTier === "expert" ? "expert" : "fast";
 
+  useEffect(() => {
+    const apply = () => {
+      const id = readThreadIdFromLocation();
+      if (!id) return;
+      const stored = loadThreadSpeedTier(id);
+      if (stored && stored !== (settings.speedTier === "expert" ? "expert" : "fast")) {
+        updateSettings({ speedTier: stored });
+      }
+    };
+    apply();
+    window.addEventListener("aether:thread-switched", apply);
+    return () => window.removeEventListener("aether:thread-switched", apply);
+  }, [settings.speedTier, updateSettings]);
+
   return (
     <div
       className={cn("flex items-center gap-0.5 rounded-md bg-[var(--surface)] p-0.5", className)}
@@ -38,7 +55,11 @@ export function ModelPicker({ className }: { className?: string }) {
             role="radio"
             aria-checked={selected}
             title={t.hint}
-            onClick={() => updateSettings({ speedTier: t.id })}
+            onClick={() => {
+              updateSettings({ speedTier: t.id });
+              const id = readThreadIdFromLocation();
+              if (id) persistThreadSpeedTier(id, t.id);
+            }}
             className={cn(
               "flex h-7 items-center gap-1 rounded-[5px] px-2.5 text-xs font-medium transition-colors",
               selected

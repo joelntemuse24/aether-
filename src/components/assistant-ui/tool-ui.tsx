@@ -270,6 +270,8 @@ function toolTraceNoun(name: string): string {
       return "Sources";
     case TOOL_NAMES.executePython:
       return "Output";
+    case TOOL_NAMES.currentTime:
+      return "Time";
     case TOOL_NAMES.createArtifact:
       return "Preview";
     case TOOL_NAMES.createPresentation:

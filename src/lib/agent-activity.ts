@@ -269,6 +269,8 @@ export function activityLabelForTool(
       return running ? "Running command" : "Ran command";
     case "execute_python":
       return running ? "Running Python" : "Ran Python";
+    case "current_time":
+      return running ? "Checking the time" : "Checked the time";
     case "memory_write":
       return running ? "Saving memory" : "Saved memory";
     case "github_get_repo":
@@ -460,6 +462,25 @@ export function deriveAgentActivity(
   }
 
   return hidden(elapsed);
+}
+
+/**
+ * Failed tools collapse the activity strip while useChat can stay
+ * `isRunning`. Don't leave Stop armed after that.
+ */
+export function composerShouldShowStop(input: {
+  threadIsRunning: boolean;
+  messageStatus?: string;
+  parts?: readonly ActivityPart[];
+}): boolean {
+  if (!input.threadIsRunning) return false;
+  const status = input.messageStatus;
+  if (!status || status === "running") return true;
+  const tools = (input.parts ?? []).filter((part) => toolNameFromActivityPart(part));
+  if (tools.length > 0 && tools.every((part) => partLooksComplete(part))) {
+    return false;
+  }
+  return true;
 }
 
 /** Composer clock is only for the gap before the assistant row mounts. */

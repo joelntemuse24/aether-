@@ -8,6 +8,7 @@ import { tool, type ToolSet } from "ai";
 import {
   TOOL_NAMES,
   executePythonInput,
+  currentTimeInput,
   webSearchInput,
   createArtifactInput,
   memorySearchInput,
@@ -88,8 +89,13 @@ export function buildHeadStartToolSchemas(
   const tools: ToolSet = {
     [TOOL_NAMES.executePython]: tool({
       description:
-        "Execute Python code in a sandboxed in-browser Pyodide runtime and return stdout and the final expression value. Use for math, data processing, or verifying code.",
+        "Execute Python code in a sandboxed in-browser Pyodide runtime and return stdout and the final expression value. Use for math, data processing, or verifying code. IANA time zones (ZoneInfo) are available.",
       inputSchema: executePythonInput,
+    }),
+    [TOOL_NAMES.currentTime]: tool({
+      description:
+        "Return the current date and time in an IANA timezone (e.g. Europe/Dublin). Prefer this for clock questions instead of execute_python.",
+      inputSchema: currentTimeInput,
     }),
     [TOOL_NAMES.webSearch]: tool({
       description:

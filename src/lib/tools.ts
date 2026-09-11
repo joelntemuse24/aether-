@@ -16,6 +16,7 @@ export { ARTIFACT_KINDS, CANONICAL_ARTIFACT_KINDS, type ArtifactKind };
 
 export const TOOL_NAMES = {
   executePython: "execute_python",
+  currentTime: "current_time",
   webSearch: "web_search",
   createArtifact: "create_artifact",
   memorySearch: "memory_search",
@@ -113,6 +114,14 @@ export const executePythonOutput = z.object({
   durationMs: z.number().optional(),
 });
 export type ExecutePythonOutput = z.infer<typeof executePythonOutput>;
+
+export const currentTimeInput = z.object({
+  timeZone: z
+    .string()
+    .optional()
+    .describe("IANA timezone, e.g. Europe/Dublin. Defaults to UTC."),
+});
+export type CurrentTimeInput = z.infer<typeof currentTimeInput>;
 
 export const webSearchInput = z.object({
   query: z.string().describe("The search query."),
@@ -648,6 +657,10 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Python",
     runningLabel: "Running Python…",
   },
+  [TOOL_NAMES.currentTime]: {
+    label: "Time",
+    runningLabel: "Checking the time…",
+  },
   [TOOL_NAMES.webSearch]: {
     label: "Web search",
     runningLabel: "Searching the web…",
@@ -908,7 +921,8 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 - Always end the turn with a clear, user-visible answer — even when tools return thin, empty, or blocked results. State uncertainty briefly; never leave the user with only tool noise.
 
 ## Core tools (always available when tools are on)
-- "execute_python": sandboxed in-browser Python for math, data, or verifying code.
+- "current_time": cheap IANA clock (e.g. Europe/Dublin). Prefer this for "what time is it" questions — do not use execute_python or pip for a timezone lookup.
+- "execute_python": sandboxed in-browser Python for math, data, or verifying code. IANA zones (ZoneInfo) are available.
 - "web_search": current or factual lookups. Few focused queries only. Results include id (1, 2, …) — cite those ids inline as [1], [2] in the final answer.
 - "browse_page": read a public page and return a structured extract (title, headings, excerpts, links). Pass instructions to focus the extract. Soft-fails paywalls; PDFs best-effort. Never use for github.com repos. Cite the page as the next [n] after search hits.
 - "fetch_url": compat alias for browse_page without instructions.

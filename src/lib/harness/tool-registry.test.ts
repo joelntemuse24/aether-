@@ -14,6 +14,7 @@ describe("tool availability vs Fast/Expert", () => {
       TOOL_NAMES.createDocument,
       TOOL_NAMES.createPdf,
       TOOL_NAMES.createArtifact,
+      TOOL_NAMES.currentTime,
       TOOL_NAMES.webSearch,
       TOOL_NAMES.browsePage,
       TOOL_NAMES.browserSnapshot,

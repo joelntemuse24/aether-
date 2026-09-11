@@ -18,6 +18,7 @@ import { TOOL_NAMES, type WebSearchOutput } from "@/lib/tools";
 /** Always exposed when tools are on (plus tool_search when deferred tools exist). */
 export const CORE_TOOL_ORDER = [
   TOOL_NAMES.executePython,
+  TOOL_NAMES.currentTime,
   TOOL_NAMES.webSearch,
   TOOL_NAMES.fetchUrl,
   TOOL_NAMES.browsePage,
