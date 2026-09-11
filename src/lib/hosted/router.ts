@@ -5,11 +5,12 @@ import {
   getRelayUpstreams,
   type UpstreamConfig,
 } from "./config";
-import type { HostedModelFamily } from "./catalog";
-import { familyForRankedModel } from "./rank-models";
 import {
-  FAST_MODEL_CASCADE,
-  PAID_FLASH_FALLBACKS,
+  EXPERT_BUZZ_FALLBACK_MODEL,
+  EXPERT_OPENROUTER_FALLBACK_MODEL,
+  EXPERT_PRIMARY_MODEL,
+  FAST_OPENROUTER_FALLBACK_MODEL,
+  FAST_OPENROUTER_MODEL,
   type SpeedTier,
 } from "./speed-tiers";
 
@@ -27,7 +28,7 @@ export type HostedRoute = {
 
 function stripProviderPrefix(modelId: string): string {
   return modelId.replace(
-    /^(anthropic|openai|google|meta-llama|meta|deepseek|x-ai|moonshotai)\//,
+    /^(anthropic|openai|google|meta-llama|meta|deepseek|x-ai|moonshotai|nvidia)\//,
     "",
   );
 }
@@ -46,16 +47,13 @@ export function toOpenRouterModelId(modelId: string): string {
   if (modelId.startsWith("gemini-")) return `google/${modelId}`;
   if (modelId.startsWith("deepseek-")) return `deepseek/${modelId}`;
   if (modelId.startsWith("llama-")) return `meta-llama/${modelId}`;
+  if (modelId.startsWith("nemotron-")) return `nvidia/${modelId}`;
   return modelId;
 }
 
-/** Model id for OpenAI-compatible specialty gateways (BUZZ, …). */
+/** Model id for OpenAI-compatible specialty gateways (Buzz, …). */
 export function toGatewayModelId(modelId: string): string {
   return stripProviderPrefix(modelId);
-}
-
-export function familyForModel(modelId: string): HostedModelFamily {
-  return familyForRankedModel(modelId);
 }
 
 function relayRoutes(gatewayModelId: string): RoutedUpstream[] {
@@ -77,13 +75,22 @@ function pushUnique(
   list.push(next);
 }
 
+function buzzGptUpstream(): ReturnType<typeof getGptUpstream> | null {
+  const gpt = getGptUpstream();
+  if (gpt.configured) return gpt;
+  const claude = getClaudeUpstream();
+  return claude.configured ? claude : null;
+}
+
 /**
- * Resolve a user-facing model id to primary + failover chain:
- * specialty gateway (BUZZ) → optional relays → OpenRouter.
+ * Resolve Cloud Fast/Expert to primary + failover chain.
  *
- * `speedTier: "fast"` (the default) reroutes generic requests through the
- * BUZZ free/cheap cascade first, then paid Flash, then OpenRouter as a
- * last resort. `"expert"` keeps the premium model on top of its chain.
+ * Fast → OpenRouter Ultra → OpenRouter Lightning (no Buzz).
+ * Expert → Buzz Luna → Buzz Sol → [optional relays] → OpenRouter DeepSeek.
+ *
+ * `modelId` is required for call-site compat but does not select the Cloud
+ * route; Fast/Expert is the product control after the catalog picker was
+ * removed.
  */
 export function resolveHostedRoute(
   modelId: string,
@@ -92,78 +99,36 @@ export function resolveHostedRoute(
   const trimmed = modelId.trim();
   if (!trimmed) return null;
 
-  const family = familyForModel(trimmed);
   const openrouter = getOpenRouterUpstream();
-  const claude = getClaudeUpstream();
   const gpt = getGptUpstream();
-  const gatewayId = toGatewayModelId(trimmed);
+  const buzz = buzzGptUpstream();
 
-  const openrouterRoute = (id = trimmed): RoutedUpstream | null =>
+  const openrouterRoute = (id: string): RoutedUpstream | null =>
     openrouter.configured
       ? { upstream: openrouter, modelId: toOpenRouterModelId(id) }
       : null;
 
-  if (family === "claude" || family === "chatgpt") {
-    const specialty =
-      family === "claude"
-        ? claude.configured
-          ? ({ upstream: claude, modelId: gatewayId } satisfies RoutedUpstream)
-          : null
-        : gpt.configured
-          ? ({ upstream: gpt, modelId: gatewayId } satisfies RoutedUpstream)
-          : null;
+  const chain: RoutedUpstream[] = [];
+  const seen = new Set<string>();
 
-    const chain: RoutedUpstream[] = [];
-    const seen = new Set<string>();
-    if (speedTier === "expert") {
-      // Expert keeps the premium model first, then the standard chain.
-      pushUnique(chain, specialty, seen);
-      for (const relay of relayRoutes(gatewayId)) {
-        pushUnique(chain, relay, seen);
-      }
-      pushUnique(chain, openrouterRoute(), seen);
-    } else {
-      // Fast: free/cheap BUZZ cascade → paid Flash → premium → OpenRouter.
-      const buzz = claude.configured ? claude : gpt.configured ? gpt : null;
-      for (const id of FAST_MODEL_CASCADE) {
-        if (buzz?.configured) pushUnique(chain, { upstream: buzz, modelId: id }, seen);
-      }
-      for (const id of PAID_FLASH_FALLBACKS) {
-        if (buzz?.configured) pushUnique(chain, { upstream: buzz, modelId: id }, seen);
-      }
-      pushUnique(chain, specialty, seen);
-      for (const relay of relayRoutes(gatewayId)) {
-        pushUnique(chain, relay, seen);
-      }
-      pushUnique(chain, openrouterRoute(), seen);
+  if (speedTier === "expert") {
+    const lunaId = toGatewayModelId(EXPERT_PRIMARY_MODEL);
+    const solId = toGatewayModelId(EXPERT_BUZZ_FALLBACK_MODEL);
+    const specialty = gpt.configured ? gpt : buzz;
+    if (specialty) {
+      pushUnique(chain, { upstream: specialty, modelId: lunaId }, seen);
+      pushUnique(chain, { upstream: specialty, modelId: solId }, seen);
     }
-
-    if (chain.length === 0) return null;
-    const [primary, ...fallbacks] = chain;
-    return { primary, fallbacks };
+    for (const relay of relayRoutes(lunaId)) {
+      pushUnique(chain, relay, seen);
+    }
+    pushUnique(chain, openrouterRoute(EXPERT_OPENROUTER_FALLBACK_MODEL), seen);
+  } else {
+    pushUnique(chain, openrouterRoute(FAST_OPENROUTER_MODEL), seen);
+    pushUnique(chain, openrouterRoute(FAST_OPENROUTER_FALLBACK_MODEL), seen);
   }
 
-  // Long-tail: Fast reroutes through the BUZZ cascade too; Expert keeps the
-  // OpenRouter catalog id (relays rarely have the full catalog).
-  if (speedTier === "fast") {
-    const buzz = claude.configured ? claude : gpt.configured ? gpt : null;
-    if (buzz?.configured) {
-      const chain: RoutedUpstream[] = [];
-      const seen = new Set<string>();
-      for (const id of FAST_MODEL_CASCADE) {
-        pushUnique(chain, { upstream: buzz, modelId: id }, seen);
-      }
-      for (const id of PAID_FLASH_FALLBACKS) {
-        pushUnique(chain, { upstream: buzz, modelId: id }, seen);
-      }
-      pushUnique(chain, openrouterRoute(trimmed), seen);
-      if (chain.length > 0) {
-        const [primary, ...fallbacks] = chain;
-        return { primary, fallbacks };
-      }
-    }
-  }
-  const primary = openrouterRoute();
-  if (!primary) return null;
-  return { primary, fallbacks: [] };
+  if (chain.length === 0) return null;
+  const [primary, ...fallbacks] = chain;
+  return { primary, fallbacks };
 }

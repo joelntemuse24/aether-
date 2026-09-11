@@ -6,6 +6,7 @@ import {
   isHostedChatAvailable,
 } from "@/lib/hosted/availability";
 import { fetchRankedHostedCatalog } from "@/lib/hosted/openrouter-catalog";
+import { hostedCloudRouteAdvertisement } from "@/lib/hosted/speed-tiers";
 import { resolveChatTransportMode } from "@/lib/trigger/config";
 
 export const runtime = "nodejs";
@@ -17,18 +18,16 @@ export const runtime = "nodejs";
 export async function GET() {
   const capabilities = getHostedCapabilities();
   const available = isHostedChatAvailable(process.env, isHostedConfigured());
+  const advertised = hostedCloudRouteAdvertisement();
 
   let models: Awaited<ReturnType<typeof fetchRankedHostedCatalog>>["models"] = [];
-  let defaultModel: string = DEFAULT_HOSTED_MODEL;
+  let defaultModel: string = advertised.defaultModel || DEFAULT_HOSTED_MODEL;
 
   try {
     const live = await fetchRankedHostedCatalog();
     models = filterCatalogForCapabilities(live.models, capabilities);
-    defaultModel =
-      models.find((m) => m.id === live.defaultModel)?.id ??
-      models.find((m) => m.family === "chatgpt")?.id ??
-      models[0]?.id ??
-      "";
+    // Cloud default is the Fast route, not the ranked catalog flagship.
+    defaultModel = advertised.defaultModel;
   } catch (err) {
     console.error("[api/hosted/status] catalog", err);
     // Hosted may still be available via Hermes; picker falls back below.
@@ -51,6 +50,8 @@ export async function GET() {
       catalog: capabilities.catalog,
     },
     defaultModel,
+    routes: advertised.routes,
+    failover: advertised.failover,
     models: models.map((m) => ({
       id: m.id,
       label: m.label,

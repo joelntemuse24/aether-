@@ -30,6 +30,8 @@ export type HostedStatus = {
   available: boolean;
   chatTransport?: "durable" | "request";
   defaultModel: string;
+  routes?: { fast: string; expert: string };
+  failover?: { fast: string[]; expert: string[] };
   models: Array<{
     id: string;
     label: string;

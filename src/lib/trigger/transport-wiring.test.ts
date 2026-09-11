@@ -127,4 +127,29 @@ describe("chat transport wiring contract", () => {
     assert.match(initialize, /void \(async \(\) => \{/);
     assert.match(initialize, /return \{ remoteId, externalId: undefined \}/);
   });
+
+  it("wires Fast/Expert through durable agent and request fallback", () => {
+    const agent = readFileSync(
+      new URL("../../trigger/chat.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(agent, /speedTier:\s*z\.enum\(\["fast", "expert"\]\)/);
+    assert.match(agent, /speedTier: prepared\.speedTier/);
+
+    const requestPath = readFileSync(
+      new URL("../../app/api/chat/route.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(requestPath, /x-speed-tier/);
+    assert.match(requestPath, /resolveCloudTierModel/);
+    assert.match(requestPath, /speedTier,/);
+
+    const picker = readFileSync(
+      new URL("../../components/model-picker.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.match(picker, /Fast/);
+    assert.match(picker, /Expert/);
+    assert.doesNotMatch(picker, /OpenRouter|Buzz|Nemotron|Luna|Trigger|Hermes|Vercel/);
+  });
 });

@@ -6,7 +6,11 @@
 import type { UIMessage } from "ai";
 import { isCloudDbConfigured } from "@/lib/db";
 import { relevantMemoryPrompt } from "@/lib/memory/store";
-import type { SpeedTier } from "@/lib/hosted/speed-tiers";
+import {
+  resolveCloudTierModel,
+  resolveEffectiveSpeedTier,
+  type SpeedTier,
+} from "@/lib/hosted/speed-tiers";
 import {
   formatProjectForPrompt,
   getProject,
@@ -83,17 +87,16 @@ export async function prepareDurableChatTurn(input: {
   const parsed = parseHarnessFields(data.harness);
   const timeBudget = resolveTurnTimeBudget(data.harness, userText);
 
-  // Speed tier: user's picker choice is the base; deep reasoning or a vision
-  // attachment forces Expert (premium/vision models) as a floor.
+  // Speed tier: composer Fast/Expert is the base; deep reasoning or a vision
+  // attachment forces Expert (Luna / vision) as a floor.
   const hasImageAttachment = (data.attachments ?? []).some(
     (a) => a.mime?.startsWith("image/"),
   );
-  const requestedTier: SpeedTier =
-    data.speedTier === "expert" ? "expert" : "fast";
-  const speedTier: SpeedTier =
-    parsed.harnessDepth === "deep" || hasImageAttachment
-      ? "expert"
-      : requestedTier;
+  const speedTier = resolveEffectiveSpeedTier({
+    requested: data.speedTier,
+    harnessDepth: parsed.harnessDepth,
+    hasImageAttachment,
+  });
 
   let memoryBlock = "";
   let projectBlock = "";
@@ -142,7 +145,7 @@ export async function prepareDurableChatTurn(input: {
 
   return {
     hosted,
-    requestedModel: data.model,
+    requestedModel: hosted ? resolveCloudTierModel(speedTier) : data.model,
     speedTier,
     provider: data.provider ?? "openrouter",
     apiKey: hosted ? "" : data.apiKey ?? "",

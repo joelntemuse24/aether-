@@ -1,70 +1,210 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { resolveHostedRoute } from "./router";
-import { threadNeedsLongContext } from "./speed-tiers";
+import {
+  EXPERT_BUZZ_FALLBACK_MODEL,
+  EXPERT_OPENROUTER_FALLBACK_MODEL,
+  EXPERT_PRIMARY_MODEL,
+  FAST_OPENROUTER_FALLBACK_MODEL,
+  FAST_OPENROUTER_MODEL,
+  hostedCloudRouteAdvertisement,
+  resolveCloudTierModel,
+  resolveEffectiveSpeedTier,
+  threadNeedsLongContext,
+} from "./speed-tiers";
 
-function withBuzzEnv<T>(fn: () => T): T {
-  const prevKey = process.env.AETHER_HOSTED_BUZZ_API_KEY;
-  const prevBase = process.env.AETHER_HOSTED_BUZZ_BASE_URL;
-  const prevOr = process.env.OPENROUTER_API_KEY;
-  process.env.AETHER_HOSTED_BUZZ_API_KEY = "test-key";
-  process.env.AETHER_HOSTED_BUZZ_BASE_URL = "https://api.buzzai.cc/v1";
-  process.env.OPENROUTER_API_KEY = "test-or-key";
+function withEnv<T>(
+  patch: Record<string, string | undefined>,
+  fn: () => T,
+): T {
+  const prev: Record<string, string | undefined> = {};
+  for (const key of Object.keys(patch)) {
+    prev[key] = process.env[key];
+    const next = patch[key];
+    if (next === undefined) delete process.env[key];
+    else process.env[key] = next;
+  }
   try {
     return fn();
   } finally {
-    if (prevKey === undefined) delete process.env.AETHER_HOSTED_BUZZ_API_KEY;
-    else process.env.AETHER_HOSTED_BUZZ_API_KEY = prevKey;
-    if (prevBase === undefined) delete process.env.AETHER_HOSTED_BUZZ_BASE_URL;
-    else process.env.AETHER_HOSTED_BUZZ_BASE_URL = prevBase;
-    if (prevOr === undefined) delete process.env.OPENROUTER_API_KEY;
-    else process.env.OPENROUTER_API_KEY = prevOr;
+    for (const [key, value] of Object.entries(prev)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 }
 
+function withBuzzAndOpenRouter<T>(fn: () => T): T {
+  return withEnv(
+    {
+      AETHER_HOSTED_BUZZ_API_KEY: "test-key",
+      AETHER_HOSTED_BUZZ_BASE_URL: "https://api.buzzai.cc/v1",
+      OPENROUTER_API_KEY: "test-or-key",
+    },
+    fn,
+  );
+}
+
+function hopIds(route: NonNullable<ReturnType<typeof resolveHostedRoute>>) {
+  return [route.primary, ...route.fallbacks].map((r) => ({
+    upstream: r.upstream.id,
+    model: r.modelId,
+  }));
+}
+
+describe("resolveCloudTierModel", () => {
+  it("maps Fast to the paid OpenRouter Nemotron Ultra slug", () => {
+    assert.equal(resolveCloudTierModel("fast"), FAST_OPENROUTER_MODEL);
+    assert.equal(FAST_OPENROUTER_MODEL, "nvidia/nemotron-3-ultra-550b-a55b");
+    assert.doesNotMatch(FAST_OPENROUTER_MODEL, /:free/);
+  });
+
+  it("maps Expert to Buzz Luna (gateway id)", () => {
+    assert.equal(resolveCloudTierModel("expert"), EXPERT_PRIMARY_MODEL);
+    assert.equal(EXPERT_PRIMARY_MODEL, "gpt-5.6-luna");
+  });
+});
+
+describe("hostedCloudRouteAdvertisement", () => {
+  it("advertises Fast/Expert primaries and the confirmed failover order", () => {
+    const advertised = hostedCloudRouteAdvertisement();
+    assert.equal(advertised.defaultModel, FAST_OPENROUTER_MODEL);
+    assert.equal(advertised.routes.fast, FAST_OPENROUTER_MODEL);
+    assert.equal(advertised.routes.expert, "openai/gpt-5.6-luna");
+    assert.deepEqual(advertised.failover.fast, [
+      "nvidia/nemotron-3-ultra-550b-a55b",
+      "nvidia/nemotron-3.5-lightning",
+    ]);
+    assert.deepEqual(advertised.failover.expert, [
+      "openai/gpt-5.6-luna",
+      "openai/gpt-5.6-sol",
+      "deepseek/deepseek-v4-flash",
+    ]);
+    assert.doesNotMatch(advertised.failover.fast.join(" "), /:free/);
+    assert.doesNotMatch(
+      advertised.failover.expert.join(" "),
+      /openai\/gpt-5\.6-luna$/,
+    );
+  });
+});
+
+describe("resolveEffectiveSpeedTier", () => {
+  it("honors the composer Fast/Expert choice", () => {
+    assert.equal(resolveEffectiveSpeedTier({ requested: "fast" }), "fast");
+    assert.equal(resolveEffectiveSpeedTier({ requested: "expert" }), "expert");
+    assert.equal(resolveEffectiveSpeedTier({}), "fast");
+  });
+
+  it("floors to Expert for deep harness or vision attachments", () => {
+    assert.equal(
+      resolveEffectiveSpeedTier({ requested: "fast", harnessDepth: "deep" }),
+      "expert",
+    );
+    assert.equal(
+      resolveEffectiveSpeedTier({
+        requested: "fast",
+        hasImageAttachment: true,
+      }),
+      "expert",
+    );
+  });
+});
+
 describe("resolveHostedRoute speed tiers", () => {
-  it("fast tier puts the BUZZ free cascade before premium ChatGPT", () => {
-    withBuzzEnv(() => {
+  it("Fast is OpenRouter Ultra then paid Lightning, never Buzz", () => {
+    withBuzzAndOpenRouter(() => {
       const route = resolveHostedRoute("gpt-5.6-luna", "fast");
-      assert.ok(route, "route should resolve when BUZZ is configured");
-      assert.equal(route.primary.modelId, "glm-5.3-flash-free");
-      const ids = [route.primary, ...route.fallbacks].map((r) => r.modelId);
-      assert.ok(ids.includes("deepseek-v4-flash-free"), "second free hop present");
-      assert.ok(ids.includes("gpt-5.6-luna"), "premium kept in chain");
-      const last = ids[ids.length - 1];
-      assert.equal(last, "openai/gpt-5.6-luna", "premium is the last OpenRouter fallback");
+      assert.ok(route, "route should resolve when OpenRouter is configured");
+      assert.deepEqual(hopIds(route), [
+        { upstream: "openrouter", model: FAST_OPENROUTER_MODEL },
+        { upstream: "openrouter", model: FAST_OPENROUTER_FALLBACK_MODEL },
+      ]);
+      assert.equal(FAST_OPENROUTER_FALLBACK_MODEL, "nvidia/nemotron-3.5-lightning");
+      assert.doesNotMatch(FAST_OPENROUTER_FALLBACK_MODEL, /:free/);
+      assert.equal(
+        hopIds(route).some((h) => h.upstream === "gpt" || h.upstream === "claude"),
+        false,
+      );
     });
   });
 
-  it("expert tier keeps the premium model primary", () => {
-    withBuzzEnv(() => {
+  it("Fast overrides leftover catalog ids and stays on OpenRouter", () => {
+    withBuzzAndOpenRouter(() => {
+      const route = resolveHostedRoute("moonshotai/kimi-k3", "fast");
+      assert.ok(route);
+      assert.deepEqual(hopIds(route).map((h) => h.model), [
+        FAST_OPENROUTER_MODEL,
+        FAST_OPENROUTER_FALLBACK_MODEL,
+      ]);
+    });
+  });
+
+  it("Expert is Buzz Luna, then Buzz Sol, then OpenRouter DeepSeek V4 Flash", () => {
+    withBuzzAndOpenRouter(() => {
+      const route = resolveHostedRoute("openai/gpt-5.5", "expert");
+      assert.ok(route);
+      assert.deepEqual(hopIds(route), [
+        { upstream: "gpt", model: EXPERT_PRIMARY_MODEL },
+        { upstream: "gpt", model: EXPERT_BUZZ_FALLBACK_MODEL },
+        { upstream: "openrouter", model: EXPERT_OPENROUTER_FALLBACK_MODEL },
+      ]);
+      assert.equal(EXPERT_BUZZ_FALLBACK_MODEL, "gpt-5.6-sol");
+      assert.equal(
+        EXPERT_OPENROUTER_FALLBACK_MODEL,
+        "deepseek/deepseek-v4-flash",
+      );
+      assert.equal(
+        hopIds(route).some((h) => h.model === "openai/gpt-5.6-luna"),
+        false,
+      );
+    });
+  });
+
+  it("Expert keeps Luna as the Buzz primary", () => {
+    withBuzzAndOpenRouter(() => {
       const route = resolveHostedRoute("gpt-5.6-luna", "expert");
       assert.ok(route);
+      assert.equal(route.primary.upstream.id, "gpt");
       assert.equal(route.primary.modelId, "gpt-5.6-luna");
     });
   });
 
-  it("fast reroutes long-tail catalog ids through the BUZZ cascade", () => {
-    withBuzzEnv(() => {
-      const route = resolveHostedRoute("moonshotai/kimi-k3", "fast");
-      assert.ok(route);
-      assert.equal(route.primary.modelId, "glm-5.3-flash-free");
-      const ids = [route.primary, ...route.fallbacks].map((r) => r.modelId);
-      assert.ok(
-        ids.includes("moonshotai/kimi-k3"),
-        "original catalog id stays as last resort",
-      );
-      assert.equal(ids[ids.length - 1], "moonshotai/kimi-k3");
-    });
+  it("Expert without Buzz goes to OpenRouter DeepSeek, not OpenRouter Luna", () => {
+    withEnv(
+      {
+        AETHER_HOSTED_BUZZ_API_KEY: undefined,
+        AETHER_HOSTED_BUZZ_BASE_URL: undefined,
+        AETHER_HOSTED_CLAUDE_API_KEY: undefined,
+        AETHER_HOSTED_GPT_API_KEY: undefined,
+        AETHER_HOSTED_CHATGPT_API_KEY: undefined,
+        ANTHROPIC_AUTH_TOKEN: undefined,
+        OPENROUTER_API_KEY: "test-or-key",
+      },
+      () => {
+        const route = resolveHostedRoute("openai/gpt-5.5", "expert");
+        assert.ok(route);
+        assert.deepEqual(hopIds(route), [
+          {
+            upstream: "openrouter",
+            model: EXPERT_OPENROUTER_FALLBACK_MODEL,
+          },
+        ]);
+      },
+    );
   });
 
-  it("expert keeps long-tail ids on OpenRouter directly", () => {
-    withBuzzEnv(() => {
-      const route = resolveHostedRoute("moonshotai/kimi-k3", "expert");
-      assert.ok(route);
-      assert.equal(route.primary.modelId, "moonshotai/kimi-k3");
-      assert.equal(route.fallbacks.length, 0);
-    });
+  it("Fast without OpenRouter does not fall back to Buzz", () => {
+    withEnv(
+      {
+        AETHER_HOSTED_BUZZ_API_KEY: "test-key",
+        AETHER_HOSTED_BUZZ_BASE_URL: "https://api.buzzai.cc/v1",
+        OPENROUTER_API_KEY: undefined,
+      },
+      () => {
+        const route = resolveHostedRoute("openai/gpt-5.5", "fast");
+        assert.equal(route, null);
+      },
+    );
   });
 });
 

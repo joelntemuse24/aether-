@@ -70,6 +70,7 @@ describe("head start route bundle isolation", () => {
     assert.match(route, /chat\.headStart/);
     assert.match(route, /@trigger\.dev\/sdk\/chat-server/);
     assert.match(route, /buildHeadStartToolSchemas/);
+    assert.match(route, /speedTier: prepared\.speedTier/);
     assert.match(route, /export const maxDuration = 60/);
     assert.equal(HEAD_START_MAX_DURATION_SECONDS, 60);
     assert.match(route, /sessionSafeChatClientData|splitHeadStartClientData/);

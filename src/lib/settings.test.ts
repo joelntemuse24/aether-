@@ -10,6 +10,14 @@ describe("buildChatHeaders", () => {
     });
     assert.equal(hosted["x-tool-approval-mode"], "ask");
     assert.equal(hosted["x-access-mode"], "hosted");
+    assert.equal(hosted["x-speed-tier"], "fast");
+
+    const expert = buildChatHeaders({
+      ...DEFAULT_SETTINGS,
+      accessMode: "hosted",
+      speedTier: "expert",
+    });
+    assert.equal(expert["x-speed-tier"], "expert");
 
     const auto = buildChatHeaders({
       ...DEFAULT_SETTINGS,

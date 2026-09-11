@@ -108,6 +108,19 @@ describe("chat clientData secrets", () => {
     assert.equal("apiKey" in persistableChatClientData(data), false);
   });
 
+  it("forwards composer Fast/Expert on hosted clientData without a BYOK key", () => {
+    const data = buildBrowserChatClientData({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        accessMode: "hosted",
+        speedTier: "expert",
+      },
+    });
+    assert.equal(data.accessMode, "hosted");
+    assert.equal(data.speedTier, "expert");
+    assert.equal(data.apiKey, undefined);
+  });
+
   it("keeps the context JWT on the sticky session payload but not the BYOK key", () => {
     const safe = sessionSafeChatClientData({
       ...byok,

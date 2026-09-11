@@ -29,6 +29,7 @@ const clientDataSchema = z
     model: z.string().min(1),
     toolsEnabled: z.boolean().optional(),
     approvalMode: z.enum(["ask", "auto"]).optional(),
+    speedTier: z.enum(["fast", "expert"]).optional(),
     provider: z.enum(["openrouter", "openai", "anthropic", "custom"]).optional(),
     apiKey: z.string().optional(),
     baseURL: z.string().optional(),
