@@ -1,6 +1,8 @@
-/**
- * Browser client for auth-gated cloud conversation APIs.
- */
+import {
+  createLatestWriteGate,
+  fingerprintFormatRepo,
+  type FormatRepoLike,
+} from "@/lib/conversation-persist";
 
 export type CloudStatus = {
   configured: boolean;
@@ -137,9 +139,13 @@ export async function cloudGetMessageRepo(id: string): Promise<CloudFormatRepo> 
   return data.repo ?? { entries: [] };
 }
 
-export async function cloudSaveMessageRepo(
+const cloudPersistGate = createLatestWriteGate<FormatRepoLike>(
+  fingerprintFormatRepo,
+);
+
+async function persistCloudRepoNow(
   id: string,
-  repo: CloudFormatRepo,
+  repo: FormatRepoLike,
 ): Promise<void> {
   const res = await fetch(
     `/api/conversations/${encodeURIComponent(id)}/messages`,
@@ -150,6 +156,13 @@ export async function cloudSaveMessageRepo(
     },
   );
   if (!res.ok) throw new Error("Failed to save messages");
+}
+
+export async function cloudSaveMessageRepo(
+  id: string,
+  repo: CloudFormatRepo,
+): Promise<void> {
+  await cloudPersistGate.enqueue(id, repo, persistCloudRepoNow);
 }
 
 export async function cloudMigrate(

@@ -65,7 +65,59 @@ export function hasContinuableAssistant(messages: UIMessage[]): boolean {
   });
 }
 
-export function shouldAutoContinue(input: {
+function asPartRecord(part: UIMessage["parts"][number]): Record<string, unknown> {
+  if (!part || typeof part !== "object") return {};
+  return part as Record<string, unknown>;
+}
+
+function isToolPart(part: UIMessage["parts"][number]): boolean {
+  const type = typeof part.type === "string" ? part.type : "";
+  return type === "tool-call" || type.startsWith("tool-");
+}
+
+function toolPartIsComplete(part: UIMessage["parts"][number]): boolean {
+  const rec = asPartRecord(part);
+  if (rec.state === "output-available" || rec.state === "output-error") {
+    return true;
+  }
+  if (rec.output != null || rec.result !== undefined) return true;
+  const status = rec.status as { type?: string } | undefined;
+  const t = status?.type;
+  if (t === "complete" || t === "incomplete" || t === "cancelled") return true;
+  return false;
+}
+
+/** Last assistant still has a tool call that never produced a result. */
+export function hasIncompleteToolWork(messages: UIMessage[]): boolean {
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== "assistant") return false;
+  const parts = Array.isArray(last.parts) ? last.parts : [];
+  return parts.some((part) => isToolPart(part) && !toolPartIsComplete(part));
+}
+
+/** Stream ended between tools, or tools never resolved — not a finished answer. */
+export function looksLikeUnfinishedTurn(messages: UIMessage[]): boolean {
+  if (hasIncompleteToolWork(messages)) return true;
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== "assistant") return false;
+  const parts = Array.isArray(last.parts) ? last.parts : [];
+  const hasTools = parts.some((part) => isToolPart(part));
+  if (!hasTools) return false;
+  const text = parts
+    .filter(
+      (part): part is { type: "text"; text: string } =>
+        part.type === "text" && typeof part.text === "string",
+    )
+    .map((part) => part.text)
+    .join("")
+    .trim();
+  return text.length === 0;
+}
+
+/** Head Start is 60s; treat a long abort with open tools as a platform kill. */
+export const PLATFORM_ABORT_MIN_MS = 50_000;
+
+export type ContinueDecisionInput = {
   isAbort: boolean;
   isDisconnect: boolean;
   isError: boolean;
@@ -73,11 +125,22 @@ export function shouldAutoContinue(input: {
   messages: UIMessage[];
   runDurationMs: number;
   continueCount: number;
-}): boolean {
-  if (input.isAbort) return false;
-  if (input.continueCount >= MAX_AUTO_CONTINUES) return false;
-  if (!hasContinuableAssistant(input.messages)) return false;
+};
 
+/** Fallback after live session follow ends with unfinished work. */
+export function shouldAutoContinue(input: ContinueDecisionInput): boolean {
+  if (input.continueCount >= MAX_AUTO_CONTINUES) return false;
+  const unfinished = looksLikeUnfinishedTurn(input.messages);
+  if (input.isAbort) {
+    return (
+      unfinished &&
+      input.runDurationMs >= PLATFORM_ABORT_MIN_MS &&
+      hasContinuableAssistant(input.messages)
+    );
+  }
+  if (!hasContinuableAssistant(input.messages) && !unfinished) return false;
+
+  if (unfinished) return true;
   if (isServerTimeoutError(input.error)) return true;
 
   // Abrupt stream drop after a long run ≈ serverless wall clock.
@@ -88,5 +151,16 @@ export function shouldAutoContinue(input: {
     return true;
   }
 
+  return false;
+}
+
+/** Show the Continue bar even when auto-continue budget is spent. */
+export function shouldOfferContinue(input: ContinueDecisionInput): boolean {
+  const unfinished = looksLikeUnfinishedTurn(input.messages);
+  if (input.isAbort && !unfinished) return false;
+  if (unfinished) return true;
+  if (!hasContinuableAssistant(input.messages)) return false;
+  if (isServerTimeoutError(input.error)) return true;
+  if (input.isDisconnect || input.isError) return true;
   return false;
 }
