@@ -158,7 +158,7 @@ export function downloadMime(kind: string, language?: string): string {
   if (k === "markdown" || k === "document") return "text/markdown";
   if (k === "csv" || k === "data") return "text/csv";
   if (k === "svg") return "image/svg+xml";
-  if (k === "json" || language === "json") return "application/json";
+  if (language === "json") return "application/json";
   return "text/plain";
 }
 
