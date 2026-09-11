@@ -115,7 +115,7 @@ export async function driveUploadForUser(
         Authorization: `Bearer ${auth.accessToken}`,
         "Content-Type": multipart.contentType,
       },
-      body: multipart.body,
+      body: new Uint8Array(multipart.body),
     },
   );
   if (res.status === 401 || res.status === 403) {
