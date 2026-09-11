@@ -18,7 +18,6 @@ import { useArtifact } from "@/providers/artifact-provider";
 import {
   collectSourceCitations,
   remarkInlineCitations,
-  type CitationPart,
 } from "@/lib/citations";
 
 const ARTIFACT_LANGS = new Set([
@@ -56,7 +55,7 @@ const ARTIFACT_LANGS = new Set([
 ]);
 
 const MarkdownTextImpl = () => {
-  const parts = useAuiState((s) => s.message.parts as CitationPart[] | undefined);
+  const parts = useAuiState((s) => s.message.parts);
   const sources = useMemo(() => collectSourceCitations(parts), [parts]);
   const plugins = useMemo(
     () => [remarkGfm, remarkInlineCitations(sources)],
