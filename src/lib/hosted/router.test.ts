@@ -53,10 +53,10 @@ function hopIds(route: NonNullable<ReturnType<typeof resolveHostedRoute>>) {
 }
 
 describe("resolveCloudTierModel", () => {
-  it("maps Fast to the paid OpenRouter Nemotron Ultra slug", () => {
+  it("maps Fast to the free OpenRouter Nemotron Ultra slug", () => {
     assert.equal(resolveCloudTierModel("fast"), FAST_OPENROUTER_MODEL);
-    assert.equal(FAST_OPENROUTER_MODEL, "nvidia/nemotron-3-ultra-550b-a55b");
-    assert.doesNotMatch(FAST_OPENROUTER_MODEL, /:free/);
+    assert.equal(FAST_OPENROUTER_MODEL, "nvidia/nemotron-3-ultra-550b-a55b:free");
+    assert.match(FAST_OPENROUTER_MODEL, /:free$/);
   });
 
   it("maps Expert to Buzz Luna (gateway id)", () => {
@@ -72,7 +72,7 @@ describe("hostedCloudRouteAdvertisement", () => {
     assert.equal(advertised.routes.fast, FAST_OPENROUTER_MODEL);
     assert.equal(advertised.routes.expert, "openai/gpt-5.6-luna");
     assert.deepEqual(advertised.failover.fast, [
-      "nvidia/nemotron-3-ultra-550b-a55b",
+      "nvidia/nemotron-3-ultra-550b-a55b:free",
       "nvidia/nemotron-3.5-lightning",
     ]);
     assert.deepEqual(advertised.failover.expert, [
@@ -80,7 +80,8 @@ describe("hostedCloudRouteAdvertisement", () => {
       "openai/gpt-5.6-sol",
       "deepseek/deepseek-v4-flash",
     ]);
-    assert.doesNotMatch(advertised.failover.fast.join(" "), /:free/);
+    assert.match(advertised.failover.fast[0], /:free$/);
+    assert.doesNotMatch(advertised.failover.fast[1], /:free/);
     assert.doesNotMatch(
       advertised.failover.expert.join(" "),
       /openai\/gpt-5\.6-luna$/,
@@ -111,7 +112,7 @@ describe("resolveEffectiveSpeedTier", () => {
 });
 
 describe("resolveHostedRoute speed tiers", () => {
-  it("Fast is OpenRouter Ultra then paid Lightning, never Buzz", () => {
+  it("Fast is OpenRouter free Ultra then paid Lightning, never Buzz", () => {
     withBuzzAndOpenRouter(() => {
       const route = resolveHostedRoute("gpt-5.6-luna", "fast");
       assert.ok(route, "route should resolve when OpenRouter is configured");

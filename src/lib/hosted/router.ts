@@ -85,7 +85,7 @@ function buzzGptUpstream(): ReturnType<typeof getGptUpstream> | null {
 /**
  * Resolve Cloud Fast/Expert to primary + failover chain.
  *
- * Fast → OpenRouter Ultra → OpenRouter Lightning (no Buzz).
+ * Fast → OpenRouter free Ultra → OpenRouter paid Lightning (no Buzz).
  * Expert → Buzz Luna → Buzz Sol → [optional relays] → OpenRouter DeepSeek.
  *
  * `modelId` is required for call-site compat but does not select the Cloud

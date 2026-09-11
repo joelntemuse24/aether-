@@ -7,7 +7,7 @@ import {
 import { prepareDurableChatTurn } from "./prepare-turn";
 
 describe("prepareDurableChatTurn Cloud Fast/Expert routing", () => {
-  it("rewrites hosted Fast turns to OpenRouter Nemotron Ultra", async () => {
+  it("rewrites hosted Fast turns to OpenRouter free Nemotron Ultra", async () => {
     const prepared = await prepareDurableChatTurn({
       clientData: {
         accessMode: "hosted",
