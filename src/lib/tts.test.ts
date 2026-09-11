@@ -36,6 +36,10 @@ describe("TTS playback helpers", () => {
       }),
       /Hello there/,
     );
+    const readonlyParts = [
+      { type: "text", text: "Readonly **parts**" },
+    ] as const;
+    assert.match(plainTextFromMessage({ parts: readonlyParts }), /Readonly parts/);
   });
 
   it("is honest when speech synthesis is missing", () => {

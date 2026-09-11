@@ -1368,9 +1368,7 @@ const PlayAnswerButton: FC = () => {
   const [playing, setPlaying] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const text = useAuiState((s) =>
-    plainTextFromMessage(
-      s.message as { parts?: Array<{ type?: string; text?: string }>; content?: unknown },
-    ),
+    plainTextFromMessage(s.message),
   );
 
   useEffect(() => {

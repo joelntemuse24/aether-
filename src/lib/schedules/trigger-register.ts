@@ -14,6 +14,8 @@ export async function createTriggerSchedule(input: {
       cron: input.cron,
       timezone: input.timezone || "UTC",
       externalId: input.externalId,
+      // SDK requires this; unique so a user can keep more than one job.
+      deduplicationKey: `aether-schedule:${input.externalId}:${crypto.randomUUID()}`,
     });
     const id = (created as { id?: string }).id;
     return id ? { id } : null;
