@@ -499,4 +499,48 @@ describe("executeAetherTool", () => {
     );
     assert.equal((result as { content?: string }).content, undefined);
   });
+
+  it("searches project knowledge without a confirm card", async () => {
+    const result = await executeAetherTool({
+      name: "project_knowledge_search",
+      args: { query: "dublin ops", projectId: "proj-1" },
+      ctx: baseCtx({
+        projectId: "proj-1",
+        deps: {
+          searchProjectKnowledge: async (userId, projectId, query) => {
+            assert.equal(userId, "user-1");
+            assert.equal(projectId, "proj-1");
+            assert.equal(query, "dublin ops");
+            return [
+              { fileId: "f1", filename: "brief.md", text: "Dublin ops", score: 3 },
+            ];
+          },
+          createConfirmation: async () => {
+            throw new Error("project_knowledge_search must not pause");
+          },
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.needs_confirmation, undefined);
+    const payload = result as unknown as { results: unknown[] };
+    assert.equal(payload.results.length, 1);
+  });
+
+  it("requires an active project for project_knowledge_search", async () => {
+    const result = await executeAetherTool({
+      name: "project_knowledge_search",
+      args: { query: "hello" },
+      ctx: baseCtx({
+        projectId: null,
+        deps: {
+          searchProjectKnowledge: async () => {
+            throw new Error("should not search without a project");
+          },
+        },
+      }),
+    });
+    assert.equal(result.ok, false);
+    assert.match(String(result.error), /project/i);
+  });
 });

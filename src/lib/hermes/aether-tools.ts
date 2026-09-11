@@ -5,6 +5,7 @@
  */
 
 import { saveArtifact } from "@/lib/artifacts/store";
+import { searchProjectKnowledge } from "@/lib/projects/knowledge-store";
 import {
   driveReadTextForUser,
   driveSearchForUser,
@@ -87,6 +88,12 @@ export type AetherToolDeps = {
       tags?: string[];
     },
   ) => Promise<unknown>;
+  searchProjectKnowledge?: (
+    userId: string,
+    projectId: string,
+    query: string,
+    limit?: number,
+  ) => Promise<unknown[]>;
   saveArtifact?: (
     userId: string,
     input: {
@@ -96,6 +103,7 @@ export type AetherToolDeps = {
       content: string;
       projectId?: string;
       conversationId?: string;
+      producedBy?: string[];
     },
   ) => Promise<{ id: string }>;
   driveSearch?: (
@@ -172,6 +180,7 @@ export type AetherToolResult = {
 const AETHER_TOOL_NAMES = new Set<string>([
   TOOL_NAMES.memorySearch,
   TOOL_NAMES.memoryWrite,
+  TOOL_NAMES.projectKnowledgeSearch,
   TOOL_NAMES.createArtifact,
   TOOL_NAMES.requestConfirmation,
   TOOL_NAMES.driveSearch,
@@ -436,6 +445,7 @@ async function persistArtifact(
     title: string;
     language?: string;
     content: string;
+    producedBy?: string[];
   },
 ): Promise<{ id?: string; persisted: boolean }> {
   if (!ctx.userId) {
@@ -455,6 +465,7 @@ async function persistArtifact(
       content: input.content,
       projectId: ctx.projectId ?? undefined,
       conversationId: ctx.conversationId ?? undefined,
+      producedBy: input.producedBy,
     });
     return { id: saved.id, persisted: true };
   } catch (err) {
@@ -536,8 +547,21 @@ export async function executeAetherTool(input: {
     return { ok: true, memory };
   }
 
+  if (name === TOOL_NAMES.projectKnowledgeSearch) {
+    if (!ctx.userId || !ctx.hasMemory) {
+      return { ok: false, error: "Project knowledge is not connected." };
+    }
+    const projectId = str(args.projectId) || ctx.projectId || "";
+    if (!projectId) {
+      return { ok: false, error: "No active project. Bind a project to this chat first." };
+    }
+    const search = ctx.deps?.searchProjectKnowledge ?? searchProjectKnowledge;
+    const results = await search(ctx.userId, projectId, str(args.query), 6);
+    return { ok: true, projectId, results };
+  }
+
   if (name === TOOL_NAMES.createArtifact) {
-    const kind = str(args.kind) || "document";
+    const kind = str(args.kind) || "markdown";
     const title = str(args.title);
     const content = str(args.content);
     if (!title || !content) {
@@ -548,6 +572,7 @@ export async function executeAetherTool(input: {
       title,
       language: str(args.language) || undefined,
       content,
+      producedBy: [name],
     });
     return {
       ok: true,
@@ -609,6 +634,7 @@ export async function executeAetherTool(input: {
       title,
       language: filename,
       content,
+      producedBy: [name],
     });
     return fileToolResult({
       title,
@@ -652,6 +678,7 @@ export async function executeAetherTool(input: {
       title,
       language: deck.filename,
       content: deck.dataUrl,
+      producedBy: [name],
     });
     return fileToolResult({
       title,
@@ -703,6 +730,7 @@ export async function executeAetherTool(input: {
       title,
       language: book.filename,
       content: book.dataUrl,
+      producedBy: [name],
     });
     return fileToolResult({
       title,
@@ -732,6 +760,7 @@ export async function executeAetherTool(input: {
       title,
       language: doc.filename,
       content: doc.dataUrl,
+      producedBy: [name],
     });
     return fileToolResult({
       title,
@@ -757,6 +786,7 @@ export async function executeAetherTool(input: {
       title,
       language: pdf.filename,
       content: pdf.dataUrl,
+      producedBy: [name],
     });
     return fileToolResult({
       title,

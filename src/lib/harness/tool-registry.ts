@@ -87,7 +87,11 @@ export function resolveAvailableToolNames(ctx: {
   const hasCalendar = !!(ctx.userId && ctx.hasCalendar);
   const hasContacts = !!(ctx.userId && ctx.hasContacts);
   if (hasMemory) {
-    names.push(TOOL_NAMES.memorySearch, TOOL_NAMES.memoryWrite);
+    names.push(
+      TOOL_NAMES.memorySearch,
+      TOOL_NAMES.memoryWrite,
+      TOOL_NAMES.projectKnowledgeSearch,
+    );
   }
   if (hasDrive) {
     names.push(TOOL_NAMES.driveSearch, TOOL_NAMES.driveRead);
@@ -272,6 +276,13 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     tools[TOOL_NAMES.memoryWrite] = tool({
       ...schemas[TOOL_NAMES.memoryWrite],
       execute: async (input) => runAether(TOOL_NAMES.memoryWrite, input),
+    });
+  }
+  if (schemas[TOOL_NAMES.projectKnowledgeSearch]) {
+    tools[TOOL_NAMES.projectKnowledgeSearch] = tool({
+      ...schemas[TOOL_NAMES.projectKnowledgeSearch],
+      execute: async (input) =>
+        runAether(TOOL_NAMES.projectKnowledgeSearch, input),
     });
   }
   if (schemas[TOOL_NAMES.driveSearch]) {

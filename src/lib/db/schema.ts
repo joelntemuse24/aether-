@@ -158,6 +158,14 @@ export const artifacts = pgTable(
     title: text("title").notNull(),
     language: text("language"),
     content: text("content").notNull(),
+    versions: jsonb("versions")
+      .$type<Array<{ n: number; content: string; createdAt: string }>>()
+      .notNull()
+      .default([]),
+    provenance: jsonb("provenance")
+      .$type<Array<{ tool: string; at: string }>>()
+      .notNull()
+      .default([]),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -217,9 +225,33 @@ export const userPreferences = pgTable("user_preferences", {
     .defaultNow(),
 });
 
+/** Uploaded project knowledge files (pdf/docx/md/txt/csv) with search chunks. */
+export const projectKnowledge = pgTable(
+  "project_knowledge",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    projectId: text("project_id").notNull(),
+    filename: text("filename").notNull(),
+    mime: text("mime"),
+    text: text("text").notNull(),
+    chunks: jsonb("chunks")
+      .$type<Array<{ index: number; text: string }>>()
+      .notNull()
+      .default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("project_knowledge_user_project_idx").on(t.userId, t.projectId),
+  ],
+);
+
 export type MemoryRecordRow = typeof memoryRecords.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect;
 export type ArtifactRow = typeof artifacts.$inferSelect;
+export type ProjectKnowledgeRow = typeof projectKnowledge.$inferSelect;
 export type VaultNoteRow = typeof vaultNotes.$inferSelect;
 export type PendingConfirmationDbRow = typeof pendingConfirmations.$inferSelect;
 export type UserPreferenceRow = typeof userPreferences.$inferSelect;

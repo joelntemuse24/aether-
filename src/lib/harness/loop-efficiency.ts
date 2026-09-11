@@ -42,6 +42,7 @@ export const CORE_TOOL_ORDER = [
 export const DEFERRED_TOOL_ORDER = [
   TOOL_NAMES.memorySearch,
   TOOL_NAMES.memoryWrite,
+  TOOL_NAMES.projectKnowledgeSearch,
   TOOL_NAMES.driveSearch,
   TOOL_NAMES.driveRead,
   TOOL_NAMES.githubGetRepo,
@@ -96,7 +97,7 @@ export type ToolCatalogEntry = {
 
 /** Sibling suites — unlocking one tool unlocks the whole capability set. */
 const DEFERRED_SUITES: ReadonlyArray<readonly string[]> = [
-  [TOOL_NAMES.memorySearch, TOOL_NAMES.memoryWrite],
+  [TOOL_NAMES.memorySearch, TOOL_NAMES.memoryWrite, TOOL_NAMES.projectKnowledgeSearch],
   [TOOL_NAMES.driveSearch, TOOL_NAMES.driveRead],
   [
     TOOL_NAMES.githubGetRepo,
@@ -162,6 +163,21 @@ const CATALOG: Record<string, Omit<ToolCatalogEntry, "name">> = {
       "from now on",
       "always",
       "don't forget",
+    ],
+  },
+  [TOOL_NAMES.projectKnowledgeSearch]: {
+    description:
+      "Search files uploaded to the active project and return relevant passages.",
+    keywords: [
+      "project",
+      "knowledge",
+      "uploaded",
+      "brief",
+      "pdf",
+      "docx",
+      "notes",
+      "project files",
+      "project knowledge",
     ],
   },
   [TOOL_NAMES.driveSearch]: {
@@ -253,7 +269,11 @@ const DOMAIN_FALLBACKS: ReadonlyArray<{
   {
     patterns:
       /\b(memory|remember|preference|preferences|about me|recall|don'?t forget|from now on)\b/i,
-    suite: [TOOL_NAMES.memorySearch, TOOL_NAMES.memoryWrite],
+    suite: [
+      TOOL_NAMES.memorySearch,
+      TOOL_NAMES.memoryWrite,
+      TOOL_NAMES.projectKnowledgeSearch,
+    ],
   },
   {
     patterns:

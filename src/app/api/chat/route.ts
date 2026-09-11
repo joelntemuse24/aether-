@@ -5,7 +5,7 @@ import type { HarnessChatContext } from "@/lib/harness/types";
 import { auth } from "@/auth";
 import { relevantMemoryPrompt } from "@/lib/memory/store";
 import {
-  formatProjectForPrompt,
+  formatProjectPromptWithKnowledge,
   getProject,
 } from "@/lib/projects/store";
 import { getValidDriveAccessToken } from "@/lib/drive-session";
@@ -163,7 +163,7 @@ export async function POST(req: Request) {
       );
       if (projectId) {
         const project = await getProject(userId, projectId);
-        projectBlock = formatProjectForPrompt(project);
+        projectBlock = await formatProjectPromptWithKnowledge(userId, project);
       }
     }
 

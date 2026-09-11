@@ -39,6 +39,7 @@ describe("head-start schema-only tools", () => {
       hasGitHub: true,
     });
     assert.ok(full[TOOL_NAMES.memorySearch]);
+    assert.ok(full[TOOL_NAMES.projectKnowledgeSearch]);
     assert.ok(full[TOOL_NAMES.driveRead]);
     assert.ok(full[TOOL_NAMES.githubReadFile]);
     assert.ok(full[TOOL_NAMES.githubListIssues]);

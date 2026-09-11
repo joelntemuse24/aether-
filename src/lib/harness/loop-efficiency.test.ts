@@ -17,6 +17,7 @@ const GITHUB_TOOLS = [
 const ALL_DEFERRED = [
   TOOL_NAMES.memorySearch,
   TOOL_NAMES.memoryWrite,
+  TOOL_NAMES.projectKnowledgeSearch,
   TOOL_NAMES.driveSearch,
   TOOL_NAMES.driveRead,
   ...GITHUB_TOOLS,
@@ -100,6 +101,7 @@ describe("expandDeferredSuites", () => {
     assert.deepEqual(expanded, [
       TOOL_NAMES.memorySearch,
       TOOL_NAMES.memoryWrite,
+      TOOL_NAMES.projectKnowledgeSearch,
     ]);
   });
 

@@ -22,6 +22,7 @@ import {
   type ExecutePythonOutput,
   type WebSearchOutput,
 } from "@/lib/tools";
+import { normalizeArtifactKind } from "@/lib/artifacts/kinds";
 
 /** Structural view of an assistant-ui enriched tool-call part. */
 export type ToolPartLike = {
@@ -279,6 +280,8 @@ function toolTraceNoun(name: string): string {
     case TOOL_NAMES.memorySearch:
     case TOOL_NAMES.memoryWrite:
       return "Memory";
+    case TOOL_NAMES.projectKnowledgeSearch:
+      return "Project";
     case TOOL_NAMES.driveSearch:
     case TOOL_NAMES.driveRead:
       return "Drive";
@@ -469,7 +472,7 @@ function toArtifact(
     mime?: string;
   },
 ): Artifact {
-  const kind = (input.kind ?? "code") as ArtifactKind;
+  const kind = normalizeArtifactKind(input.kind);
   return {
     id,
     title: input.title || "Artifact",
@@ -851,6 +854,54 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 };
 
 /* ─── Memory ─── */
+
+type KnowledgeHit = {
+  filename?: string;
+  text?: string;
+  score?: number;
+};
+
+const KnowledgeSearchToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = usePartRunning(part);
+  const input = part.args as { query?: string } | undefined;
+  const output = part.result as {
+    ok?: boolean;
+    results?: KnowledgeHit[];
+  } | undefined;
+  const error = part.isError || (output ? output.ok === false : false);
+  const results = output?.results ?? [];
+
+  return (
+    <ToolShell
+      name={TOOL_NAMES.projectKnowledgeSearch}
+      running={running}
+      error={error}
+      subtitle={input?.query}
+    >
+      {results.length === 0 && !running ? (
+        <p className="text-[12px] text-[var(--muted)]">No project files matched.</p>
+      ) : (
+        <ul className="space-y-2">
+          {results.map((r, i) => (
+            <li
+              key={`${r.filename || "file"}-${i}`}
+              className="rounded-lg border border-[var(--border)] bg-[var(--elevated)] px-2.5 py-2"
+            >
+              <div className="truncate text-[12px] font-medium text-[var(--text)]">
+                {r.filename || "File"}
+              </div>
+              {r.text && (
+                <p className="mt-1 line-clamp-3 text-[12px] text-[var(--muted)]">
+                  {r.text}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </ToolShell>
+  );
+};
 
 type MemoryRow = {
   id?: string;
@@ -1580,6 +1631,8 @@ export const ToolCallPart: FC<{ part: ToolPartLike }> = ({ part }) => {
       return <CreateArtifactToolCall part={part} />;
     case TOOL_NAMES.memorySearch:
       return <MemorySearchToolCall part={part} />;
+    case TOOL_NAMES.projectKnowledgeSearch:
+      return <KnowledgeSearchToolCall part={part} />;
     case TOOL_NAMES.memoryWrite:
       return <MemoryWriteToolCall part={part} />;
     case TOOL_NAMES.driveSearch:

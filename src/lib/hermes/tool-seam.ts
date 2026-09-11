@@ -26,6 +26,7 @@ export function hermesAetherToolSeamAddendum(
     live.push(
       "- memory_search: search the user's curated long-term memory.",
       "- memory_write: save a lasting fact they would want remembered across chats.",
+      "- project_knowledge_search: retrieve passages from files uploaded to the active project.",
     );
   } else {
     live.push(

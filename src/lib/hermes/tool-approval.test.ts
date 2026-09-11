@@ -23,6 +23,7 @@ describe("Ask vs Auto policy", () => {
   it("lets safe reads run without a card in Ask", () => {
     for (const name of [
       "memory_search",
+      "project_knowledge_search",
       "drive_search",
       "drive_read",
       "github_get_repo",

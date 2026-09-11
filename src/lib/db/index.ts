@@ -121,13 +121,39 @@ async function ensureSchema(db: AppDb): Promise<void> {
       title TEXT NOT NULL,
       language TEXT,
       content TEXT NOT NULL,
+      versions JSONB NOT NULL DEFAULT '[]'::jsonb,
+      provenance JSONB NOT NULL DEFAULT '[]'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
   await db.execute(sql`
+    ALTER TABLE artifacts
+      ADD COLUMN IF NOT EXISTS versions JSONB NOT NULL DEFAULT '[]'::jsonb
+  `);
+  await db.execute(sql`
+    ALTER TABLE artifacts
+      ADD COLUMN IF NOT EXISTS provenance JSONB NOT NULL DEFAULT '[]'::jsonb
+  `);
+  await db.execute(sql`
     CREATE INDEX IF NOT EXISTS artifacts_user_updated_idx
       ON artifacts (user_id, updated_at DESC)
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS project_knowledge (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      mime TEXT,
+      text TEXT NOT NULL,
+      chunks JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS project_knowledge_user_project_idx
+      ON project_knowledge (user_id, project_id)
   `);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS vault_notes (

@@ -492,11 +492,15 @@ function ProjectsSection() {
     update,
     remove,
     cloud,
+    knowledgeFiles,
+    uploadKnowledge,
+    removeKnowledge,
   } = useProjects();
   const { status } = useSession();
   const [dialog, setDialog] = useState<
     null | "create" | "instructions" | "delete"
   >(null);
+  const knowledgeInputRef = useRef<HTMLInputElement>(null);
 
   if (status !== "authenticated" || !cloud) return null;
 
@@ -574,6 +578,47 @@ function ProjectsSection() {
               <TrashIcon className="size-3" />
             </button>
           </div>
+          <input
+            ref={knowledgeInputRef}
+            type="file"
+            accept=".pdf,.docx,.md,.txt,.csv,application/pdf,text/plain,text/markdown,text/csv"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) void uploadKnowledge(file);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => knowledgeInputRef.current?.click()}
+            className="w-full rounded-md px-2 py-1 text-left text-[11px] text-[var(--muted)] hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+          >
+            Add knowledge
+          </button>
+          {knowledgeFiles.length > 0 && (
+            <ul className="space-y-0.5 px-0.5">
+              {knowledgeFiles.map((file) => (
+                <li
+                  key={file.id}
+                  className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-[var(--muted)]"
+                >
+                  <FileTextIcon className="size-3 shrink-0 opacity-70" />
+                  <span className="min-w-0 flex-1 truncate" title={file.filename}>
+                    {file.filename}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void removeKnowledge(file.id)}
+                    className="rounded px-1 hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+                    aria-label={`Remove ${file.filename}`}
+                  >
+                    <TrashIcon className="size-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

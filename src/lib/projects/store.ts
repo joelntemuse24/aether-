@@ -5,9 +5,31 @@ import {
   formatProjectForPrompt,
   type ProjectDTO,
 } from "./types";
+import {
+  formatProjectKnowledgeBlock,
+  projectKnowledgePromptMode,
+} from "./knowledge";
+import { listProjectKnowledge } from "./knowledge-store";
 
 export type { ProjectDTO };
 export { formatProjectForPrompt };
+
+export async function formatProjectPromptWithKnowledge(
+  userId: string,
+  project: ProjectDTO | null,
+): Promise<string> {
+  if (!project) return "";
+  try {
+    const files = await listProjectKnowledge(userId, project.id);
+    const mode = projectKnowledgePromptMode(files);
+    return formatProjectForPrompt(
+      project,
+      formatProjectKnowledgeBlock({ files, mode }),
+    );
+  } catch {
+    return formatProjectForPrompt(project);
+  }
+}
 
 function toDto(row: typeof projects.$inferSelect): ProjectDTO {
   return {
