@@ -25,7 +25,7 @@ function createChatModel(
 
 /**
  * Build a LanguageModel for hosted mode with automatic upstream failover.
- * Defaults to the Fast Cloud route (OpenRouter Nemotron Ultra).
+ * Defaults to the Fast Cloud route (OpenRouter free Nemotron Ultra).
  */
 export function createHostedLanguageModel(
   modelId: string,

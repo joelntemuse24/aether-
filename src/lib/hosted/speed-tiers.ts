@@ -1,23 +1,23 @@
 /**
  * Fast / Expert speed tiers — Cloud think-depth / model route.
  *
- * Fast (default): OpenRouter Nemotron Ultra → paid Lightning.
+ * Fast (default): OpenRouter free Nemotron Ultra → paid Lightning.
  * Expert: Buzz GPT Luna → Buzz GPT Sol → OpenRouter DeepSeek V4 Flash.
  *
  * Fast/Expert is not a tools gate (Ask/Auto lives in Settings). Product UI
  * must never name vendors.
  *
- * OpenRouter has no literal "Nemotron 3.5 Ultra" slug. Closest paid Ultra:
- * `nvidia/nemotron-3-ultra-550b-a55b`. Fast's 3.5 hop is Lightning, not Ultra.
+ * OpenRouter has no literal "Nemotron 3.5 Ultra" slug. Fast hop 1 is the
+ * free Ultra variant. Fast's 3.5 hop is paid Lightning, not Ultra.
  */
 
 export type SpeedTier = "fast" | "expert";
 
 /**
- * Paid OpenRouter Nemotron Ultra. Prefer this over `:free` for prod quality.
- * Verified against OpenRouter /models (no `nemotron-3.5-ultra` exists).
+ * Free OpenRouter Nemotron Ultra (Joel: Fast primary must be `:free`).
+ * Verified against OpenRouter /models — slug exists alongside the paid Ultra.
  */
-export const FAST_OPENROUTER_MODEL = "nvidia/nemotron-3-ultra-550b-a55b";
+export const FAST_OPENROUTER_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
 
 /** Paid OpenRouter Nemotron 3.5 Lightning — Fast hop 2 if Ultra fails. */
 export const FAST_OPENROUTER_FALLBACK_MODEL = "nvidia/nemotron-3.5-lightning";
