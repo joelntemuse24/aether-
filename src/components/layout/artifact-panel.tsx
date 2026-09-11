@@ -736,6 +736,8 @@ export function ArtifactPanel() {
     json: BracesIcon,
   };
 
+  const latestVersionIndex = Math.max(0, versions.length - 1);
+  const activeVersionIndex = versionIndex >= 0 ? versionIndex : latestVersionIndex;
   const viewingContent =
     versionIndex >= 0 && versions[versionIndex]
       ? versions[versionIndex]!.content
@@ -745,8 +747,8 @@ export function ArtifactPanel() {
       ? versions[versionIndex]!.content
       : debounced;
   const previousVersion =
-    versions.length > 1
-      ? versions[Math.max(0, (versionIndex >= 0 ? versionIndex : versions.length - 1) - 1)]
+    versions.length > 1 && activeVersionIndex > 0
+      ? versions[activeVersionIndex - 1]
       : undefined;
   const diffLines =
     showDiff && previousVersion
@@ -769,8 +771,6 @@ export function ArtifactPanel() {
       : csvFromKind;
   const hasCsvPreview = !!(csvTable && csvTable.rows.length > 0);
   const producedBy = provenanceLabels(provenance);
-  const latestVersionIndex = Math.max(0, versions.length - 1);
-  const activeVersionIndex = versionIndex >= 0 ? versionIndex : latestVersionIndex;
 
   return (
     <aside
