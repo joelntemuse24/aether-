@@ -461,7 +461,11 @@ function guessImageMime(content: string): string | undefined {
 
 function toArtifact(
   id: string,
-  input: CreateArtifactInput & { downloadPath?: string; mime?: string },
+  input: Omit<CreateArtifactInput, "content"> & {
+    content?: string;
+    downloadPath?: string;
+    mime?: string;
+  },
 ): Artifact {
   const kind = (input.kind ?? "code") as ArtifactKind;
   return {
