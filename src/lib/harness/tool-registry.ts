@@ -9,7 +9,14 @@ import { isCloudDbConfigured } from "@/lib/db";
 import {
   fetchUrlText,
 } from "@/lib/connectors/web-and-drive";
-import { browserAct, browserNavigate } from "@/lib/connectors/browser";
+import { browsePage } from "@/lib/connectors/browse-page";
+import { searchImages } from "@/lib/connectors/image-search";
+import {
+  browserAct,
+  browserNavigate,
+  browserSnapshot,
+} from "@/lib/connectors/browser";
+import { toVisionToolModelOutput } from "@/lib/harness/vision-tool-output";
 import { runVerifyChecklist } from "@/lib/harness/verify";
 import { buildHeadStartToolSchemas } from "@/lib/harness/tool-schemas";
 import type { AgentLoopController } from "@/lib/harness/loop-efficiency";
@@ -52,6 +59,9 @@ export function resolveAvailableToolNames(ctx: {
     TOOL_NAMES.executePython,
     TOOL_NAMES.webSearch,
     TOOL_NAMES.fetchUrl,
+    TOOL_NAMES.browsePage,
+    TOOL_NAMES.browserSnapshot,
+    TOOL_NAMES.searchImages,
     TOOL_NAMES.createArtifact,
     TOOL_NAMES.verifyChecklist,
     TOOL_NAMES.requestConfirmation,
@@ -198,6 +208,49 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
       ...schemas[TOOL_NAMES.fetchUrl],
       execute: async ({ url }) => fetchUrlText(url),
     }),
+    [TOOL_NAMES.browsePage]: tool({
+      ...schemas[TOOL_NAMES.browsePage],
+      execute: async ({ url, instructions }) => browsePage({ url, instructions }),
+    }),
+    [TOOL_NAMES.browserSnapshot]: tool({
+      ...schemas[TOOL_NAMES.browserSnapshot],
+      execute: async ({ url, screenshot }) =>
+        browserSnapshot({
+          url,
+          screenshot,
+          userId: ctx.userId,
+          persistImage: async ({ title, dataUrl }) => {
+            const saved = await runAether(TOOL_NAMES.createArtifact, {
+              kind: "image",
+              title,
+              content: dataUrl,
+            });
+            const rec = saved as {
+              id?: string;
+              persisted?: boolean;
+              content?: string;
+            };
+            return {
+              id: rec.id,
+              persisted: !!rec.persisted,
+              content: rec.content,
+            };
+          },
+        }),
+      toModelOutput: ({ output }) => {
+        const rec = output as {
+          title?: string;
+          text?: string;
+          content?: string;
+          mime?: string;
+        };
+        return toVisionToolModelOutput(rec);
+      },
+    }),
+    [TOOL_NAMES.searchImages]: tool({
+      ...schemas[TOOL_NAMES.searchImages],
+      execute: async ({ query }) => searchImages(query),
+    }),
     [TOOL_NAMES.verifyChecklist]: tool({
       ...schemas[TOOL_NAMES.verifyChecklist],
       execute: async (input) => runVerifyChecklist(input),
@@ -241,6 +294,20 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     [TOOL_NAMES.generateImage]: tool({
       ...schemas[TOOL_NAMES.generateImage],
       execute: async (input) => runAether(TOOL_NAMES.generateImage, input),
+      toModelOutput: ({ output }) => {
+        const rec = output as {
+          title?: string;
+          content?: string;
+          mime?: string;
+          error?: string;
+        };
+        return toVisionToolModelOutput({
+          title: rec.title,
+          text: rec.error,
+          content: rec.content,
+          mime: rec.mime,
+        });
+      },
     }),
     [TOOL_NAMES.requestConfirmation]: tool({
       ...schemas[TOOL_NAMES.requestConfirmation],

@@ -10,6 +10,7 @@ describe("confirmActionCopy", () => {
       confirmActionCopy({ action: "delete_resource" }).confirm,
       "Delete this",
     );
+    assert.equal(confirmActionCopy({ tool: "generate_image" }).confirm, "Generate image");
     assert.equal(confirmActionCopy({}).confirm, "Allow this");
     for (const row of [
       confirmActionCopy({ tool: "create_artifact" }),

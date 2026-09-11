@@ -25,7 +25,7 @@ export function resolveSessionSkills(input: {
       label: "Open pages",
       description: "Navigate public pages and extract text",
       promptHint:
-        "You can open public URLs with browser_navigate / fetch_url. Prefer browser_navigate for portal-like pages when available.",
+        "You can open public URLs with browse_page / browser_navigate / fetch_url. Prefer browse_page for a structured extract, browser_snapshot when you need a screenshot, and browser_navigate for portal-like pages.",
       available: true,
     },
     {

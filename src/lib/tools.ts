@@ -37,6 +37,9 @@ export const TOOL_NAMES = {
   githubCreatePullRequest: "github_create_pull_request",
   githubMergePullRequest: "github_merge_pull_request",
   fetchUrl: "fetch_url",
+  browsePage: "browse_page",
+  browserSnapshot: "browser_snapshot",
+  searchImages: "search_images",
   /** Deferred discovery — unlocks memory/Drive/GitHub tools into later steps. */
   toolSearch: "tool_search",
   /** Structured verify pass for deep / substantial work. */
@@ -239,6 +242,30 @@ export const githubReadFileInput = z.object({
 
 export const fetchUrlInput = z.object({
   url: z.string().url().describe("Public http(s) URL to fetch as text."),
+});
+
+export const browsePageInput = z.object({
+  url: z.string().url().describe("Public http(s) URL to read."),
+  instructions: z
+    .string()
+    .optional()
+    .describe(
+      "What to extract (fees, dates, product names). Returns a structured extract focused on that ask.",
+    ),
+});
+
+export const browserSnapshotInput = z.object({
+  url: z.string().url().describe("Public http(s) URL to open."),
+  screenshot: z
+    .boolean()
+    .optional()
+    .describe(
+      "When true, store a page screenshot as an image artifact the next step can see.",
+    ),
+});
+
+export const searchImagesInput = z.object({
+  query: z.string().min(1).describe("What the images should show."),
 });
 
 export const toolSearchInput = z.object({
@@ -618,6 +645,18 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Fetch URL",
     runningLabel: "Fetching page…",
   },
+  [TOOL_NAMES.browsePage]: {
+    label: "Browse",
+    runningLabel: "Reading page…",
+  },
+  [TOOL_NAMES.browserSnapshot]: {
+    label: "Screenshot",
+    runningLabel: "Capturing page…",
+  },
+  [TOOL_NAMES.searchImages]: {
+    label: "Images",
+    runningLabel: "Searching images…",
+  },
   [TOOL_NAMES.toolSearch]: {
     label: "Looking up",
     runningLabel: "Finding what you need…",
@@ -736,7 +775,8 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 ## Core tools (always available when tools are on)
 - "execute_python": sandboxed in-browser Python for math, data, or verifying code.
 - "web_search": current or factual lookups. Few focused queries only. Results include id (1, 2, …) — cite those ids inline as [1], [2] in the final answer.
-- "fetch_url": read a public page as text (IR, press, docs). Soft-fails paywalls; PDFs best-effort. Never use for github.com repos. Cite the page as the next [n] after search hits.
+- "browse_page": read a public page and return a structured extract (title, headings, excerpts, links). Pass instructions to focus the extract. Soft-fails paywalls; PDFs best-effort. Never use for github.com repos. Cite the page as the next [n] after search hits.
+- "fetch_url": compat alias for browse_page without instructions.
 - "create_artifact": substantial reusable content. Prefer kind "markdown" (or "document") for essays/briefs; "html" / "react" for live previews; "code" / "csv" / "svg" / "image" when those fit. Do not use this for a PowerPoint, Excel, Word, or PDF file.
 - "create_presentation": build a real .pptx and attach it in-thread. Use this for decks / slides / PowerPoint — do not install python-pptx or fall back to a markdown briefing.
 - "create_spreadsheet": build a real .xlsx and attach it in-thread. Use this for Excel / tables the user asked to download.
@@ -745,7 +785,9 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 - "verify_checklist": structured verify pass before handing back substantial work (deep / research / write / timed drafts).
 - "request_confirmation": gate any side effect (submit, send, upload) until the user approves. Never claim a side effect completed without approval.
 - "browser_navigate": open a public URL and extract text (fetch or full browser when configured).
+- "browser_snapshot": open a public URL and optionally store a screenshot as an image artifact the next step can see.
 - "browser_act": extract / fill_preview / click / submit on a page. submit always returns needs_confirmation.
+- "search_images": web image search. Returns carousel-ready image URLs (no spend).
 - "workspace_exec": run shell commands in an isolated per-conversation Linux workspace. If it reports the workspace unavailable, use create_presentation / create_spreadsheet / create_document / create_pdf for office files instead of retrying pip.
 - "workspace_read_file" / "workspace_write_file" / "workspace_list_files": inspect and edit files in that isolated workspace.
 - "workspace_publish_file": attach a binary from the isolated workspace (csv, png, zip, or other generated files) as a downloadable file in this thread. Do not use this to rebuild Word/PDF/Excel — use create_document / create_pdf / create_spreadsheet.
@@ -773,9 +815,9 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 - Essay / deadline flows: draft artifact first → verify lightly → then portal steps with confirmation.
 
 ## Web research discipline (enforced by the harness)
-- Prefer 1–2 focused web_search calls, then fetch_url, then draft. Near-duplicates and depth budgets apply (time budgets may tighten further).
-- Cite sources inline as [1], [2] matching web_search/fetch_url result ids so they render as citation chips.
-- When blocked or budget exhausted → fetch_url / browser_navigate on known links, or answer.
+- Prefer 1–2 focused web_search calls, then browse_page (or fetch_url) on the best links, then draft. Near-duplicates and depth budgets apply (time budgets may tighten further).
+- Cite sources inline as [1], [2] matching web_search/browse_page/fetch_url result ids so they render as citation chips.
+- When blocked or budget exhausted → browse_page / fetch_url / browser_navigate on known links, or answer.
 - Paywall / thin results → say so and finish with a usable answer.
 
 ## Artifacts & narration

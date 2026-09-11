@@ -20,7 +20,7 @@ const PLAYBOOKS: Record<PlaybookId, Playbook> = {
     id: "research",
     label: "Research",
     promptHint:
-      "Use web_search (few focused queries) then fetch_url on the best links. Cite inline as [1], [2] matching result ids. A search does not replace the thread — keep prior facts (names, numbers). End with a usable answer.",
+      "Use web_search (few focused queries) then browse_page (or fetch_url) on the best links. Cite inline as [1], [2] matching result ids. A search does not replace the thread — keep prior facts (names, numbers). End with a usable answer.",
   },
   "write-doc": {
     id: "write-doc",
@@ -44,7 +44,7 @@ const PLAYBOOKS: Record<PlaybookId, Playbook> = {
     id: "research-then-deck",
     label: "Research then deck",
     promptHint:
-      "Sequence on this turn (durable worker — do not rush a markdown stand-in): 1) web_search a few focused queries, 2) fetch_url the best sources, 3) synthesize with inline [1] [2] citations matching result ids, 4) create_presentation with sourced figures (no lorem; structured slides, title + 3–5 bullets), 5) verify_checklist including “real .pptx on this thread”. Do not wait on workspace_exec to build the deck. The file chip + Download must appear in-thread.",
+      "Sequence on this turn (durable worker — do not rush a markdown stand-in): 1) web_search a few focused queries, 2) browse_page / fetch_url the best sources, 3) synthesize with inline [1] [2] citations matching result ids, 4) create_presentation with sourced figures (no lorem; structured slides, title + 3–5 bullets), 5) verify_checklist including “real .pptx on this thread”. Do not wait on workspace_exec to build the deck. The file chip + Download must appear in-thread.",
   },
 };
 

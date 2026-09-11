@@ -15,6 +15,11 @@ describe("tool availability vs Fast/Expert", () => {
       TOOL_NAMES.createPdf,
       TOOL_NAMES.createArtifact,
       TOOL_NAMES.webSearch,
+      TOOL_NAMES.browsePage,
+      TOOL_NAMES.browserSnapshot,
+      TOOL_NAMES.searchImages,
+      TOOL_NAMES.generateImage,
+      TOOL_NAMES.fetchUrl,
     ]) {
       assert.ok(names.includes(name), name);
     }

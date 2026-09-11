@@ -377,6 +377,29 @@
   font-size: 11px;
 }
 
+.aether-image-carousel {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.aether-image-carousel__item {
+  flex: 0 0 auto;
+  width: 96px;
+  height: 72px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--elevated);
+}
+
+.aether-image-carousel__item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* Send ↔ Stop: one terracotta circle, icon cross-fade. */
 .aether-send-stop {
   position: relative;

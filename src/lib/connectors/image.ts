@@ -45,8 +45,16 @@ type OpenRouterImageResult = {
   title: string;
   content: string;
   mime: string;
-  model?: string;
 };
+
+export function parseGeneratedImageDataUrl(
+  dataUrl: string,
+): { mime: string; content: string } | null {
+  if (!dataUrl.startsWith("data:image/")) return null;
+  const semi = dataUrl.indexOf(";");
+  const mime = (semi > 5 ? dataUrl.slice(5, semi) : "") || "image/png";
+  return { mime, content: dataUrl };
+}
 
 export async function generateImageForUser(input: {
   prompt: string;
@@ -54,7 +62,11 @@ export async function generateImageForUser(input: {
 }): Promise<OpenRouterImageResult | { ok: false; error: string }> {
   const upstream = getImageUpstream();
   if (!upstream.configured) {
-    return { ok: false, error: "Image generation is not configured." };
+    return {
+      ok: false,
+      error:
+        "Image generation is unavailable. An operator needs to enable hosted image generation.",
+    };
   }
   const prompt =
     input.size && input.size !== "square"
@@ -93,17 +105,16 @@ export async function generateImageForUser(input: {
     };
     const dataUrl =
       data.choices?.[0]?.message?.images?.[0]?.image_url?.url ?? "";
-    if (!dataUrl.startsWith("data:image/")) {
-      return { ok: false, error: "The image provider returned no image." };
+    const parsed = parseGeneratedImageDataUrl(dataUrl);
+    if (!parsed) {
+      return { ok: false, error: "Image generation is unavailable — no image returned." };
     }
-    const mime = dataUrl.slice(5, dataUrl.indexOf(";")) || "image/png";
     return {
       ok: true,
       kind: "image",
       title: input.prompt.slice(0, 60) || "Generated image",
-      content: dataUrl,
-      mime,
-      model: upstream.modelId,
+      content: parsed.content,
+      mime: parsed.mime,
     };
   } catch {
     return { ok: false, error: "Image generation failed. Try again shortly." };

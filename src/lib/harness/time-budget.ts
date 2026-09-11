@@ -79,7 +79,7 @@ export function timeBudgetSystemAddendum(budget: TimeBudget): string {
   const lines = [
     "## Time budget",
     `The user has about ${budget.minutes} minute(s) (${budget.label}).`,
-    `Hard cap: at most ${budget.maxSearches} web_search call(s). Prefer fetch_url on known links.`,
+    `Hard cap: at most ${budget.maxSearches} web_search call(s). Prefer browse_page or fetch_url on known links.`,
   ];
   if (budget.forceEarlyDraft) {
     lines.push(
