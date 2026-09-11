@@ -572,6 +572,14 @@
   background: var(--canvas);
 }
 
+/* Streaming caret: terracotta pulse, not a solid black disc. */
+.prose-aether.aui-md[data-status="running"]::after,
+.prose-aether.aui-md[data-status="running"] > :last-child::after {
+  color: var(--accent);
+  font-size: 0.65em;
+  opacity: 0.75;
+}
+
 @media (max-width: 640px) {
   .aether-activity {
     font-size: 11px;

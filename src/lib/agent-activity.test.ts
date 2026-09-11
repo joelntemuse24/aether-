@@ -522,6 +522,8 @@ describe("thread / composer copy stays honest", () => {
     assert.match(css, /prefers-reduced-motion/);
     assert.match(css, /transition-property:/);
     assert.match(css, /aether-inline-source/);
+    assert.match(css, /aether-activity__spinner/);
+    assert.match(css, /aether-composer-dock/);
     assert.match(css, /aether-activity__chip/);
     assert.match(toolUi, /aether-tool-trace/);
     assert.doesNotMatch(toolUi, /const ICONS/);
