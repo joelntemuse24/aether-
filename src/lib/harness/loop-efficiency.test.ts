@@ -122,6 +122,42 @@ describe("rankDeferredTools", () => {
     assert.ok(names.includes(TOOL_NAMES.memoryWrite));
   });
 
+  it("unlocks Drive write tools from an @Drive mention", () => {
+    const seeds = collectSeedUnlockedToolNames({
+      messages: [],
+      availableToolNames: [
+        ...ALL_DEFERRED,
+        TOOL_NAMES.driveUpload,
+        TOOL_NAMES.driveWrite,
+        TOOL_NAMES.gmailSearch,
+        TOOL_NAMES.gmailCreateDraft,
+      ],
+      mentionsGitHubRepo: false,
+      intentText: "Save the deck to @Drive",
+    });
+    assert.ok(seeds.includes(TOOL_NAMES.driveSearch));
+    assert.ok(seeds.includes(TOOL_NAMES.driveUpload));
+    assert.ok(seeds.includes(TOOL_NAMES.driveWrite));
+  });
+
+  it("unlocks Gmail tools from an @Gmail mention", () => {
+    const seeds = collectSeedUnlockedToolNames({
+      messages: [],
+      availableToolNames: [
+        TOOL_NAMES.gmailSearch,
+        TOOL_NAMES.gmailRead,
+        TOOL_NAMES.gmailSend,
+        TOOL_NAMES.gmailCreateDraft,
+        TOOL_NAMES.driveSearch,
+      ],
+      mentionsGitHubRepo: false,
+      intentText: "Draft a note in @Gmail",
+    });
+    assert.ok(seeds.includes(TOOL_NAMES.gmailSearch));
+    assert.ok(seeds.includes(TOOL_NAMES.gmailCreateDraft));
+    assert.equal(seeds.includes(TOOL_NAMES.driveSearch), false);
+  });
+
   it("falls back to Drive suite on soft domain tokens", () => {
     const ranked = rankDeferredTools(ALL_DEFERRED, "google drive files");
     const names = ranked.map((r) => r.name);

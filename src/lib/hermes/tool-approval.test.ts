@@ -52,13 +52,34 @@ describe("Ask vs Auto policy", () => {
   it("gates routine mutations in Ask and allows them in Auto", () => {
     for (const name of [
       "memory_write",
-      "gmail_send",
       "gmail_create_draft",
       "calendar_create_event",
       "contacts_create",
     ]) {
       assert.equal(shouldConfirmAetherTool({ name, mode: "ask" }), true, name);
       assert.equal(shouldConfirmAetherTool({ name, mode: "auto" }), false, name);
+    }
+  });
+
+  it("always confirms gmail_send — Auto cannot silent-send", () => {
+    for (const mode of ["ask", "auto"] as const) {
+      assert.equal(
+        shouldConfirmAetherTool({ name: "gmail_send", mode }),
+        true,
+        mode,
+      );
+    }
+  });
+
+  it("always confirms Drive writes, including Auto", () => {
+    for (const name of ["drive_upload", "drive_write"]) {
+      for (const mode of ["ask", "auto"] as const) {
+        assert.equal(
+          shouldConfirmAetherTool({ name, mode }),
+          true,
+          `${name}/${mode}`,
+        );
+      }
     }
   });
 

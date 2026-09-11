@@ -48,6 +48,8 @@ export const DEFERRED_TOOL_ORDER = [
   TOOL_NAMES.projectKnowledgeSearch,
   TOOL_NAMES.driveSearch,
   TOOL_NAMES.driveRead,
+  TOOL_NAMES.driveUpload,
+  TOOL_NAMES.driveWrite,
   TOOL_NAMES.githubGetRepo,
   TOOL_NAMES.githubListContents,
   TOOL_NAMES.githubReadFile,
@@ -101,7 +103,12 @@ export type ToolCatalogEntry = {
 /** Sibling suites — unlocking one tool unlocks the whole capability set. */
 const DEFERRED_SUITES: ReadonlyArray<readonly string[]> = [
   [TOOL_NAMES.memorySearch, TOOL_NAMES.memoryWrite, TOOL_NAMES.projectKnowledgeSearch],
-  [TOOL_NAMES.driveSearch, TOOL_NAMES.driveRead],
+  [
+    TOOL_NAMES.driveSearch,
+    TOOL_NAMES.driveRead,
+    TOOL_NAMES.driveUpload,
+    TOOL_NAMES.driveWrite,
+  ],
   [
     TOOL_NAMES.githubGetRepo,
     TOOL_NAMES.githubListContents,
@@ -214,6 +221,33 @@ const CATALOG: Record<string, Omit<ToolCatalogEntry, "name">> = {
       "gdrive",
     ],
   },
+  [TOOL_NAMES.driveUpload]: {
+    description:
+      "Save a generated pptx, xlsx, pdf, or docx into a Drive folder after confirm.",
+    keywords: [
+      "drive",
+      "google drive",
+      "upload",
+      "save to drive",
+      "folder",
+      "pptx",
+      "xlsx",
+      "pdf",
+      "docx",
+      "@drive",
+    ],
+  },
+  [TOOL_NAMES.driveWrite]: {
+    description: "Alias of drive_upload — write a generated file to Drive.",
+    keywords: [
+      "drive",
+      "google drive",
+      "write",
+      "save",
+      "upload",
+      "@drive",
+    ],
+  },
   [TOOL_NAMES.githubGetRepo]: {
     description:
       "Get metadata for a GitHub repository the user can access (owner/repo or github.com URL).",
@@ -280,13 +314,27 @@ const DOMAIN_FALLBACKS: ReadonlyArray<{
   },
   {
     patterns:
-      /\b(drive|gdrive|google\s*drive|google\s*doc|spreadsheet|slides?)\b/i,
-    suite: [TOOL_NAMES.driveSearch, TOOL_NAMES.driveRead],
+      /\b(drive|gdrive|google\s*drive|google\s*doc|spreadsheet|slides?|@drive)\b/i,
+    suite: [
+      TOOL_NAMES.driveSearch,
+      TOOL_NAMES.driveRead,
+      TOOL_NAMES.driveUpload,
+      TOOL_NAMES.driveWrite,
+    ],
   },
   {
     patterns:
-      /\b(github|gh\.com|github\.com|repository|codebase|pull request|\brepo\b)\b/i,
+      /\b(github|gh\.com|github\.com|repository|codebase|pull request|\brepo\b|@github)\b/i,
     suite: GITHUB_TOOL_NAMES,
+  },
+  {
+    patterns: /(?:^|[\s([{])@?gmail\b|\bgoogle\s*mail\b/i,
+    suite: [
+      TOOL_NAMES.gmailSearch,
+      TOOL_NAMES.gmailRead,
+      TOOL_NAMES.gmailSend,
+      TOOL_NAMES.gmailCreateDraft,
+    ],
   },
 ];
 

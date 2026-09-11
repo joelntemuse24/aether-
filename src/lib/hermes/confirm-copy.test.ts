@@ -11,6 +11,8 @@ describe("confirmActionCopy", () => {
       "Delete this",
     );
     assert.equal(confirmActionCopy({ tool: "generate_image" }).confirm, "Generate image");
+    assert.equal(confirmActionCopy({ tool: "drive_upload" }).confirm, "Save to Drive");
+    assert.equal(confirmActionCopy({ tool: "gmail_send" }).confirm, "Send this");
     assert.equal(confirmActionCopy({}).confirm, "Allow this");
     for (const row of [
       confirmActionCopy({ tool: "create_artifact" }),
@@ -36,6 +38,8 @@ describe("confirmActionCopy", () => {
   it("marks deletes and third-party submits as destructive", () => {
     assert.equal(confirmActionCopy({ action: "delete_resource" }).destructive, true);
     assert.equal(confirmActionCopy({ action: "submit_form" }).destructive, true);
+    assert.equal(confirmActionCopy({ tool: "gmail_send" }).destructive, true);
+    assert.equal(confirmActionCopy({ tool: "drive_upload" }).destructive, true);
     assert.equal(confirmActionCopy({ tool: "create_artifact" }).destructive, false);
   });
 });

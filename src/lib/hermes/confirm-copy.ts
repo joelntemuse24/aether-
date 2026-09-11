@@ -29,12 +29,19 @@ export function confirmActionCopy(input: {
     action === "submit_form" ||
     action === "browser_click_submit" ||
     action === "browser_fill_and_submit" ||
-    action === "send_message";
+    action === "send_message" ||
+    action === "upload_file" ||
+    tool === "gmail_send" ||
+    tool === "drive_upload" ||
+    tool === "drive_write";
 
   let confirm = "Allow this";
   if (tool === "create_artifact") confirm = "Save artifact";
   else if (tool === "generate_image") confirm = "Generate image";
   else if (tool === "memory_write") confirm = "Save memory";
+  else if (tool === "drive_upload" || tool === "drive_write") {
+    confirm = "Save to Drive";
+  } else if (tool === "gmail_send") confirm = "Send this";
   else if (action.includes("delete") || tool.includes("delete")) {
     confirm = "Delete this";
   } else if (
