@@ -22,6 +22,7 @@ import "@/components/assistant-ui/agent-activity.css";
 import { ModelPicker } from "@/components/model-picker";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { usePathname } from "next/navigation";
 import { useSettings } from "@/providers/settings-provider";
 import { useAttachments } from "@/providers/attachments-provider";
 import { useDrive } from "@/providers/drive-provider";
@@ -65,7 +66,11 @@ import {
   heuristicClassify,
   shouldSkipModelClassify,
 } from "@/lib/harness/heuristic";
-import { readThreadIdFromLocation } from "@/lib/thread-url";
+import {
+  parseThreadIdFromPath,
+  readThreadIdFromLocation,
+  shouldHoldEmptyWelcome,
+} from "@/lib/thread-url";
 import {
   speechRecognitionSupported,
   startSpeechSession,
@@ -91,12 +96,14 @@ function useThreadEmptyState() {
   const isLoading = useAuiState(
     (s) => s.thread.isLoading || s.threads.isLoading,
   );
-  // URL id is stable across the first paints; don't flash Welcome on refresh.
-  const [urlThreadId] = useState(() => readThreadIdFromLocation());
-  const [holdRoute, setHoldRoute] = useState(() => !!urlThreadId);
+  const pathname = usePathname();
+  const urlThreadId = parseThreadIdFromPath(pathname);
+  const [holdRoute, setHoldRoute] = useState(() =>
+    shouldHoldEmptyWelcome({ hasMessages: false, urlThreadId }),
+  );
 
   useEffect(() => {
-    if (hasMessages || !urlThreadId) {
+    if (!shouldHoldEmptyWelcome({ hasMessages, urlThreadId })) {
       setHoldRoute(false);
       return;
     }

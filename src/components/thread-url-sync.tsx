@@ -5,9 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAui, useAuiState } from "@assistant-ui/react";
 import {
   NEW_CHAT_PATH,
+  didUrlBecomeNewChat,
+  nextUrlSyncLatches,
   parseThreadIdFromPath,
+  planActiveThreadToUrl,
+  planUrlToThread,
   stickyCanonicalId,
-  threadPath,
   type CanonicalThreadState,
 } from "@/lib/thread-url";
 import { beginNewChatSession } from "@/lib/local-thread-adapter";
@@ -26,8 +29,11 @@ export function ThreadUrlSync() {
   const pendingPath = useRef<string | null>(null);
   /** Sticky canonical id + the item key it belongs to. */
   const canonicalRef = useRef<CanonicalThreadState>({ key: "", id: null });
-  /** Suppress active→URL writes until the pending new-chat switch settles. */
+  /** Suppress active→URL writes of the old id until the new empty thread is active. */
   const pendingNewChat = useRef(false);
+  /** Deep link / refresh / back-forward: hold URL until the runtime matches. */
+  const applyingUrlThread = useRef<string | null>(urlThreadId);
+  const prevUrlThreadId = useRef<string | null>(urlThreadId);
 
   // Select primitives separately — returning a fresh object from the
   // selector re-renders infinitely (useSyncExternalStore contract).
@@ -36,6 +42,13 @@ export function ThreadUrlSync() {
       return String(s.threadListItem?.id ?? "");
     } catch {
       return "";
+    }
+  });
+  const itemIsNew = useAuiState((s) => {
+    try {
+      return s.threadListItem?.status === "new";
+    } catch {
+      return false;
     }
   });
   const rawId = useAuiState((s) => {
@@ -58,60 +71,97 @@ export function ThreadUrlSync() {
   }
   const canonicalId = sticky.id;
 
+  // Sidebar / keyboard already call beginNewChatSession — latch immediately
+  // so Active→URL cannot write the previous `/c/<id>` back.
+  useEffect(() => {
+    const onSwitch = (event: Event) => {
+      const detail = (event as CustomEvent<{ newChat?: boolean }>).detail;
+      if (!detail?.newChat) return;
+      pendingNewChat.current = true;
+      applyingUrlThread.current = null;
+    };
+    window.addEventListener("aether:thread-switched", onSwitch);
+    return () => window.removeEventListener("aether:thread-switched", onSwitch);
+  }, []);
+
+  const urlBecameNewChat = didUrlBecomeNewChat(
+    prevUrlThreadId.current,
+    urlThreadId,
+  );
+  prevUrlThreadId.current = urlThreadId;
+
+  const latches = nextUrlSyncLatches({
+    urlThreadId,
+    canonicalId,
+    itemIsNew,
+    pendingNewChat: pendingNewChat.current,
+    applyingUrlThread: applyingUrlThread.current,
+    urlBecameNewChat,
+  });
+  pendingNewChat.current = latches.pendingNewChat;
+  applyingUrlThread.current = latches.applyingUrlThread;
+
   // Active thread → URL
   useEffect(() => {
-    // A new-chat switch is in flight: hold the URL at `/` until the runtime
-    // reports the new (empty) thread, instead of writing the old id back.
-    if (pendingNewChat.current) {
-      if (urlThreadId === null) {
-        pendingNewChat.current = false;
-      } else {
-        return;
-      }
-    }
-    const desired = canonicalId ? threadPath(canonicalId) : NEW_CHAT_PATH;
+    const plan = planActiveThreadToUrl({
+      urlThreadId,
+      canonicalId,
+      itemIsNew,
+      pendingNewChat: pendingNewChat.current,
+      applyingUrlThread: applyingUrlThread.current,
+    });
+    if (plan.action === "hold") return;
+    const desired = plan.path;
     if (pathname === desired) {
       pendingPath.current = null;
       return;
     }
     pendingPath.current = desired;
     router.replace(desired, { scroll: false });
-  }, [canonicalId, pathname, router, urlThreadId]);
+  }, [canonicalId, itemIsNew, pathname, router, urlThreadId]);
 
   // URL → active thread (deep links, back/forward)
   useEffect(() => {
-    if (pendingPath.current === pathname) {
-      pendingPath.current = null;
+    const action = planUrlToThread({
+      pathname,
+      urlThreadId,
+      pendingPath: pendingPath.current,
+      pendingNewChat: pendingNewChat.current,
+    });
+    if (action === "ignore") {
+      if (pendingPath.current === pathname) pendingPath.current = null;
       return;
     }
 
     let cancelled = false;
 
     void (async () => {
+      if (action === "switch-new") {
+        pendingNewChat.current = true;
+        applyingUrlThread.current = null;
+        aui.threads().switchToNewThread();
+        beginNewChatSession();
+        return;
+      }
+
+      applyingUrlThread.current = urlThreadId;
       try {
         await aui.threads().getLoadThreadsPromise();
       } catch {
         return;
       }
-      if (cancelled) return;
+      if (cancelled || !urlThreadId) return;
 
-      if (urlThreadId) {
-        try {
-          aui.threads().switchToThread(urlThreadId);
-        } catch {
-          if (!cancelled) {
-            pendingPath.current = NEW_CHAT_PATH;
-            router.replace(NEW_CHAT_PATH, { scroll: false });
-          }
+      try {
+        aui.threads().switchToThread(urlThreadId);
+      } catch {
+        if (!cancelled) {
+          pendingPath.current = NEW_CHAT_PATH;
+          applyingUrlThread.current = null;
+          pendingNewChat.current = true;
+          router.replace(NEW_CHAT_PATH, { scroll: false });
         }
-        return;
       }
-
-      // Bare `/` from back/forward or explicit navigation → new chat.
-      pendingNewChat.current = true;
-      aui.threads().switchToNewThread();
-      // Drop stale active id so first-send initialize isn't treated as A→B.
-      beginNewChatSession();
     })();
 
     return () => {
