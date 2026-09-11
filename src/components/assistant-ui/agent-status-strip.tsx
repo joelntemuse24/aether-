@@ -12,13 +12,14 @@ import {
   formatActivityElapsed,
   activityClockShouldRun,
   recalledActivityElapsed,
+  shouldShowComposerActivity,
+  sourceChipLabel,
   syncActivityClock,
   type ActivityMessage,
   type ActivityView,
   type ContinuePhase,
 } from "@/lib/agent-activity";
 import { cn } from "@/lib/utils";
-import { sanitizeVisibleAssistantText } from "@/lib/visible-chat-text";
 import "@/components/assistant-ui/agent-activity.css";
 
 type ContinueStatusDetail = {
@@ -204,27 +205,21 @@ export const AgentStatusStrip: FC = () => {
   const { classifying } = useHarness();
   const isRunning = useAuiState((s) => s.thread.isRunning);
   const lastAssistantId = useAuiState((s) => {
-    const messages = s.thread.messages;
+    const messages = Array.isArray(s.thread?.messages) ? s.thread.messages : [];
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i]?.role === "assistant") return messages[i]!.id;
     }
     return undefined;
   });
   const hasLiveAssistant = useAuiState((s) => {
-    const last = s.thread.messages[s.thread.messages.length - 1];
+    const messages = Array.isArray(s.thread?.messages) ? s.thread.messages : [];
+    const last = messages[messages.length - 1];
     return !!last && last.role === "assistant";
   });
-  const hasVisibleAssistantText = useAuiState((s) => {
-    const last = s.thread.messages[s.thread.messages.length - 1];
-    if (!last || last.role !== "assistant") return false;
-    return (last.parts ?? []).some((part) => {
-      if (part.type !== "text") return false;
-      const text = "text" in part && typeof part.text === "string" ? part.text : "";
-      return sanitizeVisibleAssistantText(text).length > 0;
-    });
-  });
   const messages = useAuiState((s) =>
-    threadMessagesFromState(s.thread.messages),
+    threadMessagesFromState(
+      Array.isArray(s.thread?.messages) ? s.thread.messages : [],
+    ),
   );
   const continueStatus = useContinueStatus();
   const elapsed = useThreadActivityElapsed(
@@ -246,9 +241,15 @@ export const AgentStatusStrip: FC = () => {
     continueMax: continueStatus.max ?? MAX_AUTO_CONTINUES,
   });
 
-  // Keep the composer clock ticking while the assistant is markup-only / empty.
-  if (hasVisibleAssistantText) return null;
-  if (view.mode === "collapsed" && hasLiveAssistant) return null;
+  if (
+    !shouldShowComposerActivity({
+      hasAssistantMessage: hasLiveAssistant,
+      visible: view.visible,
+      mode: view.mode,
+    })
+  ) {
+    return null;
+  }
 
   return <AgentActivityPanel view={view} className="mb-1.5 px-2.5" />;
 };
@@ -263,7 +264,7 @@ function hostLabel(url?: string): string | null {
 }
 
 export const MessageSourceCards: FC = () => {
-  const parts = useAuiState((s) => s.message.parts);
+  const parts = useAuiState((s) => s.message?.parts);
   const hits = collectWebSearchHits(parts);
   if (hits.length === 0) return null;
 
@@ -277,7 +278,7 @@ export const MessageSourceCards: FC = () => {
         <span className="aether-source-tray__hosts">
           {hits.slice(0, 4).map((hit, i) => (
             <span key={`host:${i}`} className="aether-source-tray__pill">
-              {hostLabel(hit.url) ?? hit.title.slice(0, 24)}
+              {sourceChipLabel(hit)}
             </span>
           ))}
         </span>
@@ -319,9 +320,9 @@ export const MessageSourceCards: FC = () => {
 };
 
 export const MessageAgentActivity: FC = () => {
-  const isRunning = useAuiState((s) => s.message.status?.type === "running");
-  const messageId = useAuiState((s) => s.message.id);
-  const parts = useAuiState((s) => s.message.parts);
+  const isRunning = useAuiState((s) => s.message?.status?.type === "running");
+  const messageId = useAuiState((s) => s.message?.id);
+  const parts = useAuiState((s) => s.message?.parts);
   const continueStatus = useContinueStatus();
   const elapsed = useThreadActivityElapsed(
     activityClockShouldRun({

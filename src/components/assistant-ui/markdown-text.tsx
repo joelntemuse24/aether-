@@ -67,7 +67,7 @@ const MarkdownTextImpl = () => {
       remarkPlugins={plugins}
       className="aui-md prose-aether"
       components={defaultComponents}
-      preprocess={sanitizeVisibleAssistantText}
+      preprocess={(text) => sanitizeVisibleAssistantText(text)}
       defer
     />
   );

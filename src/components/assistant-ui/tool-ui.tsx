@@ -23,6 +23,7 @@ import {
   type WebSearchOutput,
 } from "@/lib/tools";
 import { normalizeArtifactKind } from "@/lib/artifacts/kinds";
+import { safeStringifyToolResult } from "@/lib/tool-part";
 
 /** Structural view of an assistant-ui enriched tool-call part. */
 export type ToolPartLike = {
@@ -1706,7 +1707,7 @@ const GenericToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       )}
       {part.result !== undefined && (
         <CodeSnippet
-          code={JSON.stringify(part.result, null, 2)}
+          code={safeStringifyToolResult(part.result)}
           label="Output"
         />
       )}

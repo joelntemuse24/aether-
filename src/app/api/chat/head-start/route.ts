@@ -159,7 +159,6 @@ export async function POST(req: Request) {
       accessMode: turnClientData.accessMode,
       speedTier: turnClientData.speedTier,
       requestedModel: turnClientData.model,
-      provider: turnClientData.provider,
       apiKey: turnClientData.apiKey,
       contextToken: turnClientData.contextToken,
     }),

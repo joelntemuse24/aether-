@@ -15,6 +15,9 @@ export type ActivityPart = {
   args?: unknown;
   argsText?: string;
   result?: unknown;
+  output?: unknown;
+  errorText?: string;
+  isError?: boolean;
   status?: { type?: string };
   text?: string;
   state?: string;
@@ -116,7 +119,11 @@ function parseArgs(part: ActivityPart): Record<string, unknown> {
 }
 
 function partLooksComplete(part: ActivityPart): boolean {
-  if (part.result !== undefined) return true;
+  if (part.result !== undefined || part.output !== undefined) return true;
+  if (part.isError) return true;
+  if (typeof part.errorText === "string" && part.errorText.length > 0) {
+    return true;
+  }
   const t = part.status?.type;
   if (t === "complete" || t === "incomplete" || t === "cancelled") return true;
   if (part.state === "output-available" || part.state === "output-error") {
@@ -136,7 +143,7 @@ function partLooksRunning(part: ActivityPart, isRunning: boolean): boolean {
   ) {
     return true;
   }
-  if (toolNameFromActivityPart(part)) return true;
+  if (toolNameFromActivityPart(part)) return isRunning;
   return isRunning;
 }
 
@@ -288,6 +295,7 @@ export function collectActivitySteps(
   const steps: ActivityStep[] = [];
   const seen = new Set<string>();
   for (const [index, part] of (parts ?? []).entries()) {
+    if (!part || typeof part !== "object") continue;
     const toolName = toolNameFromActivityPart(part);
     if (toolName) {
       const running = partLooksRunning(part, isRunning);
@@ -452,6 +460,30 @@ export function deriveAgentActivity(
   }
 
   return hidden(elapsed);
+}
+
+/** Composer clock is only for the gap before the assistant row mounts. */
+export function shouldShowComposerActivity(input: {
+  hasAssistantMessage: boolean;
+  visible: boolean;
+  mode: ActivityMode;
+}): boolean {
+  if (!input.visible) return false;
+  if (input.hasAssistantMessage) return false;
+  if (input.mode === "collapsed" || input.mode === "hidden") return false;
+  return true;
+}
+
+export function sourceChipLabel(hit: {
+  title?: unknown;
+  url?: unknown;
+}): string {
+  const host = hostFromUrl(hit.url);
+  if (host) return host;
+  if (typeof hit.title === "string" && hit.title.trim()) {
+    return hit.title.replace(/\s+/g, " ").trim().slice(0, 24);
+  }
+  return "";
 }
 
 export type ActivitySearchHit = {

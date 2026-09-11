@@ -81,6 +81,7 @@ describe("head start route bundle isolation", () => {
     assert.doesNotMatch(route, /from ["']@\/lib\/harness\/tool-registry["']/);
     assert.doesNotMatch(route, /maxDuration\s*=\s*300/);
     assert.doesNotMatch(route, /preload\(/);
+    assert.doesNotMatch(route, /provider:\s*turnClientData\.provider/);
   });
 
   it("fails closed with 503 when durable chat env is missing", () => {
