@@ -6,6 +6,7 @@ import {
 import type { HarnessChatContext } from "@/lib/harness/types";
 import type { AccessMode, AppSettings } from "@/lib/settings";
 import { resolveApiKey, resolveBaseURL, resolveModel } from "@/lib/settings";
+import { resolveCloudTierModel } from "@/lib/hosted/speed-tiers";
 
 export type ChatAccessMode = "hosted" | "byok";
 
@@ -80,9 +81,13 @@ export function parseChatClientData(raw: unknown): ParseChatClientDataResult {
 
   const accessMode: ChatAccessMode =
     rec.accessMode === "byok" ? "byok" : "hosted";
-  const model = str(rec.model).trim();
-  if (!model) {
-    return { ok: false, error: "No model selected. Pick a model from the dropdown." };
+  const speedTier = rec.speedTier === "expert" ? "expert" : "fast";
+  let model = str(rec.model).trim();
+  if (accessMode === "hosted") {
+    // Cloud turns are remapped from Fast/Expert only. Ignore leftover catalog ids.
+    model = resolveCloudTierModel(speedTier);
+  } else if (!model) {
+    return { ok: false, error: "No model selected. Open Settings and choose a model." };
   }
 
   const providerRaw = str(rec.provider).trim() || "openrouter";
@@ -118,7 +123,7 @@ export function parseChatClientData(raw: unknown): ParseChatClientDataResult {
     model,
     toolsEnabled: rec.toolsEnabled !== false,
     approvalMode: parseToolApprovalMode(rec.approvalMode),
-    speedTier: rec.speedTier === "expert" ? "expert" : "fast",
+    speedTier,
     provider,
     apiKey: accessMode === "byok" ? apiKey : undefined,
     baseURL: str(rec.baseURL).trim() || undefined,

@@ -13,6 +13,8 @@ import { getValidGitHubAccessToken } from "@/lib/github-session";
 import { isCloudDbConfigured } from "@/lib/db";
 import { isHostedConfigured } from "@/lib/hosted/config";
 import { isHostedChatAvailable } from "@/lib/hosted/availability";
+import { HOSTED_CLOUD_UNAVAILABLE_MESSAGE } from "@/lib/hosted/errors";
+import { resolveHostedRoute } from "@/lib/hosted/router";
 import {
   resolveCloudTierModel,
   resolveEffectiveSpeedTier,
@@ -66,8 +68,7 @@ export async function POST(req: Request) {
       if (!isHostedChatAvailable(process.env, isHostedConfigured())) {
         return new Response(
           JSON.stringify({
-            error:
-              "Aether Cloud is not configured on this server. Switch to Bring your own key in Settings, or ask the operator to set OPENROUTER_API_KEY.",
+            error: HOSTED_CLOUD_UNAVAILABLE_MESSAGE,
           }),
           { status: 503, headers: { "Content-Type": "application/json" } },
         );
@@ -229,6 +230,13 @@ export async function POST(req: Request) {
     const requestedModel = hosted
       ? resolveCloudTierModel(speedTier)
       : incomingModel;
+
+    if (hosted && !resolveHostedRoute(requestedModel, speedTier)) {
+      return new Response(
+        JSON.stringify({ error: HOSTED_CLOUD_UNAVAILABLE_MESSAGE }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      );
+    }
 
     if (!incomingModel && !hosted) {
       return new Response(

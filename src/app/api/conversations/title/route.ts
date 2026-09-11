@@ -85,12 +85,10 @@ export async function POST(req: Request) {
 
     let model: LanguageModel;
     if (hosted) {
-      const preferred =
-        modelId && /gpt|chatgpt|sol/i.test(modelId)
-          ? modelId
-          : modelId || "gpt-5.6-sol";
+      // Titles follow Cloud Fast (Ultra → Lightning). Leftover catalog
+      // ids in x-model must not select a dead specialty hop.
       const hostedModel = createHostedLanguageModel(
-        preferred,
+        modelId || "fast",
         req.headers.get("origin"),
       );
       if (!hostedModel) {

@@ -135,6 +135,7 @@ describe("chat transport wiring contract", () => {
     );
     assert.match(agent, /speedTier:\s*z\.enum\(\["fast", "expert"\]\)/);
     assert.match(agent, /speedTier: prepared\.speedTier/);
+    assert.match(agent, /HOSTED_CLOUD_UNAVAILABLE_MESSAGE/);
 
     const requestPath = readFileSync(
       new URL("../../app/api/chat/route.ts", import.meta.url),

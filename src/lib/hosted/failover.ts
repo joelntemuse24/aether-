@@ -4,6 +4,26 @@ import { friendlyChatError } from "@/lib/chat-errors";
 
 export { friendlyChatError };
 
+/** Per-hop cap so a hung Fast Ultra request can still reach Lightning. */
+export const HOSTED_HOP_TIMEOUT_MS = 8_000;
+
+export async function withHostedHopTimeout<T>(
+  run: () => Promise<T>,
+  ms = HOSTED_HOP_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`hosted hop timeout after ${ms}ms`));
+    }, ms);
+  });
+  try {
+    return await Promise.race([run(), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 type HostedCandidate = {
   model: LanguageModel;
   upstreamId: string;
@@ -28,16 +48,17 @@ export function isFailoverError(error: unknown): boolean {
   if (!error) return false;
   if (APICallError.isInstance(error)) {
     const status = error.statusCode ?? 0;
+    // Free / unpublished Cloud hops often 400/403/404 instead of 429.
+    if (status === 400 || status === 403 || status === 404) return true;
     if (status === 408 || status === 429) return true;
     if (status >= 500 && status <= 599) return true;
-    // Some gateways return 400 with a saturation body.
     const body = typeof error.responseBody === "string" ? error.responseBody : "";
-    if (/saturat|overloaded|capacity|no available provider/i.test(body)) {
+    if (/saturat|overloaded|capacity|no available provider|no endpoints/i.test(body)) {
       return true;
     }
   }
   const msg = error instanceof Error ? error.message : String(error);
-  return /saturat|overloaded|capacity|rate limit|429|503|502|504|ECONNRESET|ETIMEDOUT|fetch failed|All providers are saturated|maxRetriesExceeded/i.test(
+  return /saturat|overloaded|capacity|rate limit|429|503|502|504|403|404|ECONNRESET|ETIMEDOUT|fetch failed|All providers are saturated|maxRetriesExceeded|hosted hop timeout|empty model response|no content generated/i.test(
     msg,
   );
 }
@@ -69,7 +90,8 @@ export function createFailoverLanguageModel(
       const c = candidates[i];
       const model = asLM(c.model);
       try {
-        return await run(model, c.upstreamId);
+        console.info(`[hosted] ${label} try ${c.upstreamId}:${c.upstreamModelId}`);
+        return await withHostedHopTimeout(() => run(model, c.upstreamId));
       } catch (err) {
         lastError = err;
         const hasNext = i < candidates.length - 1;

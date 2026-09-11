@@ -1,6 +1,7 @@
 import type { ProviderId } from "./models";
 import { providerSupportsTools } from "./models";
 import { DEFAULT_HOSTED_MODEL } from "./hosted/catalog";
+import { resolveCloudTierModel } from "./hosted/speed-tiers";
 import type { VoiceId } from "./voice";
 import {
   DEFAULT_TOOL_APPROVAL_MODE,
@@ -115,6 +116,11 @@ export function resolveApiKey(settings: AppSettings): string {
 }
 
 export function resolveModel(settings: AppSettings): string {
+  if (settings.accessMode === "hosted") {
+    return resolveCloudTierModel(
+      settings.speedTier === "expert" ? "expert" : "fast",
+    );
+  }
   if (settings.useCustomModel && settings.customModel.trim()) {
     return settings.customModel.trim();
   }
