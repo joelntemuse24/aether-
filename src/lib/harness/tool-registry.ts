@@ -19,6 +19,7 @@ import {
 import { toVisionToolModelOutput } from "@/lib/harness/vision-tool-output";
 import { runVerifyChecklist } from "@/lib/harness/verify";
 import { buildHeadStartToolSchemas } from "@/lib/harness/tool-schemas";
+import { resolveCurrentTime } from "@/lib/current-time";
 import type { AgentLoopController } from "@/lib/harness/loop-efficiency";
 import {
   DEFAULT_TOOL_APPROVAL_MODE,
@@ -57,6 +58,7 @@ export function resolveAvailableToolNames(ctx: {
 }): string[] {
   const names: string[] = [
     TOOL_NAMES.executePython,
+    TOOL_NAMES.currentTime,
     TOOL_NAMES.webSearch,
     TOOL_NAMES.fetchUrl,
     TOOL_NAMES.browsePage,
@@ -183,6 +185,10 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
 
   const tools: ToolSet = {
     ...schemas,
+    [TOOL_NAMES.currentTime]: tool({
+      ...schemas[TOOL_NAMES.currentTime],
+      execute: async ({ timeZone }) => resolveCurrentTime({ timeZone }),
+    }),
     [TOOL_NAMES.webSearch]: tool({
       ...schemas[TOOL_NAMES.webSearch],
       execute: async ({ query }): Promise<WebSearchOutput> => {

@@ -7,6 +7,7 @@ import { buildHeadStartToolSchemas } from "./tool-schemas";
 describe("head-start schema-only tools", () => {
   it("exposes core tools without execute fns", () => {
     const tools = buildHeadStartToolSchemas({ toolsEnabled: true });
+    assert.ok(tools[TOOL_NAMES.currentTime]);
     assert.ok(tools[TOOL_NAMES.webSearch]);
     assert.ok(tools[TOOL_NAMES.fetchUrl]);
     assert.ok(tools[TOOL_NAMES.createArtifact]);

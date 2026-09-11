@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { Sandbox } from "@vercel/sandbox";
 import { annotateWorkspaceCommandResult } from "@/lib/connectors/workspace-media";
+import {
+  WORKSPACE_ENSURE_TZDATA_COMMAND,
+  wrapWorkspaceCommandForPythonTzdata,
+} from "@/lib/python-tzdata";
 
 const WORKSPACE_ROOT = "/vercel/sandbox/workspace";
 const MAX_COMMAND_TIMEOUT_MS = 60_000;
@@ -137,6 +141,18 @@ function isRetryableWorkspaceError(err: unknown): boolean {
   );
 }
 
+async function ensureWorkspaceTzdata(sandbox: WorkspaceSandbox) {
+  try {
+    await sandbox.runCommand({
+      cmd: "bash",
+      args: ["-lc", WORKSPACE_ENSURE_TZDATA_COMMAND],
+      timeoutMs: 45_000,
+    });
+  } catch (err) {
+    logWorkspaceFailure("tzdata", err);
+  }
+}
+
 async function ensureWorkspaceRoot(sandbox: WorkspaceSandbox) {
   try {
     await sandbox.runCommand({
@@ -144,6 +160,7 @@ async function ensureWorkspaceRoot(sandbox: WorkspaceSandbox) {
       args: ["-p", WORKSPACE_ROOT],
       timeoutMs: 10_000,
     });
+    await ensureWorkspaceTzdata(sandbox);
     return;
   } catch (err) {
     try {
@@ -151,6 +168,7 @@ async function ensureWorkspaceRoot(sandbox: WorkspaceSandbox) {
     } catch (mkdirErr) {
       logWorkspaceFailure("mkdir", mkdirErr ?? err);
     }
+    await ensureWorkspaceTzdata(sandbox);
   }
 }
 
@@ -203,9 +221,10 @@ export async function workspaceExec(
   );
   try {
     const sandbox = await sandboxOf(identity, deps);
+    const commandWithTz = wrapWorkspaceCommandForPythonTzdata(command);
     const result = await sandbox.runCommand({
       cmd: "bash",
-      args: ["-lc", command],
+      args: ["-lc", commandWithTz],
       cwd: WORKSPACE_ROOT,
       timeoutMs,
     });

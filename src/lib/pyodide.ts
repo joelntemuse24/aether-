@@ -41,6 +41,13 @@ function buildWorkerSource(): string {
           await pyodide.loadPackagesFromImports(code);
         } catch (_) { /* ignore optional package load failures */ }
 
+        // zoneinfo is stdlib; IANA names need the tzdata wheel (not auto-loaded).
+        try {
+          await pyodide.loadPackage("micropip");
+          const micropip = pyodide.pyimport("micropip");
+          await micropip.install("tzdata");
+        } catch (_) { /* already present or CDN miss — user code may still work */ }
+
         const result = await pyodide.runPythonAsync(code);
         const resultStr =
           result === undefined || result === null ? undefined : String(result);

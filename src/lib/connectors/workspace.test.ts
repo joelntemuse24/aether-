@@ -180,6 +180,34 @@ describe("workspace_exec happy path", () => {
     assert.match(seen, /pwd && ls/);
   });
 
+  it("installs tzdata before a Python ZoneInfo command", async () => {
+    let seen = "";
+    const result = await workspaceExec(
+      { userId: "u1", conversationId: "c1" },
+      {
+        command:
+          "python3 -c \"from zoneinfo import ZoneInfo; print(ZoneInfo('Europe/Dublin'))\"",
+      },
+      {
+        getSandbox: async () =>
+          fakeSandbox({
+            runCommand: async (input) => {
+              seen = [input.cmd, ...input.args].join(" ");
+              return {
+                exitCode: 0,
+                stdout: async () => "Europe/Dublin\n",
+                stderr: async () => "",
+                durationMs: 20,
+              };
+            },
+          }),
+      },
+    );
+    assert.equal(result.ok, true);
+    assert.match(seen, /tzdata/);
+    assert.match(seen, /Europe\/Dublin/);
+  });
+
   it("annotates a missing ffmpeg binary as MISSING", async () => {
     const result = await workspaceExec(
       { userId: "u1", conversationId: "c1" },
