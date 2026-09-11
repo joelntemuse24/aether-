@@ -1,0 +1,357 @@
+{
+  "version": 1,
+  "notes": "Capability-gap seeds plus Joel’s Grok-history harvest (2026-09-11). Keep harvest categories as labeled. Truncated … tails are OK. Detectors score breakage, not answer quality. Surfaces stay api+ui. UI chrome for failure states may be designed in Figma Make and must stay synced with this wired chrome — do not invent unwired UI.",
+  "harvestedAt": "2026-09-11T16:56:00Z",
+  "harvestSource": "grok-history",
+  "seeds": [
+    {
+      "id": "blank-survival-hello",
+      "category": "blank-survival",
+      "prompt": "Say hello in one short sentence.",
+      "tiers": ["fast", "expert"],
+      "smoke": true,
+      "timeoutMs": 45000,
+      "surfaces": ["api", "ui"],
+      "notes": "Guest/first-send must not vanish into a blank Howzit / transcript after send."
+    },
+    {
+      "id": "math-final-price",
+      "category": "math",
+      "prompt": "A jacket costs $120. After a 15% discount and then 8% sales tax on the discounted price, what is the final price? Show the arithmetic.",
+      "tiers": ["fast", "expert"],
+      "smoke": true,
+      "timeoutMs": 60000,
+      "surfaces": ["api", "ui"]
+    },
+    {
+      "id": "math-quick-product",
+      "category": "math",
+      "prompt": "What is 17 × 23? Reply with the product and a one-line check.",
+      "tiers": ["fast", "expert"],
+      "smoke": false,
+      "timeoutMs": 45000,
+      "surfaces": ["api", "ui"]
+    },
+    {
+      "id": "cite-search-ireland-unemployment",
+      "category": "cite-search",
+      "prompt": "What is Ireland's latest published unemployment rate? Use web search, cite sources with inline [1] [2], and list the URLs.",
+      "tiers": ["fast", "expert"],
+      "smoke": false,
+      "timeoutMs": 120000,
+      "surfaces": ["api", "ui"]
+    },
+    {
+      "id": "fetch-extract-example",
+      "category": "fetch-extract",
+      "prompt": "Fetch https://example.com and extract the page title plus the first sentence of the body. Quote them.",
+      "tiers": ["fast", "expert"],
+      "smoke": false,
+      "timeoutMs": 90000,
+      "surfaces": ["api", "ui"]
+    },
+    {
+      "id": "pptx-dublin-ops",
+      "category": "pptx-xlsx",
+      "prompt": "Research Dublin junior investment-ops market Sep 2026 and give me a real .pptx.",
+      "tiers": ["fast", "expert"],
+      "smoke": false,
+      "timeoutMs": 180000,
+      "surfaces": ["api", "ui"],
+      "notes": "Playbook eval prompt — breakage probe, not a quality rubric."
+    },
+    {
+      "id": "xlsx-q3-costs",
+      "category": "pptx-xlsx",
+      "prompt": "Make a real .xlsx of Q3 costs with headers Category, Amount, Notes and three sample rows.",
+      "tiers": ["fast", "expert"],
+      "smoke": false,
+      "timeoutMs": 120000,
+      "surfaces": ["api", "ui"]
+    },
+    {
+      "id": "github-list-aether",
+      "category": "github-list",
+      "prompt": "List the top-level files in https://github.com/joelntemuse24/aether- using GitHub list tools (do not scrape the HTML page).",
+      "tiers": ["fast", "expert"],
+      "smoke": false,
+      "timeoutMs": 90000,
+      "surfaces": ["api", "ui"],
+      "notes": "Without a GitHub connector the honest answer is 'not connected' — that is not a probe failure. Crash / blank / DSML is."
+    },
+    {
+      "id": "time-dublin",
+      "category": "time-dublin",
+      "prompt": "What time is it in Dublin, Ireland right now? Include the timezone name.",
+      "tiers": ["fast", "expert"],
+      "smoke": true,
+      "timeoutMs": 90000,
+      "surfaces": ["api", "ui"],
+      "notes": "Known Expert failure: ZoneInfoNotFoundError and raw DSML tool_search dumps."
+    },
+    {
+      "id": "research-deep-dublin-fund-admin",
+      "category": "research-deep",
+      "prompt": "Compare two current approaches to fund administration in Dublin. Use web search, then write a short sourced brief with inline [1] [2] citations.",
+      "tiers": ["fast", "expert"],
+      "smoke": false,
+      "timeoutMs": 180000,
+      "surfaces": ["api", "ui"]
+    }
+  ],
+  "harvested": [
+    {
+      "id": "grok-head-start-bullets",
+      "category": "tools/code",
+      "prompt": "Explain how Head Start + durable workers keep long AI chat turns smooth, in 4 short bullets.",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 90000,
+      "notes": "long-running agent architecture"
+    },
+    {
+      "id": "grok-ireland-unemployment",
+      "category": "research",
+      "prompt": "Search the web for Ireland’s current unemployment rate and cite one source.",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 120000,
+      "notes": "live web + citation"
+    },
+    {
+      "id": "grok-ireland-office-workers",
+      "category": "research",
+      "prompt": "How many people in Ireland work in an office? As opposed to strictly hospitality…",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 120000,
+      "notes": "ambiguous labour category"
+    },
+    {
+      "id": "grok-polymarket-perps",
+      "category": "long-reasoning",
+      "prompt": "is there a way to treat perps trading on polymarket as sstructually similar to the hourly binary markets?",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 180000,
+      "notes": "payoff structures"
+    },
+    {
+      "id": "grok-hedged-long-short",
+      "category": "long-reasoning",
+      "prompt": "What if I could be hedged? I could be long and short , and an overgiving period,…",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 180000,
+      "notes": "net exposure"
+    },
+    {
+      "id": "grok-underspecified-purpose",
+      "category": "other",
+      "prompt": "Like, to be honest, like, I don't even understand purpose. Are, are they, like, …",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 120000,
+      "notes": "underspecified finance"
+    },
+    {
+      "id": "grok-trading-rule",
+      "category": "long-reasoning",
+      "prompt": "So I guess what you could do is like you could kind of like build a version of a…",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 180000,
+      "notes": "trading rule design"
+    },
+    {
+      "id": "grok-backtest-design",
+      "category": "tools/code",
+      "prompt": "Yeah, what I'm going to do is I'm going to try build like a kind of really, really…",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 90000,
+      "notes": "backtest design"
+    },
+    {
+      "id": "grok-hf-vehicles",
+      "category": "research",
+      "prompt": "summarise the below : The candidate should be able to:\ndescribe investment forms and vehicles used in hedge fund investments",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 120000,
+      "notes": "HF vehicles"
+    },
+    {
+      "id": "grok-hf-risk-return",
+      "category": "long-reasoning",
+      "prompt": "he candidate should be able to:\nanalyze sources of risk, return, and diversification among hedge fund investment…",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 180000,
+      "notes": "HF risk/return"
+    },
+    {
+      "id": "grok-pulls-drags",
+      "category": "long-reasoning",
+      "prompt": "are both pulls and drags bad for liquidity? I just thought all pulls and drags are…",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 180000,
+      "notes": "working capital"
+    },
+    {
+      "id": "grok-liquidation-cost",
+      "category": "long-reasoning",
+      "prompt": "liquidation cost is always mean just like almost like the difference between fair…",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 180000,
+      "notes": "liquidation cost def"
+    },
+    {
+      "id": "grok-financial-calc",
+      "category": "tools/code",
+      "prompt": "how do i calculate thse step by step on a finacial calc",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 90000,
+      "notes": "calculator procedure"
+    },
+    {
+      "id": "grok-leverage-moral-hazard",
+      "category": "long-reasoning",
+      "prompt": "why is the following true : For example, if a finance corporation is poorly capi…",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 180000,
+      "notes": "leverage moral hazard"
+    },
+    {
+      "id": "grok-cfa-python-interview",
+      "category": "files/office",
+      "prompt": "yes add some cfa and python tho looking at the job spec its prob overkill . plea…",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 180000,
+      "notes": "interview + CFA/Python"
+    },
+    {
+      "id": "grok-job-research",
+      "category": "research",
+      "prompt": "can u explain in detail what the job actully entails and if possible can u search…",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 120000,
+      "notes": "job research"
+    },
+    {
+      "id": "grok-multistep-office",
+      "category": "files/office",
+      "prompt": "wanna test my new ai chat application with a multistep work flow that invovles b…",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 180000,
+      "notes": "Aether multi-step office workflow test"
+    },
+    {
+      "id": "grok-aether-benchmark-meta",
+      "category": "tools/code",
+      "prompt": "give another simialr propmt . remeber im trying to test the skills of aether . (…",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 90000,
+      "notes": "Aether agent benchmark meta-prompt"
+    },
+    {
+      "id": "grok-capability-parity",
+      "category": "long-reasoning",
+      "prompt": "i want it tp be able to do everything u can",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 180000,
+      "notes": "capability parity"
+    },
+    {
+      "id": "grok-capability-handoff",
+      "category": "files/office",
+      "prompt": "i actually just want to hand over a detailed list of everything you can do that …",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 180000,
+      "notes": "capability handoff"
+    },
+    {
+      "id": "grok-adversarial-doc-audit",
+      "category": "long-reasoning",
+      "prompt": "u sure this file is good and exact and theres no subtle erros or mistakes",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 180000,
+      "notes": "adversarial doc audit"
+    },
+    {
+      "id": "grok-minimum-margin",
+      "category": "simple",
+      "prompt": "What is a minimum margin requirement",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 45000,
+      "notes": "contrast simple"
+    },
+    {
+      "id": "grok-time-dublin",
+      "category": "simple",
+      "prompt": "What time is it in Dublin?",
+      "enabled": true,
+      "source": "grok-history",
+      "tiers": ["fast", "expert"],
+      "surfaces": ["api", "ui"],
+      "timeoutMs": 90000,
+      "notes": "tzdata regression"
+    }
+  ]
+}
