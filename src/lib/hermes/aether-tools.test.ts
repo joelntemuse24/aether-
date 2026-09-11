@@ -179,7 +179,7 @@ describe("executeAetherTool", () => {
             assert.equal(identity.userId, "user-1");
             assert.equal(identity.conversationId, "c1");
             assert.equal(input.command, "printf hello");
-            return { ok: true, exitCode: 0, stdout: "hello", stderr: "" };
+            return { ok: true, exitCode: 0, stdout: "hello", stderr: "", truncated: false, durationMs: 5 };
           },
         },
       }),
@@ -233,5 +233,50 @@ describe("executeAetherTool", () => {
     });
     assert.equal(gh.ok, false);
     assert.match(String((gh as { error?: string }).error), /not connected/i);
+  });
+
+  it("builds a real pptx via create_presentation without a confirm card", async () => {
+    const result = await executeAetherTool({
+      name: "create_presentation",
+      args: {
+        title: "Ireland investment operations",
+        slides: [
+          { title: "Ireland investment operations", layout: "title" },
+          { title: "Market", bullets: ["Fund admin in Dublin"] },
+        ],
+      },
+      ctx: baseCtx({
+        approvalMode: "ask",
+        userId: null,
+        deps: {
+          createConfirmation: async () => {
+            throw new Error("create_presentation must not pause in Ask");
+          },
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.needs_confirmation, undefined);
+    assert.equal((result as { kind?: string }).kind, "file");
+    assert.match(String((result as { filename?: string }).filename), /\.pptx$/);
+    assert.match(String((result as { content?: string }).content), /^data:.*base64,/);
+  });
+
+  it("surfaces the office-file fallback when workspace_exec cannot start", async () => {
+    const result = await executeAetherTool({
+      name: "workspace_exec",
+      args: { command: "pip install python-pptx" },
+      ctx: baseCtx({
+        deps: {
+          workspaceExec: async () => ({
+            ok: false,
+            error:
+              "The isolated workspace is unavailable. For a PowerPoint file use create_presentation; for Excel use create_spreadsheet. Do not substitute a markdown briefing when the user asked for a real file.",
+          }),
+        },
+      }),
+    });
+    assert.equal(result.ok, false);
+    assert.match(String((result as { error?: string }).error), /create_presentation/);
   });
 });

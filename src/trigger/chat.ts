@@ -62,6 +62,7 @@ const clientDataSchema = z
 type SessionCtx = {
   contextToken: string;
   userId: string | null;
+  conversationId: string | null;
   hasDrive: boolean;
   hasGitHub: boolean;
   hasGmail: boolean;
@@ -79,6 +80,7 @@ function readSessionCtx(): SessionCtx {
     return {
       contextToken: "",
       userId: null,
+      conversationId: null,
       hasDrive: false,
       hasGitHub: false,
       hasGmail: false,
@@ -94,6 +96,7 @@ function hydrateSessionCtx(data: ChatClientData | undefined) {
   const next: SessionCtx = {
     contextToken: data?.contextToken?.trim() || prev.contextToken,
     userId: data?.userId !== undefined ? data.userId : prev.userId,
+    conversationId: data?.conversationId?.trim() || prev.conversationId,
     hasDrive: data?.hasDrive === true || prev.hasDrive,
     hasGitHub: data?.hasGitHub === true || prev.hasGitHub,
     hasGmail: data?.hasGmail === true || prev.hasGmail,
@@ -105,6 +108,7 @@ function hydrateSessionCtx(data: ChatClientData | undefined) {
     sessionCtx.get();
     sessionCtx.contextToken = next.contextToken;
     sessionCtx.userId = next.userId;
+    sessionCtx.conversationId = next.conversationId;
     sessionCtx.hasDrive = next.hasDrive;
     sessionCtx.hasGitHub = next.hasGitHub;
     sessionCtx.hasGmail = next.hasGmail;
@@ -160,7 +164,7 @@ export const chatAgent = chat.agent({
     const userId = data?.userId !== undefined ? data.userId : stored.userId;
     return buildToolRegistry({
       userId,
-      conversationId: data?.conversationId ?? null,
+      conversationId: data?.conversationId || stored.conversationId || null,
       projectId: data?.projectId ?? null,
       hasDrive: data?.hasDrive === true || stored.hasDrive,
       hasGitHub: data?.hasGitHub === true || stored.hasGitHub,

@@ -17,6 +17,7 @@ function KindIcon({ kind }: { kind: string }) {
   if (kind === "code") return <CodeIcon className={cls} />;
   if (kind === "data") return <BracesIcon className={cls} />;
   if (kind === "image" || kind === "svg") return <ImageIcon className={cls} />;
+  if (kind === "file") return <FileTextIcon className={cls} />;
   return <SparklesIcon className={cls} />;
 }
 

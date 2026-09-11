@@ -269,6 +269,10 @@ function toolTraceNoun(name: string): string {
       return "Output";
     case TOOL_NAMES.createArtifact:
       return "Preview";
+    case TOOL_NAMES.createPresentation:
+    case TOOL_NAMES.createSpreadsheet:
+    case TOOL_NAMES.workspacePublishFile:
+      return "File";
     case TOOL_NAMES.memorySearch:
     case TOOL_NAMES.memoryWrite:
       return "Memory";
@@ -462,7 +466,10 @@ function toArtifact(id: string, input: CreateArtifactInput): Artifact {
     kind,
     language: input.language,
     code: input.content ?? "",
-    mime: kind === "image" ? guessImageMime(input.content ?? "") : undefined,
+    mime:
+      kind === "image" || kind === "file"
+        ? guessImageMime(input.content ?? "") || undefined
+        : undefined,
   };
 }
 
@@ -484,6 +491,7 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
         content?: string;
         needs_confirmation?: boolean;
         confirmation_id?: string;
+        filename?: string;
       })
     | undefined;
   const confirm = confirmationFromResult(result);
@@ -514,10 +522,17 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     (input?.kind as string | undefined) ||
     (result?.kind as string | undefined) ||
     extractPartialJsonString(part.argsText, "kind") ||
-    part.argsText?.match(/"kind"\s*:\s*"(\w+)"/)?.[1];
+    part.argsText?.match(/"kind"\s*:\s*"(\w+)"/)?.[1] ||
+    (part.toolName === TOOL_NAMES.createPresentation ||
+    part.toolName === TOOL_NAMES.createSpreadsheet ||
+    part.toolName === TOOL_NAMES.workspacePublishFile
+      ? "file"
+      : undefined);
   const streamingContent = bodyContent;
   const streamingLanguage =
-    input?.language || extractPartialJsonString(part.argsText, "language");
+    input?.language ||
+    result?.filename ||
+    extractPartialJsonString(part.argsText, "language");
 
   const artifactId = result?.id || part.toolCallId;
   const draft: Artifact | null =
@@ -650,7 +665,7 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
         ) : undefined
       }
     >
-      {(kindHint || streamingLanguage || running) && (
+      {(kindHint || streamingLanguage || running) && kindHint !== "file" && (
         <div className="text-[11px] text-[var(--muted)]">
           {kindHint ? `${kindHint} artifact` : "artifact"}
           {streamingLanguage ? ` · ${streamingLanguage}` : ""}
@@ -661,7 +676,16 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
               : ""}
         </div>
       )}
-      {streamingContent !== undefined && streamingContent.length > 0 && (
+      {kindHint === "file" && (
+        <div className="text-[11px] text-[var(--muted)]">
+          {streamingTitle || "Downloadable file"}
+          {streamingLanguage ? ` · ${streamingLanguage}` : ""}
+        </div>
+      )}
+      {streamingContent !== undefined &&
+        streamingContent.length > 0 &&
+        kindHint !== "file" &&
+        !streamingContent.startsWith("data:") && (
         <CodeSnippet
           code={
             streamingContent.length > 6000
@@ -1424,6 +1448,10 @@ export const ToolCallPart: FC<{ part: ToolPartLike }> = ({ part }) => {
     case TOOL_NAMES.webSearch:
       return <WebSearchToolCall part={part} />;
     case TOOL_NAMES.createArtifact:
+      return <CreateArtifactToolCall part={part} />;
+    case TOOL_NAMES.createPresentation:
+    case TOOL_NAMES.createSpreadsheet:
+    case TOOL_NAMES.workspacePublishFile:
       return <CreateArtifactToolCall part={part} />;
     case TOOL_NAMES.memorySearch:
       return <MemorySearchToolCall part={part} />;

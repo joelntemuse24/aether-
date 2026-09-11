@@ -37,9 +37,16 @@ import { TOOL_NAMES } from "@/lib/tools";
 import {
   workspaceExec,
   workspaceListFiles,
+  workspaceReadBinary,
   workspaceReadFile,
   workspaceWriteFile,
 } from "@/lib/connectors/workspace";
+import { buildPresentationPptx } from "@/lib/office/build-pptx";
+import { buildSpreadsheetXlsx } from "@/lib/office/build-xlsx";
+import {
+  bufferToDataUrl,
+  mimeForFilename,
+} from "@/lib/office/file-artifact";
 import { generateImageForUser } from "@/lib/connectors/image";
 import {
   gmailSearchForUser,
@@ -125,7 +132,10 @@ export type AetherToolDeps = {
   workspaceReadFile?: typeof workspaceReadFile;
   workspaceWriteFile?: typeof workspaceWriteFile;
   workspaceListFiles?: typeof workspaceListFiles;
+  workspaceReadBinary?: typeof workspaceReadBinary;
   generateImage?: typeof generateImageForUser;
+  buildPresentation?: typeof buildPresentationPptx;
+  buildSpreadsheet?: typeof buildSpreadsheetXlsx;
 };
 
 export type AetherToolContext = {
@@ -179,6 +189,9 @@ const AETHER_TOOL_NAMES = new Set<string>([
   TOOL_NAMES.workspaceReadFile,
   TOOL_NAMES.workspaceWriteFile,
   TOOL_NAMES.workspaceListFiles,
+  TOOL_NAMES.workspacePublishFile,
+  TOOL_NAMES.createPresentation,
+  TOOL_NAMES.createSpreadsheet,
   TOOL_NAMES.generateImage,
   TOOL_NAMES.gmailSearch,
   TOOL_NAMES.gmailRead,
@@ -409,6 +422,35 @@ async function gateIfNeeded(
   };
 }
 
+async function persistArtifact(
+  ctx: AetherToolContext,
+  input: {
+    kind: string;
+    title: string;
+    language?: string;
+    content: string;
+  },
+): Promise<{ id?: string; persisted: boolean }> {
+  if (!ctx.userId || !isCloudDbConfigured()) {
+    return { persisted: false };
+  }
+  try {
+    const save = ctx.deps?.saveArtifact ?? saveArtifact;
+    const saved = await save(ctx.userId, {
+      kind: input.kind,
+      title: input.title,
+      language: input.language,
+      content: input.content,
+      projectId: ctx.projectId ?? undefined,
+      conversationId: ctx.conversationId ?? undefined,
+    });
+    return { id: saved.id, persisted: true };
+  } catch (err) {
+    console.warn("[artifact] persist failed", err);
+    return { persisted: false };
+  }
+}
+
 export async function executeAetherTool(input: {
   name: string;
   args?: unknown;
@@ -489,30 +531,20 @@ export async function executeAetherTool(input: {
     if (!title || !content) {
       return { ok: false, error: "title and content are required." };
     }
-    if (ctx.userId && isCloudDbConfigured()) {
-      try {
-        const save = ctx.deps?.saveArtifact ?? saveArtifact;
-        const saved = await save(ctx.userId, {
-          kind,
-          title,
-          language: str(args.language) || undefined,
-          content,
-          projectId: ctx.projectId ?? undefined,
-          conversationId: ctx.conversationId ?? undefined,
-        });
-        return {
-          ok: true,
-          kind,
-          title,
-          id: saved.id,
-          persisted: true,
-          content,
-        };
-      } catch (err) {
-        console.warn("[create_artifact] persist failed", err);
-      }
-    }
-    return { ok: true, kind, title, persisted: false, content };
+    const saved = await persistArtifact(ctx, {
+      kind,
+      title,
+      language: str(args.language) || undefined,
+      content,
+    });
+    return {
+      ok: true,
+      kind,
+      title,
+      id: saved.id,
+      persisted: saved.persisted,
+      content,
+    };
   }
 
   const workspaceIdentity = {
@@ -548,6 +580,134 @@ export async function executeAetherTool(input: {
       path: str(args.path) || undefined,
       depth: typeof args.depth === "number" ? args.depth : undefined,
     });
+  }
+
+  if (name === TOOL_NAMES.workspacePublishFile) {
+    const pathArg = str(args.path);
+    if (!pathArg) return { ok: false, error: "path is required." };
+    const read = ctx.deps?.workspaceReadBinary ?? workspaceReadBinary;
+    const file = await read(workspaceIdentity, { path: pathArg });
+    if (!file.ok) return file;
+    const filename = pathArg.split("/").filter(Boolean).pop() || "file";
+    const mime = mimeForFilename(filename);
+    const title = str(args.title) || filename;
+    const content = bufferToDataUrl(file.buffer, mime);
+    const saved = await persistArtifact(ctx, {
+      kind: "file",
+      title,
+      language: filename,
+      content,
+    });
+    return {
+      ok: true,
+      kind: "file",
+      title,
+      filename,
+      mime,
+      bytes: file.buffer.byteLength,
+      id: saved.id,
+      persisted: saved.persisted,
+      content,
+    };
+  }
+
+  if (name === TOOL_NAMES.createPresentation) {
+    const title = str(args.title);
+    const slides = Array.isArray(args.slides) ? args.slides : [];
+    if (!title) return { ok: false, error: "title is required." };
+    if (slides.length === 0) {
+      return { ok: false, error: "slides are required." };
+    }
+    const build = ctx.deps?.buildPresentation ?? buildPresentationPptx;
+    const deck = await build({
+      title,
+      subtitle: str(args.subtitle) || undefined,
+      slides: slides.map((raw) => {
+        const slide = asRecord(raw);
+        const layout = str(slide.layout);
+        return {
+          title: str(slide.title),
+          bullets: Array.isArray(slide.bullets)
+            ? slide.bullets.filter((b): b is string => typeof b === "string")
+            : undefined,
+          notes: str(slide.notes) || undefined,
+          layout:
+            layout === "title" || layout === "section" || layout === "title_and_bullets"
+              ? layout
+              : undefined,
+        };
+      }),
+    });
+    const saved = await persistArtifact(ctx, {
+      kind: "file",
+      title,
+      language: deck.filename,
+      content: deck.dataUrl,
+    });
+    return {
+      ok: true,
+      kind: "file",
+      title,
+      filename: deck.filename,
+      mime: deck.mime,
+      slides: deck.slideCount,
+      id: saved.id,
+      persisted: saved.persisted,
+      content: deck.dataUrl,
+    };
+  }
+
+  if (name === TOOL_NAMES.createSpreadsheet) {
+    const title = str(args.title);
+    const sheets = Array.isArray(args.sheets) ? args.sheets : [];
+    if (!title) return { ok: false, error: "title is required." };
+    if (sheets.length === 0) {
+      return { ok: false, error: "sheets are required." };
+    }
+    const build = ctx.deps?.buildSpreadsheet ?? buildSpreadsheetXlsx;
+    const book = await build({
+      title,
+      sheets: sheets.map((raw) => {
+        const sheet = asRecord(raw);
+        return {
+          name: str(sheet.name) || undefined,
+          headers: Array.isArray(sheet.headers)
+            ? sheet.headers.filter((h): h is string => typeof h === "string")
+            : undefined,
+          rows: Array.isArray(sheet.rows)
+            ? sheet.rows.map((row) =>
+                Array.isArray(row)
+                  ? row.map((cell) =>
+                      typeof cell === "string" ||
+                      typeof cell === "number" ||
+                      typeof cell === "boolean" ||
+                      cell === null
+                        ? cell
+                        : String(cell),
+                    )
+                  : [],
+              )
+            : [],
+        };
+      }),
+    });
+    const saved = await persistArtifact(ctx, {
+      kind: "file",
+      title,
+      language: book.filename,
+      content: book.dataUrl,
+    });
+    return {
+      ok: true,
+      kind: "file",
+      title,
+      filename: book.filename,
+      mime: book.mime,
+      sheets: book.sheetCount,
+      id: saved.id,
+      persisted: saved.persisted,
+      content: book.dataUrl,
+    };
   }
 
   if (name === TOOL_NAMES.generateImage) {

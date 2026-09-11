@@ -71,8 +71,11 @@ const GITHUB_OWNED_WRITE_TOOLS = new Set<string>([
 /** Files / tables / docs the user just asked for — land, don't pause. */
 const USER_DELIVERABLE_TOOLS = new Set<string>([
   TOOL_NAMES.createArtifact,
+  TOOL_NAMES.createPresentation,
+  TOOL_NAMES.createSpreadsheet,
   TOOL_NAMES.workspaceExec,
   TOOL_NAMES.workspaceWriteFile,
+  TOOL_NAMES.workspacePublishFile,
 ]);
 
 const DESTRUCTIVE_ACTIONS = new Set<string>([

@@ -12,6 +12,9 @@
     },
     "src/app/api/drive/download/route.ts": {
       "maxDuration": 120
+    },
+    "src/app/api/hermes/aether-tools/route.ts": {
+      "maxDuration": 300
     }
   }
 }

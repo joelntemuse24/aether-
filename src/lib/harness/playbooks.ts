@@ -26,13 +26,13 @@ const PLAYBOOKS: Record<PlaybookId, Playbook> = {
     id: "slides",
     label: "Slides",
     promptHint:
-      "Deliver a deck via create_artifact (kind \"document\" or \"data\"): numbered slides with a title and 3–5 bullets each. Do not dump a wall of prose in chat.",
+      "Deliver a real PowerPoint via create_presentation (structured slides: title + 3–5 bullets). Do not use create_artifact markdown, and do not wait on workspace_exec / python-pptx. Keep the .pptx on this thread.",
   },
   sheet: {
     id: "sheet",
     label: "Sheet",
     promptHint:
-      "Deliver a table via create_artifact kind \"data\" (CSV or JSON rows). Clear headers, one fact per cell. Mention the table in chat; put the grid in the artifact.",
+      "Deliver a real spreadsheet via create_spreadsheet (.xlsx with headers and rows). Mention the file in chat; put the grid in the workbook. Use create_artifact kind \"data\" only if they asked for CSV/JSON in the panel, not a downloadable workbook.",
   },
 };
 

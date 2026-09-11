@@ -212,6 +212,20 @@ export function activityLabelForTool(
       if (running) return title ? `Creating ${title}` : "Creating file";
       return "Created file";
     }
+    case "create_presentation": {
+      const title = clipPhrase(args.title);
+      if (running) return title ? `Building ${title}` : "Building slides";
+      return "Built slides";
+    }
+    case "create_spreadsheet": {
+      const title = clipPhrase(args.title);
+      if (running) return title ? `Building ${title}` : "Building spreadsheet";
+      return "Built spreadsheet";
+    }
+    case "workspace_publish_file":
+      return running ? "Attaching file" : "Attached file";
+    case "workspace_exec":
+      return running ? "Running command" : "Ran command";
     case "execute_python":
       return running ? "Running Python" : "Ran Python";
     case "memory_write":

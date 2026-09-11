@@ -37,6 +37,9 @@ import {
   workspaceReadFileInput,
   workspaceWriteFileInput,
   workspaceListFilesInput,
+  workspacePublishFileInput,
+  createPresentationInput,
+  createSpreadsheetInput,
   generateImageInput,
   gmailSearchInput,
   gmailReadInput,
@@ -115,6 +118,21 @@ export function buildHeadStartToolSchemas(
       description:
         "List files and directories in the isolated conversation workspace.",
       inputSchema: workspaceListFilesInput,
+    }),
+    [TOOL_NAMES.workspacePublishFile]: tool({
+      description:
+        "Attach a binary file from the isolated workspace (pptx, xlsx, pdf, images) as a downloadable artifact in this thread. Use after workspace_exec writes the file. Ordinary user-requested files do not need confirmation.",
+      inputSchema: workspacePublishFileInput,
+    }),
+    [TOOL_NAMES.createPresentation]: tool({
+      description:
+        "Build a real PowerPoint (.pptx) from structured slides and attach it in-thread for download. Use this for decks — do not use create_artifact markdown and do not wait on workspace_exec / pip install python-pptx.",
+      inputSchema: createPresentationInput,
+    }),
+    [TOOL_NAMES.createSpreadsheet]: tool({
+      description:
+        "Build a real Excel workbook (.xlsx) from headers and rows and attach it in-thread for download. Use this for spreadsheets the user asked to download — not a markdown table.",
+      inputSchema: createSpreadsheetInput,
     }),
     [TOOL_NAMES.generateImage]: tool({
       description:
