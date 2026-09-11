@@ -316,4 +316,187 @@ describe("executeAetherTool", () => {
     assert.equal(result.ok, false);
     assert.match(String((result as { error?: string }).error), /create_presentation/);
   });
+
+  it("builds a real xlsx via create_spreadsheet without a confirm card", async () => {
+    const result = await executeAetherTool({
+      name: "create_spreadsheet",
+      args: {
+        title: "Q3 costs",
+        sheets: [
+          {
+            name: "Costs",
+            headers: ["item", "amount"],
+            rows: [
+              ["rent", 1200],
+              ["software", 80],
+            ],
+          },
+        ],
+      },
+      ctx: baseCtx({
+        approvalMode: "ask",
+        userId: null,
+        deps: {
+          createConfirmation: async () => {
+            throw new Error("create_spreadsheet must not pause in Ask");
+          },
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.needs_confirmation, undefined);
+    assert.equal((result as { kind?: string }).kind, "file");
+    assert.match(String((result as { filename?: string }).filename), /\.xlsx$/);
+    assert.match(String((result as { content?: string }).content), /^data:.*base64,/);
+    assert.equal((result as { persisted?: boolean }).persisted, false);
+    assert.match(String((result as { hint?: string }).hint), /sign in/i);
+  });
+
+  it("persists an xlsx for signed-in cloud users and returns a download path", async () => {
+    const result = await executeAetherTool({
+      name: "create_spreadsheet",
+      args: {
+        title: "Q3 costs",
+        sheets: [{ headers: ["item"], rows: [["rent"]] }],
+      },
+      ctx: baseCtx({
+        approvalMode: "ask",
+        userId: "user-1",
+        deps: {
+          saveArtifact: async (_userId, input) => {
+            assert.equal(input.kind, "file");
+            assert.match(input.content, /^data:.*base64,/);
+            return { id: "art-xlsx-1" };
+          },
+          createConfirmation: async () => {
+            throw new Error("create_spreadsheet must not pause in Ask");
+          },
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal((result as { persisted?: boolean }).persisted, true);
+    assert.equal((result as { id?: string }).id, "art-xlsx-1");
+    assert.equal(
+      (result as { downloadPath?: string }).downloadPath,
+      "/api/artifacts/art-xlsx-1/download",
+    );
+    assert.equal((result as { content?: string }).content, undefined);
+  });
+
+  it("builds a real docx via create_document without a confirm card", async () => {
+    const result = await executeAetherTool({
+      name: "create_document",
+      args: {
+        title: "Q3 ops memo",
+        paragraphs: ["Rent is the largest line item this quarter."],
+      },
+      ctx: baseCtx({
+        approvalMode: "ask",
+        userId: null,
+        deps: {
+          createConfirmation: async () => {
+            throw new Error("create_document must not pause in Ask");
+          },
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.needs_confirmation, undefined);
+    assert.equal((result as { kind?: string }).kind, "file");
+    assert.match(String((result as { filename?: string }).filename), /\.docx$/);
+    assert.match(String((result as { content?: string }).content), /^data:.*base64,/);
+    assert.equal((result as { persisted?: boolean }).persisted, false);
+    assert.match(String((result as { hint?: string }).hint), /sign in/i);
+  });
+
+  it("persists a docx for signed-in cloud users and returns a download path", async () => {
+    const result = await executeAetherTool({
+      name: "create_document",
+      args: {
+        title: "Q3 ops memo",
+        paragraphs: ["Rent is the largest line item."],
+      },
+      ctx: baseCtx({
+        approvalMode: "ask",
+        userId: "user-1",
+        deps: {
+          saveArtifact: async (_userId, input) => {
+            assert.equal(input.kind, "file");
+            assert.match(input.content, /^data:.*base64,/);
+            return { id: "art-docx-1" };
+          },
+          createConfirmation: async () => {
+            throw new Error("create_document must not pause in Ask");
+          },
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal((result as { persisted?: boolean }).persisted, true);
+    assert.equal((result as { id?: string }).id, "art-docx-1");
+    assert.equal(
+      (result as { downloadPath?: string }).downloadPath,
+      "/api/artifacts/art-docx-1/download",
+    );
+    assert.equal((result as { content?: string }).content, undefined);
+  });
+
+  it("builds a real pdf via create_pdf without a confirm card", async () => {
+    const result = await executeAetherTool({
+      name: "create_pdf",
+      args: {
+        title: "Q3 ops memo",
+        paragraphs: ["Rent is the largest line item this quarter."],
+      },
+      ctx: baseCtx({
+        approvalMode: "ask",
+        userId: null,
+        deps: {
+          createConfirmation: async () => {
+            throw new Error("create_pdf must not pause in Ask");
+          },
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.needs_confirmation, undefined);
+    assert.equal((result as { kind?: string }).kind, "file");
+    assert.match(String((result as { filename?: string }).filename), /\.pdf$/);
+    assert.match(String((result as { content?: string }).content), /^data:.*base64,/);
+    assert.equal((result as { persisted?: boolean }).persisted, false);
+    assert.match(String((result as { hint?: string }).hint), /sign in/i);
+  });
+
+  it("persists a pdf for signed-in cloud users and returns a download path", async () => {
+    const result = await executeAetherTool({
+      name: "create_pdf",
+      args: {
+        title: "Q3 ops memo",
+        paragraphs: ["Rent is the largest line item."],
+      },
+      ctx: baseCtx({
+        approvalMode: "ask",
+        userId: "user-1",
+        deps: {
+          saveArtifact: async (_userId, input) => {
+            assert.equal(input.kind, "file");
+            assert.match(input.content, /^data:.*base64,/);
+            return { id: "art-pdf-1" };
+          },
+          createConfirmation: async () => {
+            throw new Error("create_pdf must not pause in Ask");
+          },
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal((result as { persisted?: boolean }).persisted, true);
+    assert.equal((result as { id?: string }).id, "art-pdf-1");
+    assert.equal(
+      (result as { downloadPath?: string }).downloadPath,
+      "/api/artifacts/art-pdf-1/download",
+    );
+    assert.equal((result as { content?: string }).content, undefined);
+  });
 });

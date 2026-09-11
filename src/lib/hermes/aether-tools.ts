@@ -43,6 +43,8 @@ import {
 } from "@/lib/connectors/workspace";
 import { buildPresentationPptx } from "@/lib/office/build-pptx";
 import { buildSpreadsheetXlsx } from "@/lib/office/build-xlsx";
+import { buildDocumentDocx } from "@/lib/office/build-docx";
+import { buildDocumentPdf } from "@/lib/office/build-pdf";
 import {
   bufferToDataUrl,
   mimeForFilename,
@@ -137,6 +139,8 @@ export type AetherToolDeps = {
   generateImage?: typeof generateImageForUser;
   buildPresentation?: typeof buildPresentationPptx;
   buildSpreadsheet?: typeof buildSpreadsheetXlsx;
+  buildDocument?: typeof buildDocumentDocx;
+  buildPdf?: typeof buildDocumentPdf;
 };
 
 export type AetherToolContext = {
@@ -193,6 +197,8 @@ const AETHER_TOOL_NAMES = new Set<string>([
   TOOL_NAMES.workspacePublishFile,
   TOOL_NAMES.createPresentation,
   TOOL_NAMES.createSpreadsheet,
+  TOOL_NAMES.createDocument,
+  TOOL_NAMES.createPdf,
   TOOL_NAMES.generateImage,
   TOOL_NAMES.gmailSearch,
   TOOL_NAMES.gmailRead,
@@ -706,6 +712,60 @@ export async function executeAetherTool(input: {
       dataUrl: book.dataUrl,
       saved,
       extra: { sheets: book.sheetCount },
+    });
+  }
+
+  if (name === TOOL_NAMES.createDocument) {
+    const title = str(args.title);
+    if (!title) return { ok: false, error: "title is required." };
+    const paragraphs = Array.isArray(args.paragraphs)
+      ? args.paragraphs.filter((p): p is string => typeof p === "string")
+      : [];
+    const build = ctx.deps?.buildDocument ?? buildDocumentDocx;
+    const doc = await build({
+      title,
+      subtitle: str(args.subtitle) || undefined,
+      paragraphs,
+    });
+    const saved = await persistArtifact(ctx, {
+      kind: "file",
+      title,
+      language: doc.filename,
+      content: doc.dataUrl,
+    });
+    return fileToolResult({
+      title,
+      filename: doc.filename,
+      mime: doc.mime,
+      bytes: doc.buffer.byteLength,
+      dataUrl: doc.dataUrl,
+      saved,
+      extra: { paragraphs: doc.paragraphCount },
+    });
+  }
+
+  if (name === TOOL_NAMES.createPdf) {
+    const title = str(args.title);
+    if (!title) return { ok: false, error: "title is required." };
+    const paragraphs = Array.isArray(args.paragraphs)
+      ? args.paragraphs.filter((p): p is string => typeof p === "string")
+      : [];
+    const build = ctx.deps?.buildPdf ?? buildDocumentPdf;
+    const pdf = await build({ title, paragraphs });
+    const saved = await persistArtifact(ctx, {
+      kind: "file",
+      title,
+      language: pdf.filename,
+      content: pdf.dataUrl,
+    });
+    return fileToolResult({
+      title,
+      filename: pdf.filename,
+      mime: pdf.mime,
+      bytes: pdf.buffer.byteLength,
+      dataUrl: pdf.dataUrl,
+      saved,
+      extra: { pages: pdf.pageCount },
     });
   }
 

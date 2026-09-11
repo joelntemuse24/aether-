@@ -225,6 +225,16 @@ export function activityLabelForTool(
       if (running) return title ? `Building ${title}` : "Building spreadsheet";
       return "Built spreadsheet";
     }
+    case "create_document": {
+      const title = clipPhrase(args.title);
+      if (running) return title ? `Writing ${title}` : "Writing document";
+      return "Wrote document";
+    }
+    case "create_pdf": {
+      const title = clipPhrase(args.title);
+      if (running) return title ? `Building ${title}` : "Building PDF";
+      return "Built PDF";
+    }
     case "workspace_publish_file":
       return running ? "Attaching file" : "Attached file";
     case "workspace_exec":

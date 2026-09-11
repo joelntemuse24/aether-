@@ -32,6 +32,8 @@ export const CORE_TOOL_ORDER = [
   TOOL_NAMES.workspacePublishFile,
   TOOL_NAMES.createPresentation,
   TOOL_NAMES.createSpreadsheet,
+  TOOL_NAMES.createDocument,
+  TOOL_NAMES.createPdf,
   TOOL_NAMES.generateImage,
   TOOL_NAMES.toolSearch,
 ] as const;

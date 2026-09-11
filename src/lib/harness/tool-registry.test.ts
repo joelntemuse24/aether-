@@ -11,6 +11,8 @@ describe("tool availability vs Fast/Expert", () => {
       TOOL_NAMES.workspacePublishFile,
       TOOL_NAMES.createPresentation,
       TOOL_NAMES.createSpreadsheet,
+      TOOL_NAMES.createDocument,
+      TOOL_NAMES.createPdf,
       TOOL_NAMES.createArtifact,
       TOOL_NAMES.webSearch,
     ]) {

@@ -28,11 +28,15 @@ describe("chat playbooks", () => {
   });
 
   it("loads write-doc for document drafts", () => {
-    const ids = resolvePlaybooks({
+    const playbooks = resolvePlaybooks({
       text: "Write a two-page briefing document on this.",
       intent: "write",
-    }).map((p) => p.id);
+    });
+    const ids = playbooks.map((p) => p.id);
     assert.ok(ids.includes("write-doc"));
+    const block = playbooksSystemAddendum(playbooks);
+    assert.match(block, /create_document/);
+    assert.match(block, /create_pdf/);
   });
 
   it("loads slides for a deck / presentation", () => {
@@ -71,10 +75,14 @@ describe("chat playbooks", () => {
   });
 
   it("loads sheet for a spreadsheet / table", () => {
-    const ids = resolvePlaybooks({
+    const playbooks = resolvePlaybooks({
       text: "Build a spreadsheet of Q3 costs",
-    }).map((p) => p.id);
+    });
+    const ids = playbooks.map((p) => p.id);
     assert.ok(ids.includes("sheet"));
+    const block = playbooksSystemAddendum(playbooks);
+    assert.match(block, /create_spreadsheet/);
+    assert.match(block, /pasted a table/);
   });
 
   it("stays empty for a tiny unrelated chat turn", () => {

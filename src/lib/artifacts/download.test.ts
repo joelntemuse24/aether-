@@ -39,6 +39,33 @@ describe("artifact download helpers", () => {
     assert.match(headers["Content-Disposition"], /\.pptx/);
   });
 
+  it("names downloadable office files from language or mime", () => {
+    assert.match(
+      downloadFilename({
+        title: "q3-costs.xlsx",
+        language: "q3-costs.xlsx",
+        mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+      /\.xlsx$/,
+    );
+    assert.match(
+      downloadFilename({
+        title: "memo.docx",
+        language: "memo.docx",
+        mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      }),
+      /\.docx$/,
+    );
+    assert.match(
+      downloadFilename({
+        title: "memo.pdf",
+        language: "memo.pdf",
+        mime: "application/pdf",
+      }),
+      /\.pdf$/,
+    );
+  });
+
   it("returns null for empty artifact content instead of a fake file", () => {
     assert.equal(bytesFromArtifactContent(""), null);
     assert.equal(bytesFromArtifactContent("   "), null);

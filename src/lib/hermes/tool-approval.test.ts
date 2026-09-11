@@ -105,6 +105,13 @@ describe("Ask vs Auto policy", () => {
     }
   });
 
+  it("does not pause create_document or create_pdf", () => {
+    for (const name of ["create_document", "create_pdf"]) {
+      assert.equal(shouldConfirmAetherTool({ name, mode: "ask" }), false, name);
+      assert.equal(shouldConfirmAetherTool({ name, mode: "auto" }), false, name);
+    }
+  });
+
   it("does not pause ordinary create_artifact in Ask or Auto", () => {
     assert.equal(
       shouldConfirmAetherTool({ name: "create_artifact", mode: "ask" }),

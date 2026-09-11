@@ -26,7 +26,7 @@ const PLAYBOOKS: Record<PlaybookId, Playbook> = {
     id: "write-doc",
     label: "Write document",
     promptHint:
-      "Draft long prose with create_artifact kind \"document\". Outline if needed, then write. Keep the artifact on this thread. Short chat commentary; body in the artifact.",
+      "For a downloadable Word file use create_document; for a PDF use create_pdf. Use create_artifact kind \"document\" only for a panel markdown draft they did not ask to download. Keep the file or artifact on this thread.",
   },
   slides: {
     id: "slides",
@@ -38,7 +38,7 @@ const PLAYBOOKS: Record<PlaybookId, Playbook> = {
     id: "sheet",
     label: "Sheet",
     promptHint:
-      "Deliver a real spreadsheet via create_spreadsheet (.xlsx with headers and rows). Mention the file in chat; put the grid in the workbook. Use create_artifact kind \"data\" only if they asked for CSV/JSON in the panel, not a downloadable workbook.",
+      "Deliver a real spreadsheet via create_spreadsheet (.xlsx with headers and rows). If they pasted a table, map those headers and rows into the workbook. Mention the file in chat; put the grid in the workbook. Use create_artifact kind \"data\" only if they asked for CSV/JSON in the panel, not a downloadable workbook. Publish a generated CSV with workspace_publish_file.",
   },
   "research-then-deck": {
     id: "research-then-deck",

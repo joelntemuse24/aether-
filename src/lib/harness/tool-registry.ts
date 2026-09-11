@@ -64,6 +64,8 @@ export function resolveAvailableToolNames(ctx: {
     TOOL_NAMES.workspacePublishFile,
     TOOL_NAMES.createPresentation,
     TOOL_NAMES.createSpreadsheet,
+    TOOL_NAMES.createDocument,
+    TOOL_NAMES.createPdf,
     TOOL_NAMES.generateImage,
     TOOL_NAMES.githubListIssues,
     TOOL_NAMES.githubGetIssue,
@@ -223,6 +225,14 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     [TOOL_NAMES.createSpreadsheet]: tool({
       ...schemas[TOOL_NAMES.createSpreadsheet],
       execute: async (input) => runAether(TOOL_NAMES.createSpreadsheet, input),
+    }),
+    [TOOL_NAMES.createDocument]: tool({
+      ...schemas[TOOL_NAMES.createDocument],
+      execute: async (input) => runAether(TOOL_NAMES.createDocument, input),
+    }),
+    [TOOL_NAMES.createPdf]: tool({
+      ...schemas[TOOL_NAMES.createPdf],
+      execute: async (input) => runAether(TOOL_NAMES.createPdf, input),
     }),
     [TOOL_NAMES.generateImage]: tool({
       ...schemas[TOOL_NAMES.generateImage],
