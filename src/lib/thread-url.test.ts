@@ -199,6 +199,20 @@ describe("URL → thread", () => {
     );
   });
 
+  it("does not remount when /c/:id is already the active thread", () => {
+    assert.equal(
+      planUrlToThread({
+        pathname: "/c/thread-fast",
+        urlThreadId: "thread-fast",
+        pendingPath: null,
+        pendingNewChat: false,
+        itemIsNew: false,
+        canonicalId: "thread-fast",
+      }),
+      "ignore",
+    );
+  });
+
   it("does not remount when the runtime is already a new empty chat", () => {
     assert.equal(
       planUrlToThread({
@@ -371,6 +385,25 @@ describe("sync wiring stays fire-and-forget for first send", () => {
     assert.doesNotMatch(
       sync,
       /if \(urlThreadId === null\) \{\s*pendingNewChat\.current = false;/,
+    );
+  });
+
+  it("holds Howzit while a first-send draft is still in flight on /c/:id", () => {
+    assert.equal(
+      shouldHoldEmptyWelcome({
+        hasMessages: false,
+        urlThreadId: "thread-fast",
+        hasInFlightDraft: true,
+      }),
+      true,
+    );
+    assert.equal(
+      shouldHoldEmptyWelcome({
+        hasMessages: true,
+        urlThreadId: "thread-fast",
+        hasInFlightDraft: true,
+      }),
+      false,
     );
   });
 

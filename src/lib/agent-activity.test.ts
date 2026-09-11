@@ -6,6 +6,7 @@ import {
   closeActivityClock,
   collectActivitySteps,
   collectWebSearchHits,
+  composerShouldShowStop,
   deriveAgentActivity,
   formatActivityElapsed,
   recalledActivityElapsed,
@@ -576,6 +577,39 @@ describe("deriveAgentActivity — honesty", () => {
     );
   });
 
+  it("unsticks Stop after a failed tool when the assistant row is no longer running", () => {
+    const parts = [
+      {
+        type: "tool-execute_python",
+        state: "output-error",
+        errorText: "ZoneInfoNotFoundError: 'Europe/Dublin'",
+        output: { ok: false, error: "ZoneInfoNotFoundError" },
+        isError: true,
+      },
+    ];
+    assert.equal(
+      composerShouldShowStop({
+        threadIsRunning: true,
+        messageStatus: "incomplete",
+        parts,
+      }),
+      false,
+    );
+    assert.equal(
+      composerShouldShowStop({
+        threadIsRunning: true,
+        messageStatus: "running",
+        parts: [
+          {
+            type: "tool-execute_python",
+            state: "input-available",
+          },
+        ],
+      }),
+      true,
+    );
+  });
+
   it("hides the composer clock once an assistant message exists", () => {
     assert.equal(
       shouldShowComposerActivity({
@@ -657,6 +691,7 @@ describe("thread / composer copy stays honest", () => {
       /bg-\[var\(--text\)\] px-3 text-\[var\(--canvas\)\]/,
     );
     assert.match(thread, /aether-send-stop/);
+    assert.match(thread, /composerShouldShowStop/);
     assert.match(thread, /aether-composer-dock/);
     const activity = readFileSync(
       new URL(

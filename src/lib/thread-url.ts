@@ -101,9 +101,14 @@ export function planUrlToThread(input: {
   pendingPath: string | null;
   pendingNewChat: boolean;
   itemIsNew: boolean;
+  /** Already-mounted conversation — remounting blanks Fast failover transcripts. */
+  canonicalId?: string | null;
 }): UrlToThreadAction {
   if (input.urlThreadId) {
     if (input.pendingPath === input.pathname) return "ignore";
+    if (input.canonicalId && input.canonicalId === input.urlThreadId) {
+      return "ignore";
+    }
     return "switch-thread";
   }
   // First send: initialize() writes `/c/<id>` while the path is still `/`.
@@ -133,8 +138,11 @@ export function didUrlBecomeNewChat(
 export function shouldHoldEmptyWelcome(input: {
   hasMessages: boolean;
   urlThreadId: string | null;
+  hasInFlightDraft?: boolean;
 }): boolean {
-  return !input.hasMessages && input.urlThreadId !== null;
+  if (input.hasMessages) return false;
+  if (input.hasInFlightDraft) return true;
+  return input.urlThreadId !== null;
 }
 
 /**

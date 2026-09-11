@@ -128,6 +128,7 @@ export function ThreadUrlSync() {
       pendingPath: pendingPath.current,
       pendingNewChat: pendingNewChat.current,
       itemIsNew,
+      canonicalId,
     });
     if (action === "ignore") {
       if (pendingPath.current === pathname) pendingPath.current = null;
@@ -168,7 +169,7 @@ export function ThreadUrlSync() {
     return () => {
       cancelled = true;
     };
-  }, [urlThreadId, pathname, aui, router, itemIsNew]);
+  }, [urlThreadId, pathname, aui, router, itemIsNew, canonicalId]);
 
   return null;
 }

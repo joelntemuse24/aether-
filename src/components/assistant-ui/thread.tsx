@@ -104,7 +104,9 @@ import {
   shouldAwaitHistoryBeforeSend,
 } from "@/lib/chat-first-send";
 import { persistThreadUIMessages } from "@/lib/local-thread-adapter";
-import { stashFirstSendDraft } from "@/lib/chat-turn-draft";
+import { persistThreadSpeedTier } from "@/lib/thread-speed";
+import { peekInFlightFirstSendDraft, stashFirstSendDraft } from "@/lib/chat-turn-draft";
+import { composerShouldShowStop } from "@/lib/agent-activity";
 import { resolveInitializedRemoteId } from "@/lib/trigger/thread-remote-id";
 import { isHiddenToolMarkup } from "@/lib/visible-chat-text";
 
@@ -120,15 +122,20 @@ function useThreadEmptyState() {
   const pathname = usePathname();
   const urlThreadId = parseThreadIdFromPath(pathname);
   const [holdRoute, setHoldRoute] = useState(() =>
-    shouldHoldEmptyWelcome({ hasMessages: false, urlThreadId }),
+    shouldHoldEmptyWelcome({
+      hasMessages: false,
+      urlThreadId,
+      hasInFlightDraft: peekInFlightFirstSendDraft().length > 0,
+    }),
   );
 
   useEffect(() => {
-    if (!shouldHoldEmptyWelcome({ hasMessages, urlThreadId })) {
+    const hasInFlightDraft = peekInFlightFirstSendDraft().length > 0;
+    if (!shouldHoldEmptyWelcome({ hasMessages, urlThreadId, hasInFlightDraft })) {
       setHoldRoute(false);
       return;
     }
-    if (isLoading) {
+    if (isLoading || hasInFlightDraft) {
       setHoldRoute(true);
       return;
     }
@@ -434,6 +441,7 @@ const Composer: FC = () => {
     setOpenSettings,
     openConnectedAccounts,
     chatHeaders,
+    settings,
   } = useSettings();
   const { addFiles, hasAttachments, attachments } = useAttachments();
   const {
@@ -537,6 +545,10 @@ const Composer: FC = () => {
     });
     if (remoteGuess && !remoteGuess.startsWith("__LOCALID_")) {
       persistThreadUIMessages(remoteGuess, [userDraft]);
+      persistThreadSpeedTier(
+        remoteGuess,
+        settings.speedTier === "expert" ? "expert" : "fast",
+      );
     }
 
     const pathnameHasThread = !!readThreadIdFromLocation();
@@ -1005,7 +1017,24 @@ const SendStopControl: FC<{
   harnessBlocked: boolean;
   onSend: () => void;
 }> = ({ classifying, harnessBlocked, onSend }) => {
-  const isRunning = useAuiState((s) => s.thread.isRunning);
+  const threadIsRunning = useAuiState((s) => s.thread.isRunning);
+  const latestAssistant = useAuiState((s) => {
+    const messages = Array.isArray(s.thread?.messages) ? s.thread.messages : [];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]?.role === "assistant") return messages[i];
+    }
+    return undefined;
+  });
+  const assistantRec = latestAssistant as
+    | { status?: { type?: string }; parts?: unknown }
+    | undefined;
+  const isRunning = composerShouldShowStop({
+    threadIsRunning,
+    messageStatus: assistantRec?.status?.type,
+    parts: Array.isArray(assistantRec?.parts)
+      ? assistantRec.parts
+      : undefined,
+  });
   const sendDisabled = classifying || harnessBlocked;
 
   return (
