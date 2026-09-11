@@ -711,21 +711,27 @@ function useChatThreadRuntime() {
     }
   }, [status]);
 
-  // Assign a durable thread id as soon as a turn starts so /c/<id> + drafts work
-  // before assistant-ui's end-of-run history flush.
+  // Bind the durable id immediately, but do not initialize() while a turn is
+  // live — that remounts useChat and blanks the guest first send.
   useEffect(() => {
-    if (status !== "submitted" && status !== "streaming") return;
+    try {
+      bindDurableChatId(durableChatId, aui.threadListItem().getState().id);
+    } catch {
+      bindDurableChatId(durableChatId);
+    }
+    if (status === "submitted" || status === "streaming") return;
+    if (status !== "ready" && status !== "error") return;
+    if (messagesRef.current.length === 0) return;
     let cancelled = false;
     void (async () => {
       try {
         const state = aui.threadListItem().getState();
-        bindDurableChatId(durableChatId, state.id);
         if (!state.remoteId) {
           await aui.threadListItem().initialize();
         }
         if (cancelled) return;
         const key =
-          readThreadStorageKey(aui) ?? readThreadIdFromLocation();
+          readThreadStorageKey(aui) ?? readThreadIdFromLocation() ?? durableChatId;
         if (!key) return;
         threadIdRef.current = key;
         if (

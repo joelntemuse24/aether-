@@ -39,12 +39,14 @@
 }
 
 .aether-activity__spinner {
+  box-sizing: border-box;
   width: 12px;
   height: 12px;
   flex-shrink: 0;
-  border: 1.5px solid color-mix(in oklab, var(--accent) 28%, transparent);
+  border: 1.5px solid color-mix(in oklab, var(--accent) 22%, transparent);
   border-top-color: var(--accent);
   border-radius: 999px;
+  background: transparent;
   animation: aether-spin 700ms linear infinite;
 }
 

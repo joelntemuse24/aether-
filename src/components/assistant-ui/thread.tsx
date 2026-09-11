@@ -90,7 +90,6 @@ import {
   planClassifyBeforeSend,
   planComposerSend,
   shouldAwaitHistoryBeforeSend,
-  shouldAwaitThreadInitializeBeforeSend,
 } from "@/lib/chat-first-send";
 import { persistThreadUIMessages } from "@/lib/local-thread-adapter";
 import { stashFirstSendDraft } from "@/lib/chat-turn-draft";
@@ -538,13 +537,8 @@ const Composer: FC = () => {
     ) {
       await waitForChatHistoryReady(HISTORY_WAIT_BEFORE_SEND_MS);
     }
-    try {
-      if (!listState.remoteId && !shouldAwaitThreadInitializeBeforeSend()) {
-        void aui.threadListItem().initialize();
-      }
-    } catch {
-      // send still proceeds — URL / remoteId update in the background
-    }
+    // Do not initialize() here. Assigning remoteId remounts useChat and
+    // wipes the live turn. URL /c/<id> is bound after the turn persists.
 
     let classification = opts?.classification;
     let runId = opts?.runId;

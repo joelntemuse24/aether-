@@ -175,18 +175,24 @@ describe("composer send wiring", () => {
   });
 
   it("does not await threadListItem initialize before composer.send", () => {
-    assert.match(thread, /shouldAwaitThreadInitializeBeforeSend/);
     assert.doesNotMatch(thread, /await aui\.threadListItem\(\)\.initialize\(\)/);
+    assert.doesNotMatch(
+      thread.slice(
+        thread.indexOf("const sendWithHarness"),
+        thread.indexOf("const onClarifySubmit"),
+      ),
+      /threadListItem\(\)\.initialize\(\)/,
+    );
   });
 
-  it("kicks off initialize before composer.send so /c/ can update in the background", () => {
+  it("does not initialize() before composer.send — remount would blank the turn", () => {
     const sendFn = thread.slice(
       thread.indexOf("const sendWithHarness"),
       thread.indexOf("const onClarifySubmit"),
     );
-    const initAt = sendFn.indexOf("threadListItem().initialize()");
     const sendAt = sendFn.indexOf("composerRuntime.send()");
-    assert.ok(initAt >= 0 && sendAt > initAt);
+    assert.ok(sendAt >= 0);
+    assert.doesNotMatch(sendFn, /threadListItem\(\)\.initialize\(\)/);
     assert.doesNotMatch(sendFn, /await aui\.threadListItem\(\)\.initialize\(\)/);
     assert.doesNotMatch(sendFn, /router\.(push|replace)/);
   });
@@ -206,6 +212,7 @@ describe("composer send wiring", () => {
     );
     assert.match(runtime, /mergeSeedWithDraft/);
     assert.match(runtime, /shouldReplaceLiveWithStored/);
+    assert.match(runtime, /do not initialize\(\) while a turn is/);
   });
 
   it("never silent-skips composer.send — plans a keep-and-explain path", () => {
@@ -220,10 +227,9 @@ describe("composer send wiring", () => {
     );
     assert.match(sendFn, /stashFirstSendDraft/);
     const stashAt = sendFn.indexOf("stashFirstSendDraft");
-    const initAt = sendFn.indexOf("threadListItem().initialize()");
     const sendAt = sendFn.indexOf("composerRuntime.send()");
     assert.ok(stashAt >= 0 && sendAt > stashAt);
-    if (initAt >= 0) assert.ok(stashAt < initAt);
+    assert.doesNotMatch(sendFn, /threadListItem\(\)\.initialize\(\)/);
   });
 
   it("gates model classify so first send does not await /api/harness/classify", () => {
