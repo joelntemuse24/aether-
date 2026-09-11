@@ -47,6 +47,8 @@ export const TOOL_NAMES = {
   workspacePublishFile: "workspace_publish_file",
   createPresentation: "create_presentation",
   createSpreadsheet: "create_spreadsheet",
+  createDocument: "create_document",
+  createPdf: "create_pdf",
   generateImage: "generate_image",
   gmailSearch: "gmail_search",
   gmailRead: "gmail_read",
@@ -128,7 +130,7 @@ export const createArtifactInput = z.object({
   kind: z
     .enum(ARTIFACT_KINDS)
     .describe(
-      "The artifact type: 'code' for source code, 'document' for markdown prose, 'data' for JSON/tabular data, 'image' for an image data URL, 'svg' for inline SVG markup, 'file' for a downloadable binary (pptx/xlsx/pdf).",
+      "The artifact type: 'code' for source code, 'document' for markdown prose, 'data' for JSON/tabular data, 'image' for an image data URL, 'svg' for inline SVG markup, 'file' for a downloadable binary (pptx/xlsx/docx/pdf).",
     ),
   title: z.string().describe("A short, human-friendly title."),
   language: z
@@ -335,6 +337,25 @@ export const createSpreadsheetInput = z.object({
     )
     .min(1)
     .max(8),
+});
+
+export const createDocumentInput = z.object({
+  title: z.string().min(1).describe("Document title shown to the user and used as the filename."),
+  subtitle: z.string().optional().describe("Optional subtitle under the title."),
+  paragraphs: z
+    .array(z.string())
+    .max(80)
+    .optional()
+    .describe("Body paragraphs in order. Prefer short paragraphs, not markdown."),
+});
+
+export const createPdfInput = z.object({
+  title: z.string().min(1).describe("PDF title shown to the user and used as the filename."),
+  paragraphs: z
+    .array(z.string())
+    .max(80)
+    .optional()
+    .describe("Body paragraphs in order."),
 });
 
 export const githubListIssuesInput = z.object({
@@ -635,6 +656,14 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Spreadsheet",
     runningLabel: "Building spreadsheet…",
   },
+  [TOOL_NAMES.createDocument]: {
+    label: "Document",
+    runningLabel: "Building document…",
+  },
+  [TOOL_NAMES.createPdf]: {
+    label: "PDF",
+    runningLabel: "Building PDF…",
+  },
   [TOOL_NAMES.generateImage]: {
     label: "Image",
     runningLabel: "Generating image…",
@@ -701,13 +730,15 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 - "create_artifact": substantial reusable content. kind "document" for essays/briefs; "code" / "data" / "svg" / "image" when those fit. Do not use this for a PowerPoint or Excel file.
 - "create_presentation": build a real .pptx and attach it in-thread. Use this for decks / slides / PowerPoint — do not install python-pptx or fall back to a markdown briefing.
 - "create_spreadsheet": build a real .xlsx and attach it in-thread. Use this for Excel / tables the user asked to download.
+- "create_document": build a real Word file (.docx) and attach it in-thread. Use this when they asked to download a document — not a markdown briefing.
+- "create_pdf": build a real PDF and attach it in-thread. Use this when they asked for a PDF.
 - "verify_checklist": structured verify pass before handing back substantial work (deep / research / write / timed drafts).
 - "request_confirmation": gate any side effect (submit, send, upload) until the user approves. Never claim a side effect completed without approval.
 - "browser_navigate": open a public URL and extract text (fetch or full browser when configured).
 - "browser_act": extract / fill_preview / click / submit on a page. submit always returns needs_confirmation.
-- "workspace_exec": run shell commands in an isolated per-conversation Linux workspace. If it reports the workspace unavailable, use create_presentation / create_spreadsheet for office files instead of retrying pip.
+- "workspace_exec": run shell commands in an isolated per-conversation Linux workspace. If it reports the workspace unavailable, use create_presentation / create_spreadsheet / create_document / create_pdf for office files instead of retrying pip.
 - "workspace_read_file" / "workspace_write_file" / "workspace_list_files": inspect and edit files in that isolated workspace.
-- "workspace_publish_file": attach a binary from the isolated workspace (pptx, xlsx, pdf) as a downloadable file in this thread.
+- "workspace_publish_file": attach a binary from the isolated workspace (csv, png, zip, or other generated files) as a downloadable file in this thread. Do not use this to rebuild Word/PDF/Excel — use create_document / create_pdf / create_spreadsheet.
 - "generate_image": generate a bitmap image from a description. Confirms before spending — the user sees a card.
 - "tool_search": unlock optional tools (memory, Drive, GitHub) by keyword when needed.
 
@@ -738,8 +769,8 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 
 ## Artifacts & narration
 - Short snippets in chat; create_artifact for long or reusable work (essays, briefs).
-- Decks and spreadsheets the user asked to download must be real files (create_presentation / create_spreadsheet), not markdown stand-ins.
-- After create_presentation, the thread shows a file chip with Download. Do not claim a file is attached unless the tool returned persisted/downloadPath or in-thread content.
+- Decks, spreadsheets, Word files, and PDFs the user asked to download must be real files (create_presentation / create_spreadsheet / create_document / create_pdf), not markdown stand-ins.
+- After those tools, the thread shows a file chip with Download. Do not claim a file is attached unless the tool returned persisted/downloadPath or in-thread content. Guests keep the file in this thread — never say it is attached with no file.
 - Weave tool results into the answer; no raw JSON dumps.
 
 ## If tools are unavailable

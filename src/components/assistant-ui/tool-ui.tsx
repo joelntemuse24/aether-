@@ -272,6 +272,8 @@ function toolTraceNoun(name: string): string {
       return "Preview";
     case TOOL_NAMES.createPresentation:
     case TOOL_NAMES.createSpreadsheet:
+    case TOOL_NAMES.createDocument:
+    case TOOL_NAMES.createPdf:
     case TOOL_NAMES.workspacePublishFile:
       return "File";
     case TOOL_NAMES.memorySearch:
@@ -600,6 +602,8 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   const isFileTool =
     part.toolName === TOOL_NAMES.createPresentation ||
     part.toolName === TOOL_NAMES.createSpreadsheet ||
+    part.toolName === TOOL_NAMES.createDocument ||
+    part.toolName === TOOL_NAMES.createPdf ||
     part.toolName === TOOL_NAMES.workspacePublishFile;
   const kindHint =
     (input?.kind as string | undefined) ||
@@ -1570,6 +1574,8 @@ export const ToolCallPart: FC<{ part: ToolPartLike }> = ({ part }) => {
       return <CreateArtifactToolCall part={part} />;
     case TOOL_NAMES.createPresentation:
     case TOOL_NAMES.createSpreadsheet:
+    case TOOL_NAMES.createDocument:
+    case TOOL_NAMES.createPdf:
     case TOOL_NAMES.workspacePublishFile:
       return <CreateArtifactToolCall part={part} />;
     case TOOL_NAMES.memorySearch:

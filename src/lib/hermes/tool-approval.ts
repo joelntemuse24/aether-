@@ -73,6 +73,8 @@ const USER_DELIVERABLE_TOOLS = new Set<string>([
   TOOL_NAMES.createArtifact,
   TOOL_NAMES.createPresentation,
   TOOL_NAMES.createSpreadsheet,
+  TOOL_NAMES.createDocument,
+  TOOL_NAMES.createPdf,
   TOOL_NAMES.workspaceExec,
   TOOL_NAMES.workspaceWriteFile,
   TOOL_NAMES.workspacePublishFile,

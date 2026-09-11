@@ -40,6 +40,8 @@ import {
   workspacePublishFileInput,
   createPresentationInput,
   createSpreadsheetInput,
+  createDocumentInput,
+  createPdfInput,
   generateImageInput,
   gmailSearchInput,
   gmailReadInput,
@@ -133,6 +135,16 @@ export function buildHeadStartToolSchemas(
       description:
         "Build a real Excel workbook (.xlsx) from headers and rows and attach it in-thread for download. Use this for spreadsheets the user asked to download — not a markdown table.",
       inputSchema: createSpreadsheetInput,
+    }),
+    [TOOL_NAMES.createDocument]: tool({
+      description:
+        "Build a real Word document (.docx) from a title and paragraphs and attach it in-thread for download. Use this when the user asked for a downloadable document — not a markdown briefing.",
+      inputSchema: createDocumentInput,
+    }),
+    [TOOL_NAMES.createPdf]: tool({
+      description:
+        "Build a real PDF from a title and paragraphs and attach it in-thread for download. Use this when the user asked for a PDF.",
+      inputSchema: createPdfInput,
     }),
     [TOOL_NAMES.generateImage]: tool({
       description:
