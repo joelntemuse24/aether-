@@ -18,6 +18,7 @@ import { prepareDurableChatTurn } from "@/lib/trigger/prepare-turn";
 import { aetherAppOrigin } from "@/lib/trigger/app-url";
 import { isHostedChatAvailable } from "@/lib/hosted/availability";
 import { isHostedConfigured } from "@/lib/hosted/config";
+import { HOSTED_CLOUD_UNAVAILABLE_MESSAGE } from "@/lib/hosted/errors";
 import {
   enrichModelMessagesWithAttachments,
   lastUserTextFromModelMessages,
@@ -26,7 +27,7 @@ import {
 const clientDataSchema = z
   .object({
     accessMode: z.enum(["hosted", "byok"]),
-    model: z.string().min(1),
+    model: z.string().min(1).optional(),
     toolsEnabled: z.boolean().optional(),
     approvalMode: z.enum(["ask", "auto"]).optional(),
     speedTier: z.enum(["fast", "expert"]).optional(),
@@ -187,9 +188,7 @@ export const chatAgent = chat.agent({
     hydrateSessionCtx(data as ChatClientData);
     if (data.accessMode !== "byok") {
       if (!isHostedChatAvailable(process.env, isHostedConfigured())) {
-        throw new Error(
-          "Aether Cloud is not configured on this server. Switch to Bring your own key in Settings.",
-        );
+        throw new Error(HOSTED_CLOUD_UNAVAILABLE_MESSAGE);
       }
     } else if (!data.apiKey?.trim()) {
       throw new Error(

@@ -106,34 +106,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       .then((status) => {
         if (cancelled) return;
         setHostedStatus(status);
-        // Auto-pick default hosted model when needed
-        if (
-          loaded.accessMode === "hosted" &&
-          status.available &&
-          status.defaultModel &&
-          !loaded.useCustomModel &&
-          (!loaded.model ||
-            !status.models.some((m) => m.id === loaded.model))
-        ) {
-          const next = { ...loaded, model: status.defaultModel };
-          setSettingsState(next);
-          saveSettings(next);
+        // Cloud Fast/Expert remap leftover catalog ids (e.g. Claude).
+        if (loaded.accessMode === "hosted" && status.available) {
+          const tier = loaded.speedTier === "expert" ? "expert" : "fast";
+          const remapped =
+            status.routes?.[tier] || status.defaultModel || loaded.model;
+          if (remapped && remapped !== loaded.model) {
+            const next = { ...loaded, model: remapped, useCustomModel: false };
+            setSettingsState(next);
+            saveSettings(next);
+          }
         }
-        const chatReady = canChat(
-          {
-            ...loaded,
-            model:
-              loaded.accessMode === "hosted" &&
-              status.available &&
-              status.defaultModel &&
-              !loaded.useCustomModel &&
-              (!loaded.model ||
-                !status.models.some((m) => m.id === loaded.model))
-                ? status.defaultModel
-                : loaded.model,
-          },
-          status.available,
-        );
+        const chatReady = canChat(loaded, status.available);
         if (openForConnect || !chatReady) {
           setOpenSettings(true);
         }

@@ -22,6 +22,21 @@ describe("prepareDurableChatTurn Cloud Fast/Expert routing", () => {
     assert.equal(prepared.requestedModel, FAST_OPENROUTER_MODEL);
   });
 
+  it("ignores leftover catalog model on hosted Fast (speedTier only)", async () => {
+    const prepared = await prepareDurableChatTurn({
+      clientData: {
+        accessMode: "hosted",
+        model: "anthropic/claude-sonnet-5",
+        speedTier: "fast",
+      },
+      chatId: "c-stale",
+      userText: "hello",
+    });
+    assert.equal(prepared.speedTier, "fast");
+    assert.equal(prepared.requestedModel, FAST_OPENROUTER_MODEL);
+    assert.notEqual(prepared.requestedModel, "anthropic/claude-sonnet-5");
+  });
+
   it("rewrites hosted Expert turns to Buzz Luna", async () => {
     const prepared = await prepareDurableChatTurn({
       clientData: {

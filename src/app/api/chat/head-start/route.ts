@@ -4,6 +4,8 @@ import { chat } from "@trigger.dev/sdk/chat-server";
 import { streamText } from "ai";
 import { isHostedChatAvailable } from "@/lib/hosted/availability";
 import { isHostedConfigured } from "@/lib/hosted/config";
+import { HOSTED_CLOUD_UNAVAILABLE_MESSAGE } from "@/lib/hosted/errors";
+import { resolveHostedRoute } from "@/lib/hosted/router";
 import { CHAT_AGENT_TASK_ID, isTriggerChatConfigured } from "@/lib/trigger/config";
 import {
   parseChatClientData,
@@ -52,10 +54,18 @@ const headStartHandler = chat.headStart({
     if (!model) {
       throw new Error(
         prepared.hosted
-          ? "Aether Cloud is not configured on this server. Switch to Bring your own key in Settings."
-          : "Missing API key. Open Settings and add an OpenRouter (or other provider) key.",
+          ? HOSTED_CLOUD_UNAVAILABLE_MESSAGE
+          : "Missing API key. Open Settings and add a provider key.",
       );
     }
+    console.info(
+      "[chat/head-start] route",
+      redactChatClientData({
+        chatId: helper.session.chatId,
+        speedTier: prepared.speedTier,
+        requestedModel: prepared.requestedModel,
+      }),
+    );
     const tools = buildHeadStartToolSchemas({
       toolsEnabled: prepared.toolsEnabled,
       hasDrive: prepared.hasDrive,
@@ -107,18 +117,24 @@ export async function POST(req: Request) {
   if (hosted) {
     if (!isHostedChatAvailable(process.env, isHostedConfigured())) {
       return NextResponse.json(
-        {
-          error:
-            "Aether Cloud is not configured on this server. Switch to Bring your own key in Settings.",
-        },
+        { error: HOSTED_CLOUD_UNAVAILABLE_MESSAGE },
+        { status: 503 },
+      );
+    }
+    const hostedRoute = resolveHostedRoute(
+      parsed.data.model,
+      parsed.data.speedTier === "expert" ? "expert" : "fast",
+    );
+    if (!hostedRoute) {
+      return NextResponse.json(
+        { error: HOSTED_CLOUD_UNAVAILABLE_MESSAGE },
         { status: 503 },
       );
     }
   } else if (!parsed.data.apiKey?.trim()) {
     return NextResponse.json(
       {
-        error:
-          "Missing API key. Open Settings and add an OpenRouter (or other provider) key.",
+        error: "Missing API key. Open Settings and add a provider key.",
       },
       { status: 401 },
     );
@@ -135,7 +151,8 @@ export async function POST(req: Request) {
     redactChatClientData({
       chatId,
       accessMode: turnClientData.accessMode,
-      model: turnClientData.model,
+      speedTier: turnClientData.speedTier,
+      requestedModel: turnClientData.model,
       provider: turnClientData.provider,
       apiKey: turnClientData.apiKey,
       contextToken: turnClientData.contextToken,

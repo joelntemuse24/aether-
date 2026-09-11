@@ -93,12 +93,11 @@ function buzzGptUpstream(): ReturnType<typeof getGptUpstream> | null {
  * removed.
  */
 export function resolveHostedRoute(
-  modelId: string,
+  _modelId: string = "",
   speedTier: SpeedTier = "fast",
 ): HostedRoute | null {
-  const trimmed = modelId.trim();
-  if (!trimmed) return null;
-
+  // Cloud hops are chosen from speedTier only. Leftover catalog ids
+  // (e.g. anthropic/claude-sonnet-5 in stale client payloads) are ignored.
   const openrouter = getOpenRouterUpstream();
   const gpt = getGptUpstream();
   const buzz = buzzGptUpstream();

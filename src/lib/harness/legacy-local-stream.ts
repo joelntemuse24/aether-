@@ -18,6 +18,7 @@ import {
 } from "ai";
 import { repairToolCallInputJson } from "@/lib/repair-tool-json";
 import { friendlyChatError } from "@/lib/chat-errors";
+import { HOSTED_CLOUD_UNAVAILABLE_MESSAGE } from "@/lib/hosted/errors";
 import { messageMentionsGitHubRepo } from "@/lib/connectors/github";
 import {
   collectMessageText,
@@ -83,8 +84,8 @@ export async function runLegacyLocalChat(args: LegacyLocalStreamArgs) {
     return new Response(
       JSON.stringify({
         error: args.hosted
-          ? "That model is not available on Aether Cloud right now. Pick another model or use Bring your own key."
-          : "Missing API key. Open Settings and add an OpenRouter (or other provider) key.",
+          ? HOSTED_CLOUD_UNAVAILABLE_MESSAGE
+          : "Missing API key. Open Settings and add a provider key.",
       }),
       { status: 503, headers: { "Content-Type": "application/json" } },
     );

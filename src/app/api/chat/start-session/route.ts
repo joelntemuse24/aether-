@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { chat } from "@trigger.dev/sdk/ai";
 import { isHostedChatAvailable } from "@/lib/hosted/availability";
 import { isHostedConfigured } from "@/lib/hosted/config";
+import { HOSTED_CLOUD_UNAVAILABLE_MESSAGE } from "@/lib/hosted/errors";
+import { resolveHostedRoute } from "@/lib/hosted/router";
 import { CHAT_AGENT_TASK_ID, isTriggerChatConfigured } from "@/lib/trigger/config";
 import {
   parseChatClientData,
@@ -46,18 +48,25 @@ export async function POST(req: Request) {
   if (hosted) {
     if (!isHostedChatAvailable(process.env, isHostedConfigured())) {
       return NextResponse.json(
-        {
-          error:
-            "Aether Cloud is not configured on this server. Switch to Bring your own key in Settings.",
-        },
+        { error: HOSTED_CLOUD_UNAVAILABLE_MESSAGE },
+        { status: 503 },
+      );
+    }
+    if (
+      !resolveHostedRoute(
+        parsed.data.model,
+        parsed.data.speedTier === "expert" ? "expert" : "fast",
+      )
+    ) {
+      return NextResponse.json(
+        { error: HOSTED_CLOUD_UNAVAILABLE_MESSAGE },
         { status: 503 },
       );
     }
   } else if (!parsed.data.apiKey?.trim()) {
     return NextResponse.json(
       {
-        error:
-          "Missing API key. Open Settings and add an OpenRouter (or other provider) key.",
+        error: "Missing API key. Open Settings and add a provider key.",
       },
       { status: 401 },
     );

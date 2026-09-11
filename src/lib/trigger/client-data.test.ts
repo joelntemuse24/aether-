@@ -9,6 +9,7 @@ import {
   sessionSafeChatClientData,
 } from "./client-data";
 import { DEFAULT_SETTINGS } from "../settings";
+import { FAST_OPENROUTER_MODEL } from "../hosted/speed-tiers";
 
 const hosted = {
   accessMode: "hosted" as const,
@@ -71,7 +72,7 @@ describe("chat clientData secrets", () => {
     assert.equal(redacted.model, "gpt-4o");
   });
 
-  it("rejects BYOK clientData without a key and hosted without a model", () => {
+  it("rejects BYOK clientData without a key; hosted Cloud needs only speedTier", () => {
     const missingKey = parseChatClientData({
       accessMode: "byok",
       model: "gpt-4o",
@@ -84,6 +85,27 @@ describe("chat clientData secrets", () => {
       model: "openai/gpt-5",
     });
     assert.equal(hostedOk.ok, true);
+
+    const hostedSpeedOnly = parseChatClientData({
+      accessMode: "hosted",
+      speedTier: "fast",
+    });
+    assert.equal(hostedSpeedOnly.ok, true);
+    if (hostedSpeedOnly.ok) {
+      assert.equal(hostedSpeedOnly.data.speedTier, "fast");
+      assert.equal(hostedSpeedOnly.data.model, FAST_OPENROUTER_MODEL);
+    }
+
+    const leftoverIgnored = parseChatClientData({
+      accessMode: "hosted",
+      model: "anthropic/claude-sonnet-5",
+      speedTier: "fast",
+    });
+    assert.equal(leftoverIgnored.ok, true);
+    if (leftoverIgnored.ok) {
+      assert.equal(leftoverIgnored.data.model, FAST_OPENROUTER_MODEL);
+      assert.equal(leftoverIgnored.data.speedTier, "fast");
+    }
 
     const byokOk = parseChatClientData(byok);
     assert.equal(byokOk.ok, true);
@@ -119,6 +141,19 @@ describe("chat clientData secrets", () => {
     assert.equal(data.accessMode, "hosted");
     assert.equal(data.speedTier, "expert");
     assert.equal(data.apiKey, undefined);
+  });
+
+  it("hosted clientData remaps leftover catalog model from speedTier", () => {
+    const data = buildBrowserChatClientData({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        accessMode: "hosted",
+        model: "anthropic/claude-sonnet-5",
+        speedTier: "fast",
+      },
+    });
+    assert.equal(data.model, FAST_OPENROUTER_MODEL);
+    assert.equal(data.speedTier, "fast");
   });
 
   it("keeps the context JWT on the sticky session payload but not the BYOK key", () => {

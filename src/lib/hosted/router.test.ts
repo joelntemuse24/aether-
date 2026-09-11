@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolveHostedRoute } from "./router";
+import { resolveHostedRoute, toOpenRouterModelId } from "./router";
+import { HOSTED_CLOUD_UNAVAILABLE_MESSAGE } from "./errors";
 import {
   EXPERT_BUZZ_FALLBACK_MODEL,
   EXPERT_OPENROUTER_FALLBACK_MODEL,
@@ -129,15 +130,33 @@ describe("resolveHostedRoute speed tiers", () => {
     });
   });
 
-  it("Fast overrides leftover catalog ids and stays on OpenRouter", () => {
+  it("Fast remaps from speedTier only — leftover catalog ids and empty model are ignored", () => {
     withBuzzAndOpenRouter(() => {
-      const route = resolveHostedRoute("moonshotai/kimi-k3", "fast");
-      assert.ok(route);
-      assert.deepEqual(hopIds(route).map((h) => h.model), [
-        FAST_OPENROUTER_MODEL,
-        FAST_OPENROUTER_FALLBACK_MODEL,
-      ]);
+      for (const leftover of [
+        "anthropic/claude-sonnet-5",
+        "moonshotai/kimi-k3",
+        "",
+        "   ",
+      ]) {
+        const route = resolveHostedRoute(leftover, "fast");
+        assert.ok(route, `Fast must resolve when leftover model is ${JSON.stringify(leftover)}`);
+        assert.deepEqual(hopIds(route).map((h) => h.model), [
+          FAST_OPENROUTER_MODEL,
+          FAST_OPENROUTER_FALLBACK_MODEL,
+        ]);
+      }
     });
+  });
+
+  it("preserves the :free OpenRouter variant through id mapping", () => {
+    assert.equal(
+      toOpenRouterModelId(FAST_OPENROUTER_MODEL),
+      "nvidia/nemotron-3-ultra-550b-a55b:free",
+    );
+    assert.equal(
+      toOpenRouterModelId("nemotron-3-ultra-550b-a55b:free"),
+      "nvidia/nemotron-3-ultra-550b-a55b:free",
+    );
   });
 
   it("Expert is Buzz Luna, then Buzz Sol, then OpenRouter DeepSeek V4 Flash", () => {
@@ -194,7 +213,7 @@ describe("resolveHostedRoute speed tiers", () => {
     );
   });
 
-  it("Fast without OpenRouter does not fall back to Buzz", () => {
+  it("Fast without OpenRouter does not fall back to Buzz and surfaces a loud Cloud error", () => {
     withEnv(
       {
         AETHER_HOSTED_BUZZ_API_KEY: "test-key",
@@ -202,8 +221,14 @@ describe("resolveHostedRoute speed tiers", () => {
         OPENROUTER_API_KEY: undefined,
       },
       () => {
-        const route = resolveHostedRoute("openai/gpt-5.5", "fast");
+        const route = resolveHostedRoute("anthropic/claude-sonnet-5", "fast");
         assert.equal(route, null);
+        assert.match(HOSTED_CLOUD_UNAVAILABLE_MESSAGE, /Aether Cloud/);
+        assert.match(HOSTED_CLOUD_UNAVAILABLE_MESSAGE, /Bring your own key/i);
+        assert.doesNotMatch(
+          HOSTED_CLOUD_UNAVAILABLE_MESSAGE,
+          /OpenRouter|Buzz|Nemotron|NVIDIA|Claude|dropdown/i,
+        );
       },
     );
   });
