@@ -52,6 +52,7 @@ import {
   calendarDeleteEventInput,
   contactsSearchInput,
   contactsCreateInput,
+  projectKnowledgeSearchInput,
 } from "@/lib/tools";
 import { verifyChecklistInput } from "@/lib/harness/verify";
 
@@ -173,6 +174,11 @@ export function buildHeadStartToolSchemas(
       description:
         "Write or update a lasting memory about the user (preference, person, project, constraint, writing_voice, belief_or_practice, open_question, note). Only store durable facts they would want remembered across chats. Discover via tool_search first if not already unlocked.",
       inputSchema: memoryWriteInput,
+    });
+    tools[TOOL_NAMES.projectKnowledgeSearch] = tool({
+      description:
+        "Search files uploaded to the active project (PDF, Word, Markdown, text, CSV). Returns relevant passages — do not assume the whole folder is in the prompt. Discover via tool_search first if not already unlocked.",
+      inputSchema: projectKnowledgeSearchInput,
     });
   }
 

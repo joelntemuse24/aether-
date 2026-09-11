@@ -27,6 +27,7 @@ const ALWAYS_CONFIRM_TOOLS = new Set<string>([
 
 const SAFE_READ_TOOLS = new Set<string>([
   TOOL_NAMES.memorySearch,
+  TOOL_NAMES.projectKnowledgeSearch,
   TOOL_NAMES.driveSearch,
   TOOL_NAMES.driveRead,
   TOOL_NAMES.githubGetRepo,

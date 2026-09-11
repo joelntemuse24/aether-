@@ -12,7 +12,7 @@ import {
   type SpeedTier,
 } from "@/lib/hosted/speed-tiers";
 import {
-  formatProjectForPrompt,
+  formatProjectPromptWithKnowledge,
   getProject,
 } from "@/lib/projects/store";
 import { getAuthSecretString } from "@/lib/auth-secret";
@@ -106,7 +106,7 @@ export async function prepareDurableChatTurn(input: {
       memoryBlock = await relevantMemoryPrompt(userId, userText);
       if (data.projectId) {
         const project = await getProject(userId, data.projectId);
-        projectBlock = formatProjectForPrompt(project);
+        projectBlock = await formatProjectPromptWithKnowledge(userId, project);
       }
     } catch (err) {
       console.warn("[chat.agent] memory/project", redactChatClientData({ err: String(err) }));

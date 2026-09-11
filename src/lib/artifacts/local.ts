@@ -4,6 +4,8 @@
  */
 
 import type { ArtifactKind } from "@/lib/tools";
+import { mergeProvenance, type ArtifactProvenance } from "./provenance";
+import { bumpArtifactVersions, type ArtifactVersion } from "./versions";
 
 export type LocalArtifact = {
   id: string;
@@ -12,6 +14,8 @@ export type LocalArtifact = {
   language?: string;
   content: string;
   updatedAt: string;
+  versions?: ArtifactVersion[];
+  provenance?: ArtifactProvenance[];
 };
 
 const KEY = "aether:local-artifacts:v1";
@@ -41,13 +45,23 @@ export function saveLocalArtifacts(items: LocalArtifact[]): void {
 export function upsertLocalArtifact(
   input: Omit<LocalArtifact, "updatedAt"> & { updatedAt?: string },
 ): LocalArtifact {
+  const prevRow = loadLocalArtifacts().find((a) => a.id === input.id);
+  const content = input.content ?? "";
+  const versions =
+    input.versions ??
+    bumpArtifactVersions(prevRow?.versions, prevRow?.content ?? "", content);
+  const provenance =
+    input.provenance ??
+    mergeProvenance(prevRow?.provenance, []);
   const next: LocalArtifact = {
     id: input.id,
     kind: input.kind || "document",
     title: input.title || "Artifact",
     language: input.language,
-    content: input.content ?? "",
+    content,
     updatedAt: input.updatedAt || new Date().toISOString(),
+    versions,
+    provenance,
   };
   const prev = loadLocalArtifacts().filter((a) => a.id !== next.id);
   saveLocalArtifacts([next, ...prev]);

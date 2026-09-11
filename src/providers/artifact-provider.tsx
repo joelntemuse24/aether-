@@ -11,6 +11,8 @@ import {
 } from "react";
 
 import type { ArtifactKind } from "@/lib/tools";
+import type { ArtifactProvenance } from "@/lib/artifacts/provenance";
+import type { ArtifactVersion } from "@/lib/artifacts/versions";
 import {
   getLocalArtifact,
   loadLocalArtifacts,
@@ -39,6 +41,8 @@ export type Artifact = {
   persisted?: boolean;
   /** True when saved in browser localStorage. */
   local?: boolean;
+  versions?: ArtifactVersion[];
+  provenance?: ArtifactProvenance[];
 };
 
 export type SavedArtifactSummary = {
@@ -209,6 +213,8 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
           code: local.content,
           local: true,
           persisted: false,
+          versions: local.versions,
+          provenance: local.provenance,
         });
         return true;
       }
@@ -225,6 +231,8 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
             title: string;
             language?: string;
             content: string;
+            versions?: ArtifactVersion[];
+            provenance?: ArtifactProvenance[];
           };
         };
         const a = body.artifact;
@@ -236,6 +244,8 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
           language: a.language,
           code: a.content,
           persisted: true,
+          versions: a.versions,
+          provenance: a.provenance,
         });
         // Mirror to local for offline reopen.
         upsertLocalArtifact({
@@ -244,6 +254,8 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
           title: a.title,
           language: a.language,
           content: a.content,
+          versions: a.versions,
+          provenance: a.provenance,
         });
         return true;
       } catch {
@@ -259,7 +271,7 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
       if (!current?.id) return false;
 
       // Always keep a local copy so sidebar/reopen work without cloud.
-      upsertLocalArtifact({
+      const local = upsertLocalArtifact({
         id: current.id,
         kind: current.kind || "document",
         title: current.title,
@@ -283,15 +295,34 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
           if (!res.ok) {
             setArtifact((prev) =>
               prev && prev.id === current.id
-                ? { ...prev, code: content, local: true }
+                ? {
+                    ...prev,
+                    code: content,
+                    local: true,
+                    versions: local.versions,
+                    provenance: local.provenance,
+                  }
                 : prev,
             );
             void refreshSaved();
             return true; // local saved even if cloud failed
           }
+          const body = (await res.json()) as {
+            artifact?: {
+              versions?: ArtifactVersion[];
+              provenance?: ArtifactProvenance[];
+            };
+          };
           setArtifact((prev) =>
             prev && prev.id === current.id
-              ? { ...prev, code: content, persisted: true, local: true }
+              ? {
+                  ...prev,
+                  code: content,
+                  persisted: true,
+                  local: true,
+                  versions: body.artifact?.versions ?? local.versions,
+                  provenance: body.artifact?.provenance ?? local.provenance,
+                }
               : prev,
           );
           void refreshSaved();
@@ -299,7 +330,13 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
         } catch {
           setArtifact((prev) =>
             prev && prev.id === current.id
-              ? { ...prev, code: content, local: true }
+              ? {
+                  ...prev,
+                  code: content,
+                  local: true,
+                  versions: local.versions,
+                  provenance: local.provenance,
+                }
               : prev,
           );
           void refreshSaved();
@@ -309,7 +346,13 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
 
       setArtifact((prev) =>
         prev && prev.id === current.id
-          ? { ...prev, code: content, local: true }
+          ? {
+              ...prev,
+              code: content,
+              local: true,
+              versions: local.versions,
+              provenance: local.provenance,
+            }
           : prev,
       );
       void refreshSaved();
@@ -345,12 +388,23 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
         });
         if (res.ok) {
           const body = (await res.json()) as {
-            artifact?: { id: string };
+            artifact?: {
+              id: string;
+              versions?: ArtifactVersion[];
+              provenance?: ArtifactProvenance[];
+            };
           };
           const id = body.artifact?.id || current.id;
           setArtifact((prev) =>
             prev
-              ? { ...prev, id, persisted: true, local: true }
+              ? {
+                  ...prev,
+                  id,
+                  persisted: true,
+                  local: true,
+                  versions: body.artifact?.versions ?? prev.versions,
+                  provenance: body.artifact?.provenance ?? prev.provenance,
+                }
               : prev,
           );
           void refreshSaved();

@@ -1,4 +1,11 @@
 import { z } from "zod";
+import {
+  ARTIFACT_KINDS,
+  CANONICAL_ARTIFACT_KINDS,
+  type ArtifactKind,
+} from "@/lib/artifacts/kinds";
+
+export { ARTIFACT_KINDS, CANONICAL_ARTIFACT_KINDS, type ArtifactKind };
 
 /**
  * Shared tool definitions used by both the server (to declare tools for the
@@ -59,6 +66,7 @@ export const TOOL_NAMES = {
   calendarDeleteEvent: "calendar_delete_event",
   contactsSearch: "contacts_search",
   contactsCreate: "contacts_create",
+  projectKnowledgeSearch: "project_knowledge_search",
 } as const;
 
 export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -71,19 +79,6 @@ export const CLIENT_TOOLS: ReadonlySet<string> = new Set([
 export function isClientTool(name: string): boolean {
   return CLIENT_TOOLS.has(name);
 }
-
-// ─── Artifact kinds ───
-
-export const ARTIFACT_KINDS = [
-  "code",
-  "document",
-  "data",
-  "image",
-  "svg",
-  "file",
-] as const;
-
-export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
 
 // ─── Input schemas ───
 
@@ -130,7 +125,7 @@ export const createArtifactInput = z.object({
   kind: z
     .enum(ARTIFACT_KINDS)
     .describe(
-      "The artifact type: 'code' for source code, 'document' for markdown prose, 'data' for JSON/tabular data, 'image' for an image data URL, 'svg' for inline SVG markup, 'file' for a downloadable binary (pptx/xlsx/docx/pdf).",
+      "The artifact type: markdown, code, html, react, svg, csv, image, pptx, xlsx, docx, pdf. Aliases document/data/file still work. Use html/react for a live sandboxed preview. Use create_presentation / create_spreadsheet / create_document / create_pdf for real office files.",
     ),
   title: z.string().describe("A short, human-friendly title."),
   language: z
@@ -165,6 +160,17 @@ export const memorySearchInput = z.object({
     .string()
     .describe("Search query for the user's curated long-term memory."),
 });
+
+export const projectKnowledgeSearchInput = z.object({
+  query: z.string().describe("Search query over uploaded project knowledge files."),
+  projectId: z
+    .string()
+    .optional()
+    .describe("Project id. Defaults to the active project for this chat."),
+});
+export type ProjectKnowledgeSearchInput = z.infer<
+  typeof projectKnowledgeSearchInput
+>;
 
 export const memoryWriteInput = z.object({
   id: z.string().optional().describe("Existing memory id to update."),
@@ -536,6 +542,10 @@ export const TOOL_DISPLAY: Record<string, ToolDisplay> = {
     label: "Memory",
     runningLabel: "Searching memory…",
   },
+  [TOOL_NAMES.projectKnowledgeSearch]: {
+    label: "Project knowledge",
+    runningLabel: "Searching project files…",
+  },
   [TOOL_NAMES.memoryWrite]: {
     label: "Memory",
     runningLabel: "Saving memory…",
@@ -727,7 +737,7 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 - "execute_python": sandboxed in-browser Python for math, data, or verifying code.
 - "web_search": current or factual lookups. Few focused queries only. Results include id (1, 2, …) — cite those ids inline as [1], [2] in the final answer.
 - "fetch_url": read a public page as text (IR, press, docs). Soft-fails paywalls; PDFs best-effort. Never use for github.com repos. Cite the page as the next [n] after search hits.
-- "create_artifact": substantial reusable content. kind "document" for essays/briefs; "code" / "data" / "svg" / "image" when those fit. Do not use this for a PowerPoint or Excel file.
+- "create_artifact": substantial reusable content. Prefer kind "markdown" (or "document") for essays/briefs; "html" / "react" for live previews; "code" / "csv" / "svg" / "image" when those fit. Do not use this for a PowerPoint, Excel, Word, or PDF file.
 - "create_presentation": build a real .pptx and attach it in-thread. Use this for decks / slides / PowerPoint — do not install python-pptx or fall back to a markdown briefing.
 - "create_spreadsheet": build a real .xlsx and attach it in-thread. Use this for Excel / tables the user asked to download.
 - "create_document": build a real Word file (.docx) and attach it in-thread. Use this when they asked to download a document — not a markdown briefing.
@@ -744,6 +754,7 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 
 ## Optional tools (via tool_search when the session supports them; GitHub may already be unlocked if the user pasted a repo link)
 - "memory_search" / "memory_write": lasting facts about the user.
+- "project_knowledge_search": retrieve passages from files uploaded to the active project. Do not assume the whole folder is in this prompt.
 - "drive_search" / "drive_read": the user's Google Drive when connected.
 - "github_get_repo" / "github_list_contents" / "github_read_file": repo tools (one path per read_file call; parallelize multiple files).
 - "github_list_issues" / "github_get_issue" / "github_list_pull_requests" / "github_get_pull_request" / "github_list_commits": inspect issues, PRs, and commit history.

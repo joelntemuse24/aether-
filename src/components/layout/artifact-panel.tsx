@@ -22,6 +22,8 @@ import {
   Maximize2Icon,
   Minimize2Icon,
   XIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from "lucide-react";
 import { useArtifact } from "@/providers/artifact-provider";
 import { useDrive } from "@/providers/drive-provider";
@@ -30,6 +32,17 @@ import { useTheme } from "@/providers/theme-provider";
 import type { ArtifactKind } from "@/lib/tools";
 import { cn } from "@/lib/utils";
 import { fonts } from "@/lib/tokens";
+import { diffText } from "@/lib/artifacts/diff";
+import {
+  downloadExtension,
+  downloadMime,
+  isFileArtifactKind,
+  isTextArtifactKind,
+  normalizeArtifactKind,
+  parseCsv,
+  previewMode,
+} from "@/lib/artifacts/kinds";
+import { provenanceLabels } from "@/lib/artifacts/provenance";
 import {
   filePreviewMode,
   parseCsvTable,
@@ -177,8 +190,10 @@ function buildPreviewDoc(
     </style></head><body>${content}</body></html>`;
   }
 
-  if (lang === "html" || lang === "htm") {
-    return content;
+  if (kind === "html" || lang === "html" || lang === "htm") {
+    return /<html[\s>]|<body[\s>]/i.test(content)
+      ? content
+      : `<!doctype html><html><head><meta charset="utf-8"></head><body>${content}</body></html>`;
   }
 
   // React / JSX / TSX / JS: transpile in-browser with Babel standalone (CDN).
@@ -500,31 +515,38 @@ export function ArtifactPanel() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const lastPersisted = useRef<string>("");
 
-  const kind: ArtifactKind = artifact?.kind ?? "code";
+  const kind: ArtifactKind = normalizeArtifactKind(artifact?.kind, {
+    language: artifact?.language,
+  });
   const lang = (artifact?.language || "").toLowerCase();
+  const mode = previewMode(kind, lang);
+  const versions = artifact?.versions ?? [];
+  const provenance = artifact?.provenance ?? [];
+  const [versionIndex, setVersionIndex] = useState(-1);
+  const [showDiff, setShowDiff] = useState(false);
 
   const tabs = useMemo<Tab[]>(() => {
     if (!artifact) return [];
-    if (kind === "image") return [];
-    if (kind === "file") {
+    if (mode === "image") return [];
+    if (isFileArtifactKind(kind)) {
       if (filePreviewMode(artifact.language) !== "table") return [];
       const text = textFromArtifactContent(artifact.code);
       const table = text ? parseCsvTable(text) : null;
       return table?.rows.length ? ["table"] : [];
     }
-    if (kind === "svg") return ["preview", "code"];
-    if (kind === "document") return ["preview", "edit"];
-    if (kind === "data") {
+    if (mode === "live") return ["preview", "code"];
+    if (mode === "document") return ["preview", "edit"];
+    if (mode === "table") {
       const { rows, series } = parseData(artifact.code);
+      const csv = parseCsv(artifact.code) ?? parseCsvTable(artifact.code);
       const t: Tab[] = [];
-      if (rows) t.push("table");
+      if (rows || csv?.rows.length) t.push("table");
       if (series) t.push("chart");
       t.push("json");
       return t;
     }
-    // code
     return PREVIEWABLE_CODE_LANGS.has(lang) ? ["preview", "code"] : ["code"];
-  }, [artifact, kind, lang]);
+  }, [artifact, kind, lang, mode]);
 
   // Reset local state when the artifact changes.
   useEffect(() => {
@@ -534,6 +556,8 @@ export function ArtifactPanel() {
     lastPersisted.current = artifact.code;
     setCopied(false);
     setSaveState("idle");
+    setShowDiff(false);
+    setVersionIndex(-1);
     setTab(tabs[0] ?? "code");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artifact?.id]);
@@ -610,15 +634,15 @@ export function ArtifactPanel() {
   };
 
   const onDownload = () => {
-    if (kind === "image" || kind === "file") {
+    if (kind === "image" || isFileArtifactKind(kind)) {
       const filename =
-        kind === "file"
+        isFileArtifactKind(kind)
           ? artifact.language?.includes(".")
             ? artifact.language
             : `${slugify(artifact.title)}${artifact.language ? `.${artifact.language}` : ""}`
           : `${slugify(artifact.title)}`;
       const href =
-        kind === "file"
+        isFileArtifactKind(kind)
           ? artifact.downloadPath ||
             (artifact.persisted && artifact.id
               ? `/api/artifacts/${encodeURIComponent(artifact.id)}/download`
@@ -640,16 +664,8 @@ export function ArtifactPanel() {
       a.remove();
       return;
     }
-    const filename = `${slugify(artifact.title)}.${
-      kind === "data" ? "json" : kind === "svg" ? "svg" : ext
-    }`;
-    const mime =
-      kind === "svg"
-        ? "image/svg+xml"
-        : kind === "data"
-          ? "application/json"
-          : "text/plain";
-    download(filename, content, mime);
+    const filename = `${slugify(artifact.title)}.${downloadExtension(kind, lang) || ext}`;
+    download(filename, content, downloadMime(kind, lang));
   };
 
   const onExportPdf = () => {
@@ -701,13 +717,13 @@ export function ArtifactPanel() {
   };
 
   const KindIcon =
-    kind === "document"
+    kind === "document" || kind === "markdown"
       ? FileTextIcon
-      : kind === "data"
+      : kind === "data" || kind === "csv"
         ? BracesIcon
         : kind === "image"
           ? ImageIcon
-          : kind === "file"
+          : isFileArtifactKind(kind)
             ? FileIcon
             : CodeIcon;
 
@@ -720,20 +736,41 @@ export function ArtifactPanel() {
     json: BracesIcon,
   };
 
+  const viewingContent =
+    versionIndex >= 0 && versions[versionIndex]
+      ? versions[versionIndex]!.content
+      : content;
+  const viewingDebounced =
+    versionIndex >= 0 && versions[versionIndex]
+      ? versions[versionIndex]!.content
+      : debounced;
+  const previousVersion =
+    versions.length > 1
+      ? versions[Math.max(0, (versionIndex >= 0 ? versionIndex : versions.length - 1) - 1)]
+      : undefined;
+  const diffLines =
+    showDiff && previousVersion
+      ? diffText(previousVersion.content, viewingContent)
+      : [];
+
   const documentHtml =
-    kind === "document"
-      ? (marked.parse(debounced, { async: false }) as string)
+    kind === "document" || kind === "markdown"
+      ? (marked.parse(viewingDebounced, { async: false }) as string)
       : "";
 
-  const parsed = kind === "data" ? parseData(content) : null;
+  const parsed = kind === "data" || kind === "csv" ? parseData(viewingContent) : null;
+  const csvFromKind = kind === "csv" ? parseCsv(viewingContent) : null;
   const csvTable =
-    kind === "file" && filePreviewMode(artifact.language) === "table"
+    isFileArtifactKind(kind) && filePreviewMode(artifact.language) === "table"
       ? (() => {
-          const text = textFromArtifactContent(content);
+          const text = textFromArtifactContent(viewingContent);
           return text ? parseCsvTable(text) : null;
         })()
-      : null;
+      : csvFromKind;
   const hasCsvPreview = !!(csvTable && csvTable.rows.length > 0);
+  const producedBy = provenanceLabels(provenance);
+  const latestVersionIndex = Math.max(0, versions.length - 1);
+  const activeVersionIndex = versionIndex >= 0 ? versionIndex : latestVersionIndex;
 
   return (
     <aside
@@ -752,10 +789,15 @@ export function ArtifactPanel() {
             <div className="truncate text-sm font-medium text-[var(--text)]">
               {artifact.title}
             </div>
+            {producedBy.length > 0 && (
+              <div className="truncate text-[11px] text-[var(--muted-soft)]">
+                Produced by {producedBy.join(", ")}
+              </div>
+            )}
             <div className="text-[11px] lowercase text-[var(--muted-soft)]">
               {kind}
               {kind === "code" && lang ? ` · ${lang}` : ""}
-              {kind === "file" && lang ? ` · ${lang}` : ""}
+              {isFileArtifactKind(kind) && lang ? ` · ${lang}` : ""}
               {saveState === "saving"
                 ? " · saving…"
                 : saveState === "saved"
@@ -810,7 +852,7 @@ export function ArtifactPanel() {
           >
             {expanded ? <Minimize2Icon className="size-4" /> : <Maximize2Icon className="size-4" />}
           </button>
-          {kind === "document" && (
+          {(kind === "document" || kind === "markdown") && (
             <button
               type="button"
               onClick={onExportPdf}
@@ -840,7 +882,15 @@ export function ArtifactPanel() {
             onClick={onDownload}
             className="flex size-8 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--elevated)] hover:text-[var(--text)]"
             aria-label="Download"
-            title={kind === "document" ? "Download .md" : "Download"}
+            title={
+              kind === "document" || kind === "markdown"
+                ? "Download .md"
+                : kind === "html"
+                  ? "Download source"
+                  : kind === "react"
+                    ? "Download source"
+                    : "Download"
+            }
           >
             <DownloadIcon className="size-4" />
           </button>
@@ -855,6 +905,53 @@ export function ArtifactPanel() {
           </button>
         </div>
       </div>
+
+      {versions.length > 1 && (
+        <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-1.5">
+          <button
+            type="button"
+            disabled={activeVersionIndex <= 0}
+            onClick={() => {
+              setShowDiff(false);
+              setVersionIndex(Math.max(0, activeVersionIndex - 1));
+            }}
+            className="flex size-7 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--elevated)] disabled:opacity-40"
+            aria-label="Previous version"
+          >
+            <ChevronLeftIcon className="size-4" />
+          </button>
+          <span className="text-[11px] text-[var(--muted)]">
+            v{versions[activeVersionIndex]?.n ?? 1} of {versions.length}
+          </span>
+          <button
+            type="button"
+            disabled={activeVersionIndex >= latestVersionIndex}
+            onClick={() => {
+              setShowDiff(false);
+              const next = Math.min(latestVersionIndex, activeVersionIndex + 1);
+              setVersionIndex(next === latestVersionIndex ? -1 : next);
+            }}
+            className="flex size-7 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--elevated)] disabled:opacity-40"
+            aria-label="Next version"
+          >
+            <ChevronRightIcon className="size-4" />
+          </button>
+          {isTextArtifactKind(kind) && previousVersion && (
+            <button
+              type="button"
+              onClick={() => setShowDiff((v) => !v)}
+              className={cn(
+                "rounded-md px-2 py-1 text-[11px]",
+                showDiff
+                  ? "bg-[var(--elevated)] text-[var(--text)]"
+                  : "text-[var(--muted)] hover:text-[var(--text)]",
+              )}
+            >
+              Diff
+            </button>
+          )}
+        </div>
+      )}
 
       {tabs.length > 1 && (
         <div className="flex gap-1 border-b border-[var(--border)] px-3 py-1.5">
@@ -881,8 +978,27 @@ export function ArtifactPanel() {
       )}
 
       <div className="min-h-0 flex-1 overflow-hidden">
+        {showDiff && diffLines.length > 0 && (
+          <pre className="h-full overflow-auto bg-[var(--code-bg)] p-3 font-[family-name:var(--font-mono)] text-[12px] leading-relaxed">
+            {diffLines.map((line, i) => (
+              <div
+                key={`${line.type}-${i}`}
+                className={
+                  line.type === "add"
+                    ? "bg-emerald-500/10 text-emerald-800"
+                    : line.type === "del"
+                      ? "bg-red-500/10 text-red-800"
+                      : "text-[var(--text-secondary)]"
+                }
+              >
+                {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
+                {line.text}
+              </div>
+            ))}
+          </pre>
+        )}
         {/* Image */}
-        {kind === "image" && (
+        {kind === "image" && !showDiff && (
           <div className="flex h-full items-center justify-center overflow-auto bg-[var(--elevated)] p-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -892,12 +1008,12 @@ export function ArtifactPanel() {
             />
           </div>
         )}
-        {kind === "file" && hasCsvPreview && tab === "table" && csvTable && (
+        {isFileArtifactKind(kind) && hasCsvPreview && tab === "table" && csvTable && !showDiff && (
           <div className="flex h-full flex-col">
             <DataTable rows={csvTable.rows} columns={csvTable.columns} />
           </div>
         )}
-        {kind === "file" && !hasCsvPreview && (
+        {isFileArtifactKind(kind) && !hasCsvPreview && !showDiff && (
           <div className="flex h-full flex-col items-center justify-center gap-4 bg-[var(--elevated)] px-6 text-center">
             <FileIcon className="size-10 text-[var(--accent)]" />
             <div>
@@ -920,7 +1036,7 @@ export function ArtifactPanel() {
         )}
 
         {/* SVG */}
-        {kind === "svg" && tab === "preview" && (
+        {kind === "svg" && tab === "preview" && !showDiff && (
           <iframe
             ref={iframeRef}
             title="SVG preview"
@@ -929,12 +1045,12 @@ export function ArtifactPanel() {
             className="h-full w-full border-0 bg-[var(--canvas)]"
           />
         )}
-        {kind === "svg" && tab === "code" && (
-          <HighlightedCode code={content} language="xml" />
+        {kind === "svg" && tab === "code" && !showDiff && (
+          <HighlightedCode code={viewingContent} language="xml" />
         )}
 
         {/* Document */}
-        {kind === "document" && tab === "preview" && (
+        {(kind === "document" || kind === "markdown") && tab === "preview" && !showDiff && (
           <iframe
             ref={iframeRef}
             title="Document preview"
@@ -945,7 +1061,7 @@ export function ArtifactPanel() {
             className="h-full w-full border-0 bg-[var(--canvas)]"
           />
         )}
-        {kind === "document" && tab === "edit" && (
+        {(kind === "document" || kind === "markdown") && tab === "edit" && !showDiff && (
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
@@ -955,35 +1071,44 @@ export function ArtifactPanel() {
         )}
 
         {/* Data */}
-        {kind === "data" && tab === "table" && parsed?.rows && (
-          <DataTable rows={parsed.rows} columns={parsed.columns} />
+        {(kind === "data" || kind === "csv") && tab === "table" && (parsed?.rows || csvTable?.rows) && !showDiff && (
+          <DataTable
+            rows={parsed?.rows ?? csvTable?.rows ?? []}
+            columns={parsed?.columns ?? csvTable?.columns ?? []}
+          />
         )}
-        {kind === "data" && tab === "chart" && parsed?.series && (
+        {(kind === "data" || kind === "csv") && tab === "chart" && parsed?.series && !showDiff && (
           <BarChart series={parsed.series} />
         )}
-        {kind === "data" && tab === "json" && (
-          <HighlightedCode code={content} language="json" />
+        {(kind === "data" || kind === "csv") && tab === "json" && !showDiff && (
+          <HighlightedCode code={viewingContent} language="json" />
         )}
 
         {/* Code */}
-        {kind === "code" && tab === "preview" && (
+        {(kind === "code" || kind === "html" || kind === "react") &&
+          tab === "preview" &&
+          !showDiff && (
           <iframe
             ref={iframeRef}
             title="Live preview"
             sandbox="allow-scripts"
-            srcDoc={buildPreviewDoc("code", lang, debounced, previewTheme)}
+            srcDoc={buildPreviewDoc(kind, lang || kind, viewingDebounced, previewTheme)}
             className="h-full w-full border-0 bg-[var(--canvas)]"
           />
         )}
-        {kind === "code" && tab === "code" && (
+        {(kind === "code" || kind === "html" || kind === "react") &&
+          tab === "code" &&
+          !showDiff && (
           <div className="flex h-full flex-col">
-            <HighlightedCode code={content} language={lang} />
+            <HighlightedCode code={viewingContent} language={lang || kind} />
           </div>
         )}
       </div>
 
       {/* Editable source for previewable code (auto-refresh) */}
-      {kind === "code" && tab === "preview" && (
+      {(kind === "code" || kind === "html" || kind === "react") &&
+        tab === "preview" &&
+        !showDiff && (
         <details className="border-t border-[var(--border)]">
           <summary className="cursor-pointer px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-[var(--muted-soft)] hover:text-[var(--text)]">
             <PlayIcon className="mr-1 inline size-3" />

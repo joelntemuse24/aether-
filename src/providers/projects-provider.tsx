@@ -34,6 +34,10 @@ type ProjectsContextValue = {
   ) => Promise<ProjectDTO | null>;
   remove: (id: string) => Promise<void>;
   cloud: boolean;
+  knowledgeFiles: Array<{ id: string; filename: string; createdAt?: string }>;
+  refreshKnowledge: () => Promise<void>;
+  uploadKnowledge: (file: File) => Promise<boolean>;
+  removeKnowledge: (fileId: string) => Promise<void>;
 };
 
 const ProjectsContext = createContext<ProjectsContextValue | null>(null);
@@ -46,6 +50,9 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
     null,
   );
   const [cloud, setCloud] = useState(false);
+  const [knowledgeFiles, setKnowledgeFiles] = useState<
+    Array<{ id: string; filename: string; createdAt?: string }>
+  >([]);
   const syncingFromThread = useRef(false);
   const activeProjectIdRef = useRef<string | null>(null);
   const syncGeneration = useRef(0);
@@ -194,6 +201,69 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
   const activeProject =
     projects.find((p) => p.id === activeProjectId) ?? null;
 
+  const refreshKnowledge = useCallback(async () => {
+    if (!activeProjectId || status !== "authenticated" || !cloud) {
+      setKnowledgeFiles([]);
+      return;
+    }
+    try {
+      const res = await fetch(
+        `/api/projects/${encodeURIComponent(activeProjectId)}/knowledge`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) {
+        setKnowledgeFiles([]);
+        return;
+      }
+      const body = (await res.json()) as {
+        files?: Array<{ id: string; filename: string; createdAt?: string }>;
+      };
+      setKnowledgeFiles(body.files ?? []);
+    } catch {
+      setKnowledgeFiles([]);
+    }
+  }, [activeProjectId, cloud, status]);
+
+  useEffect(() => {
+    void refreshKnowledge();
+  }, [refreshKnowledge]);
+
+  const uploadKnowledge = useCallback(
+    async (file: File) => {
+      if (!activeProjectId) return false;
+      const form = new FormData();
+      form.set("file", file);
+      const res = await fetch(
+        `/api/projects/${encodeURIComponent(activeProjectId)}/knowledge`,
+        { method: "POST", body: form },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        window.dispatchEvent(
+          new CustomEvent("aether:notice", {
+            detail: body.error || "Could not add that file.",
+          }),
+        );
+        return false;
+      }
+      await refreshKnowledge();
+      return true;
+    },
+    [activeProjectId, refreshKnowledge],
+  );
+
+  const removeKnowledge = useCallback(
+    async (fileId: string) => {
+      if (!activeProjectId) return;
+      await fetch(
+        `/api/projects/${encodeURIComponent(activeProjectId)}/knowledge?fileId=${encodeURIComponent(fileId)}`,
+        { method: "DELETE" },
+      );
+      await refreshKnowledge();
+    },
+    [activeProjectId, refreshKnowledge],
+  );
+
   const value = useMemo(
     () => ({
       projects,
@@ -205,6 +275,10 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       update,
       remove,
       cloud,
+      knowledgeFiles,
+      refreshKnowledge,
+      uploadKnowledge,
+      removeKnowledge,
     }),
     [
       projects,
@@ -216,6 +290,10 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       update,
       remove,
       cloud,
+      knowledgeFiles,
+      refreshKnowledge,
+      uploadKnowledge,
+      removeKnowledge,
     ],
   );
 

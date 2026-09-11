@@ -1,6 +1,8 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getDb, isCloudDbConfigured } from "@/lib/db";
 import { artifacts } from "@/lib/db/schema";
+import { mergeProvenance, type ArtifactProvenance } from "./provenance";
+import { bumpArtifactVersions, type ArtifactVersion } from "./versions";
 
 export type ArtifactDTO = {
   id: string;
@@ -11,6 +13,8 @@ export type ArtifactDTO = {
   projectId?: string;
   conversationId?: string;
   updatedAt?: string;
+  versions?: ArtifactVersion[];
+  provenance?: ArtifactProvenance[];
 };
 
 function toDto(row: typeof artifacts.$inferSelect): ArtifactDTO {
@@ -23,6 +27,8 @@ function toDto(row: typeof artifacts.$inferSelect): ArtifactDTO {
     projectId: row.projectId ?? undefined,
     conversationId: row.conversationId ?? undefined,
     updatedAt: row.updatedAt?.toISOString?.(),
+    versions: Array.isArray(row.versions) ? row.versions : [],
+    provenance: Array.isArray(row.provenance) ? row.provenance : [],
   };
 }
 
@@ -36,6 +42,7 @@ export async function saveArtifact(
     content: string;
     projectId?: string;
     conversationId?: string;
+    producedBy?: string[];
   },
 ): Promise<ArtifactDTO> {
   const db = await getDb();
@@ -60,6 +67,17 @@ export async function saveArtifact(
       .where(and(eq(artifacts.id, requestedId), eq(artifacts.userId, userId)))
       .limit(1);
     if (owned[0]) {
+      const versions = bumpArtifactVersions(
+        owned[0].versions,
+        owned[0].content,
+        content,
+        now.toISOString(),
+      );
+      const provenance = mergeProvenance(
+        owned[0].provenance,
+        input.producedBy ?? [],
+        now.toISOString(),
+      );
       await db
         .update(artifacts)
         .set({
@@ -67,6 +85,8 @@ export async function saveArtifact(
           title,
           language,
           content,
+          versions,
+          provenance,
           projectId,
           conversationId,
           updatedAt: now,
@@ -94,6 +114,8 @@ export async function saveArtifact(
   }
 
   const id = requestedId || crypto.randomUUID();
+  const versions = bumpArtifactVersions([], "", content, now.toISOString());
+  const provenance = mergeProvenance([], input.producedBy ?? [], now.toISOString());
   await db.insert(artifacts).values({
     id,
     userId,
@@ -101,6 +123,8 @@ export async function saveArtifact(
     title,
     language,
     content,
+    versions,
+    provenance,
     projectId,
     conversationId,
     createdAt: now,
