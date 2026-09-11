@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test --test-force-exit src/lib/*.test.ts src/lib/**/*.test.ts"
+    "test": "tsx --test --test-force-exit src/lib/*.test.ts src/lib/**/*.test.ts evals/probe/*.test.ts",
+    "probe": "tsx evals/probe/run.ts --smoke",
+    "probe:smoke": "tsx evals/probe/run.ts --smoke",
+    "probe:full": "tsx evals/probe/run.ts --all"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.18",

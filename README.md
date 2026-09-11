@@ -95,7 +95,10 @@ npm run dev      # local dev (Turbopack)
 npm run build    # production build
 npm run start    # serve production build
 npm run lint     # eslint
+npm run probe    # Aether breakage probe (offline smoke; live with AETHER_PROBE_BASE_URL)
 ```
+
+Hosted Fast/Expert probe pack: `evals/probe/README.md`.
 
 ## Authentication & Google Drive
 
