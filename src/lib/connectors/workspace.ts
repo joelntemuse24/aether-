@@ -7,6 +7,8 @@ const MAX_COMMAND_TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_CHARS = 64 * 1024;
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_PUBLISH_BYTES = 3 * 1024 * 1024;
+const SANDBOX_TIMEOUT_MS = 15 * 60_000;
+const SNAPSHOT_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const WORKSPACE_UNAVAILABLE_MESSAGE =
   "The isolated workspace is unavailable. For a PowerPoint file use create_presentation; for Excel use create_spreadsheet. Do not substitute a markdown briefing when the user asked for a real file.";
@@ -37,10 +39,26 @@ export type WorkspaceDeps = {
   getSandbox?: (identity: WorkspaceIdentity) => Promise<WorkspaceSandbox>;
 };
 
+export type SandboxAccessTokenAuth = {
+  token: string;
+  teamId: string;
+  projectId: string;
+};
+
+/**
+ * Explicit access-token auth for Sandbox.create / getOrCreate.
+ *
+ * Only `VERCEL_TOKEN` (a personal/access token) is eligible. Passing
+ * `VERCEL_OIDC_TOKEN` as `token` skips the SDK's `getVercelOidcToken()`
+ * refresh and can pin an expired snapshot — that is how production
+ * workspace_exec fails even when OIDC is enabled.
+ *
+ * When this returns null, the SDK authenticates via request-scoped OIDC.
+ */
 export function sandboxAuthFromEnv(
   env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
-): { token: string; teamId: string; projectId: string } | null {
-  const token = (env.VERCEL_TOKEN || env.VERCEL_OIDC_TOKEN || "").trim();
+): SandboxAccessTokenAuth | null {
+  const token = (env.VERCEL_TOKEN || "").trim();
   const teamId = (env.VERCEL_TEAM_ID || env.VERCEL_ORG_ID || "").trim();
   const projectId = (env.VERCEL_PROJECT_ID || "").trim();
   if (token && teamId && projectId) return { token, teamId, projectId };
@@ -54,6 +72,22 @@ export function workspaceName(identity: WorkspaceIdentity): string {
   const scope = `${identity.userId || "guest"}:${identity.conversationId}`;
   const digest = createHash("sha256").update(scope).digest("hex").slice(0, 24);
   return `aether-${digest}`;
+}
+
+export function sandboxCreateParams(
+  identity: WorkspaceIdentity,
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
+) {
+  const auth = sandboxAuthFromEnv(env);
+  return {
+    name: workspaceName(identity),
+    persistent: true as const,
+    timeout: SANDBOX_TIMEOUT_MS,
+    resources: { vcpus: 1 as const },
+    image: "vercel/sandbox/universal" as const,
+    snapshotExpiration: SNAPSHOT_EXPIRATION_MS,
+    ...(auth ?? {}),
+  };
 }
 
 export function resolveWorkspacePath(input: string): string | null {
@@ -95,19 +129,54 @@ function logWorkspaceFailure(op: string, err: unknown) {
   });
 }
 
-async function getWorkspace(identity: WorkspaceIdentity): Promise<WorkspaceSandbox> {
-  const name = workspaceName(identity);
-  const auth = sandboxAuthFromEnv();
-  return Sandbox.getOrCreate({
-    name,
-    persistent: true,
-    timeout: 15 * 60_000,
-    resources: { vcpus: 1 },
-    ...(auth ?? {}),
-    onCreate: async (sandbox) => {
+function isRetryableWorkspaceError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /429|503|502|504|ETIMEDOUT|ECONNRESET|snapshot not found|temporarily unavailable/i.test(
+    message,
+  );
+}
+
+async function ensureWorkspaceRoot(sandbox: WorkspaceSandbox) {
+  try {
+    await sandbox.runCommand({
+      cmd: "mkdir",
+      args: ["-p", WORKSPACE_ROOT],
+      timeoutMs: 10_000,
+    });
+    return;
+  } catch (err) {
+    try {
       await sandbox.mkDir("workspace");
-    },
-  });
+    } catch (mkdirErr) {
+      logWorkspaceFailure("mkdir", mkdirErr ?? err);
+    }
+  }
+}
+
+async function getWorkspace(identity: WorkspaceIdentity): Promise<WorkspaceSandbox> {
+  const params = sandboxCreateParams(identity);
+  const create = async () =>
+    Sandbox.getOrCreate({
+      ...params,
+      onCreate: async (sandbox) => {
+        try {
+          await ensureWorkspaceRoot(sandbox);
+        } catch (err) {
+          logWorkspaceFailure("onCreate", err);
+        }
+      },
+    });
+
+  let sandbox: WorkspaceSandbox;
+  try {
+    sandbox = await create();
+  } catch (err) {
+    if (!isRetryableWorkspaceError(err)) throw err;
+    logWorkspaceFailure("getOrCreate-retry", err);
+    sandbox = await create();
+  }
+  await ensureWorkspaceRoot(sandbox);
+  return sandbox;
 }
 
 function sandboxOf(

@@ -4,6 +4,7 @@ import {
   classifyWorkspaceError,
   resolveWorkspacePath,
   sandboxAuthFromEnv,
+  sandboxCreateParams,
   workspaceExec,
   workspaceReadBinary,
   WORKSPACE_UNAVAILABLE_MESSAGE,
@@ -56,14 +57,14 @@ describe("sandbox auth from env", () => {
     );
   });
 
-  it("accepts OIDC token and org id aliases", () => {
-    assert.deepEqual(
+  it("does not treat an OIDC snapshot as an access-token override", () => {
+    assert.equal(
       sandboxAuthFromEnv({
-        VERCEL_OIDC_TOKEN: "oidc",
+        VERCEL_OIDC_TOKEN: "oidc-snapshot",
         VERCEL_ORG_ID: "team_2",
         VERCEL_PROJECT_ID: "prj_2",
       }),
-      { token: "oidc", teamId: "team_2", projectId: "prj_2" },
+      null,
     );
   });
 
@@ -75,6 +76,35 @@ describe("sandbox auth from env", () => {
       }),
       null,
     );
+  });
+
+  it("lets the SDK refresh OIDC instead of pinning VERCEL_OIDC_TOKEN", () => {
+    const params = sandboxCreateParams(
+      { userId: "u1", conversationId: "c1" },
+      {
+        VERCEL_OIDC_TOKEN: "expired-oidc-snapshot",
+        VERCEL_ORG_ID: "team_2",
+        VERCEL_PROJECT_ID: "prj_2",
+      },
+    );
+    assert.equal("token" in params, false);
+    assert.equal(params.persistent, true);
+    assert.match(params.name, /^aether-[0-9a-f]{24}$/);
+    assert.equal(params.image, "vercel/sandbox/universal");
+  });
+
+  it("passes access-token credentials when VERCEL_TOKEN is complete", () => {
+    const params = sandboxCreateParams(
+      { userId: "u1", conversationId: "c1" },
+      {
+        VERCEL_TOKEN: "tok",
+        VERCEL_TEAM_ID: "team_1",
+        VERCEL_PROJECT_ID: "prj_1",
+      },
+    );
+    assert.equal(params.token, "tok");
+    assert.equal(params.teamId, "team_1");
+    assert.equal(params.projectId, "prj_1");
   });
 });
 
