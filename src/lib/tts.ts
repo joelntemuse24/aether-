@@ -12,21 +12,32 @@ export function speechSynthesisSupported(
   return !!scope && typeof scope.speechSynthesis === "object" && scope.speechSynthesis !== null;
 }
 
+function textsFromParts(parts: unknown): string {
+  if (!Array.isArray(parts)) return "";
+  return parts
+    .map((part) => {
+      if (!part || typeof part !== "object") return "";
+      const rec = part as { type?: string; text?: unknown };
+      if (typeof rec.text === "string" && (!rec.type || rec.type === "text")) {
+        return rec.text;
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function plainTextFromMessage(message: {
-  parts?: Array<{ type?: string; text?: string }>;
+  parts?: unknown;
   content?: unknown;
 }): string {
-  const parts = message.parts;
-  if (Array.isArray(parts)) {
-    const text = parts
-      .filter((part) => part?.type === "text" && typeof part.text === "string")
-      .map((part) => part.text as string)
-      .join("\n");
-    return plainTextForSpeech(text);
-  }
+  const fromParts = textsFromParts(message.parts);
+  if (fromParts) return plainTextForSpeech(fromParts);
   if (typeof message.content === "string") {
     return plainTextForSpeech(message.content);
   }
+  const fromContent = textsFromParts(message.content);
+  if (fromContent) return plainTextForSpeech(fromContent);
   return "";
 }
 

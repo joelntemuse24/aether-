@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   PLAYBACK_UNAVAILABLE_MESSAGE,
   plainTextForSpeech,
+  plainTextFromMessage,
   speechSynthesisSupported,
 } from "./tts";
 
@@ -19,6 +20,21 @@ describe("TTS playback helpers", () => {
   it("returns empty for blank or tool-only payloads", () => {
     assert.equal(plainTextForSpeech("   "), "");
     assert.equal(plainTextForSpeech(""), "");
+  });
+
+  it("reads assistant-ui content arrays as well as parts", () => {
+    assert.match(
+      plainTextFromMessage({
+        content: [{ type: "text", text: "Overnight markets were quiet." }],
+      }),
+      /Overnight markets/,
+    );
+    assert.match(
+      plainTextFromMessage({
+        parts: [{ type: "text", text: "Hello **there**" }],
+      }),
+      /Hello there/,
+    );
   });
 
   it("is honest when speech synthesis is missing", () => {
