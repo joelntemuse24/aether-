@@ -119,6 +119,7 @@ export async function fetchUrlText(url: string): Promise<{
   title?: string;
   text?: string;
   url: string;
+  id?: string;
   warning?: string;
   paywalled?: boolean;
   contentType?: string;

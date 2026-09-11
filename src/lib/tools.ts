@@ -109,6 +109,7 @@ export const webSearchInput = z.object({
 export type WebSearchInput = z.infer<typeof webSearchInput>;
 
 export type WebSearchResult = {
+  id?: string;
   title: string;
   snippet: string;
   url?: string;
@@ -150,6 +151,11 @@ export type CreateArtifactOutput = {
   persisted?: boolean;
   /** Echo of body for client open when tool args were incomplete. */
   content?: string;
+  filename?: string;
+  mime?: string;
+  bytes?: number;
+  downloadPath?: string;
+  hint?: string;
 };
 
 export const memorySearchInput = z.object({
@@ -690,8 +696,8 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 
 ## Core tools (always available when tools are on)
 - "execute_python": sandboxed in-browser Python for math, data, or verifying code.
-- "web_search": current or factual lookups. Few focused queries only.
-- "fetch_url": read a public page as text (IR, press, docs). Soft-fails paywalls; PDFs best-effort. Never use for github.com repos.
+- "web_search": current or factual lookups. Few focused queries only. Results include id (1, 2, …) — cite those ids inline as [1], [2] in the final answer.
+- "fetch_url": read a public page as text (IR, press, docs). Soft-fails paywalls; PDFs best-effort. Never use for github.com repos. Cite the page as the next [n] after search hits.
 - "create_artifact": substantial reusable content. kind "document" for essays/briefs; "code" / "data" / "svg" / "image" when those fit. Do not use this for a PowerPoint or Excel file.
 - "create_presentation": build a real .pptx and attach it in-thread. Use this for decks / slides / PowerPoint — do not install python-pptx or fall back to a markdown briefing.
 - "create_spreadsheet": build a real .xlsx and attach it in-thread. Use this for Excel / tables the user asked to download.
@@ -725,13 +731,15 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 - Essay / deadline flows: draft artifact first → verify lightly → then portal steps with confirmation.
 
 ## Web research discipline (enforced by the harness)
-- Prefer 1–2 focused web_search calls, then draft. Near-duplicates and depth budgets apply (time budgets may tighten further).
+- Prefer 1–2 focused web_search calls, then fetch_url, then draft. Near-duplicates and depth budgets apply (time budgets may tighten further).
+- Cite sources inline as [1], [2] matching web_search/fetch_url result ids so they render as citation chips.
 - When blocked or budget exhausted → fetch_url / browser_navigate on known links, or answer.
 - Paywall / thin results → say so and finish with a usable answer.
 
 ## Artifacts & narration
 - Short snippets in chat; create_artifact for long or reusable work (essays, briefs).
 - Decks and spreadsheets the user asked to download must be real files (create_presentation / create_spreadsheet), not markdown stand-ins.
+- After create_presentation, the thread shows a file chip with Download. Do not claim a file is attached unless the tool returned persisted/downloadPath or in-thread content.
 - Weave tool results into the answer; no raw JSON dumps.
 
 ## If tools are unavailable

@@ -47,6 +47,7 @@ import {
   bufferToDataUrl,
   mimeForFilename,
 } from "@/lib/office/file-artifact";
+import { fileToolResult } from "@/lib/artifacts/file-result";
 import { generateImageForUser } from "@/lib/connectors/image";
 import {
   gmailSearchForUser,
@@ -431,11 +432,16 @@ async function persistArtifact(
     content: string;
   },
 ): Promise<{ id?: string; persisted: boolean }> {
-  if (!ctx.userId || !isCloudDbConfigured()) {
+  if (!ctx.userId) {
+    return { persisted: false };
+  }
+  const save =
+    ctx.deps?.saveArtifact ??
+    (isCloudDbConfigured() ? saveArtifact : null);
+  if (!save) {
     return { persisted: false };
   }
   try {
-    const save = ctx.deps?.saveArtifact ?? saveArtifact;
     const saved = await save(ctx.userId, {
       kind: input.kind,
       title: input.title,
@@ -598,17 +604,14 @@ export async function executeAetherTool(input: {
       language: filename,
       content,
     });
-    return {
-      ok: true,
-      kind: "file",
+    return fileToolResult({
       title,
       filename,
       mime,
       bytes: file.buffer.byteLength,
-      id: saved.id,
-      persisted: saved.persisted,
-      content,
-    };
+      dataUrl: content,
+      saved,
+    });
   }
 
   if (name === TOOL_NAMES.createPresentation) {
@@ -644,17 +647,15 @@ export async function executeAetherTool(input: {
       language: deck.filename,
       content: deck.dataUrl,
     });
-    return {
-      ok: true,
-      kind: "file",
+    return fileToolResult({
       title,
       filename: deck.filename,
       mime: deck.mime,
-      slides: deck.slideCount,
-      id: saved.id,
-      persisted: saved.persisted,
-      content: deck.dataUrl,
-    };
+      bytes: deck.buffer.byteLength,
+      dataUrl: deck.dataUrl,
+      saved,
+      extra: { slides: deck.slideCount },
+    });
   }
 
   if (name === TOOL_NAMES.createSpreadsheet) {
@@ -697,17 +698,15 @@ export async function executeAetherTool(input: {
       language: book.filename,
       content: book.dataUrl,
     });
-    return {
-      ok: true,
-      kind: "file",
+    return fileToolResult({
       title,
       filename: book.filename,
       mime: book.mime,
-      sheets: book.sheetCount,
-      id: saved.id,
-      persisted: saved.persisted,
-      content: book.dataUrl,
-    };
+      bytes: book.buffer.byteLength,
+      dataUrl: book.dataUrl,
+      saved,
+      extra: { sheets: book.sheetCount },
+    });
   }
 
   if (name === TOOL_NAMES.generateImage) {

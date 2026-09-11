@@ -8,12 +8,18 @@ import {
   unstable_memoizeMarkdownComponents as memoizeMarkdownComponents,
   useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown";
+import { useAuiState } from "@assistant-ui/react";
 import remarkGfm from "remark-gfm";
-import { type FC, memo, useState } from "react";
+import { type FC, memo, useMemo, useState } from "react";
 import { CheckIcon, CopyIcon, PanelRightOpenIcon } from "lucide-react";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { cn } from "@/lib/utils";
 import { useArtifact } from "@/providers/artifact-provider";
+import {
+  collectSourceCitations,
+  remarkInlineCitations,
+  type CitationPart,
+} from "@/lib/citations";
 
 const ARTIFACT_LANGS = new Set([
   "html",
@@ -50,9 +56,15 @@ const ARTIFACT_LANGS = new Set([
 ]);
 
 const MarkdownTextImpl = () => {
+  const parts = useAuiState((s) => s.message.parts as CitationPart[] | undefined);
+  const sources = useMemo(() => collectSourceCitations(parts), [parts]);
+  const plugins = useMemo(
+    () => [remarkGfm, remarkInlineCitations(sources)],
+    [sources],
+  );
   return (
     <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={plugins}
       className="aui-md prose-aether"
       components={defaultComponents}
       defer
@@ -174,17 +186,30 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  a: ({ className, ...props }) => (
-    <a
-      className={cn(
-        "text-[var(--accent)] underline underline-offset-2 hover:opacity-80",
-        className,
-      )}
-      target="_blank"
-      rel="noreferrer"
-      {...props}
-    />
-  ),
+  a: ({ className, href, children, ...props }) => {
+    const label = Array.isArray(children)
+      ? children.map((c) => (typeof c === "string" ? c : "")).join("")
+      : typeof children === "string"
+        ? children
+        : "";
+    const citation = /^\d+$/.test(label.trim());
+    return (
+      <a
+        className={cn(
+          citation
+            ? "aether-cite"
+            : "text-[var(--accent)] underline underline-offset-2 hover:opacity-80",
+          className,
+        )}
+        target="_blank"
+        rel="noreferrer"
+        href={href}
+        {...props}
+      >
+        {citation ? label.trim() : children}
+      </a>
+    );
+  },
   blockquote: ({ className, ...props }) => (
     <blockquote
       className={cn(

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import JSZip from "jszip";
 import { extractOfficeText } from "@/lib/office-text";
 import { buildPresentationPptx } from "./build-pptx";
 import { buildSpreadsheetXlsx } from "./build-xlsx";
@@ -31,6 +32,12 @@ describe("buildPresentationPptx", () => {
     assert.match(String(text), /Market size/);
     assert.match(String(text), /AUM growing in Dublin/);
     assert.equal(deck.slideCount, 2);
+    const zip = await JSZip.loadAsync(deck.buffer);
+    const contentTypes = zip.file("[Content_Types].xml");
+    assert.ok(contentTypes, "pptx must include [Content_Types].xml");
+    const xml = await contentTypes.async("string");
+    assert.match(xml, /ContentType/);
+    assert.match(xml, /presentationml/);
   });
 
   it("still produces a title slide when the model omits slides", async () => {

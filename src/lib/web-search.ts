@@ -14,6 +14,7 @@
 import type { WebSearchOutput, WebSearchResult } from "@/lib/tools";
 import { fetchUrlText } from "@/lib/connectors/web-and-drive";
 import { runApiSearchProviders } from "@/lib/search/providers";
+import { assignCitationIds } from "@/lib/citations";
 
 const SEARCH_TIMEOUT_MS = 28_000;
 
@@ -398,7 +399,7 @@ function withCurrencyWarning(
     ok: true,
     query,
     source,
-    results,
+    results: assignCitationIds(results),
     ...(warning ? { warning } : {}),
   };
 }

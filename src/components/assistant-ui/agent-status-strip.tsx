@@ -258,7 +258,10 @@ export const MessageSourceCards: FC = () => {
         const host = hostLabel(hit.url);
         const inner = (
           <>
-            <span className="aether-inline-source__title">{hit.title}</span>
+            <span className="aether-inline-source__title">
+              {hit.id ? `[${hit.id}] ` : ""}
+              {hit.title}
+            </span>
             {host ? (
               <span className="aether-inline-source__host">{host}</span>
             ) : null}
