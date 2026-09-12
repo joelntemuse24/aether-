@@ -26,7 +26,7 @@ export async function GET() {
   try {
     const live = await fetchRankedHostedCatalog();
     models = filterCatalogForCapabilities(live.models, capabilities);
-    // Cloud default is the Fast route, not the ranked catalog flagship.
+    // Cloud default is the Expert route, not the ranked catalog flagship.
     defaultModel = advertised.defaultModel;
   } catch (err) {
     console.error("[api/hosted/status] catalog", err);

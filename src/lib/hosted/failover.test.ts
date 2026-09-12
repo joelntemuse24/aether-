@@ -18,7 +18,7 @@ function apiError(statusCode: number, body = "") {
 }
 
 describe("isFailoverError", () => {
-  it("fails over on 400/403/404 so Fast Ultra can reach Lightning", () => {
+  it("fails over on 400/403/404 so a dead Expert hop can reach the next Cloud route", () => {
     assert.equal(isFailoverError(apiError(400, "model not available")), true);
     assert.equal(isFailoverError(apiError(403, "privacy policy required")), true);
     assert.equal(isFailoverError(apiError(404, "No endpoints found")), true);

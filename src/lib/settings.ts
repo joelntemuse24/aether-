@@ -45,7 +45,10 @@ export type AppSettings = {
    * Destructive actions always confirm.
    */
   toolApprovalMode: ToolApprovalMode;
-  /** Speed tier: Fast (OpenRouter Nemotron Ultra) or Expert (Buzz Luna). */
+  /**
+   * Cloud chats are Expert only. Leftover `fast` from older clients is
+   * coerced to Expert on load.
+   */
   speedTier: "fast" | "expert";
 };
 
@@ -65,7 +68,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   enableTools: true,
   voice: "literary",
   toolApprovalMode: DEFAULT_TOOL_APPROVAL_MODE,
-  speedTier: "fast",
+  speedTier: "expert",
 };
 
 export function loadSettings(): AppSettings {
@@ -85,8 +88,14 @@ export function loadSettings(): AppSettings {
       next.model = DEFAULT_HOSTED_MODEL;
     }
     next.toolApprovalMode = parseToolApprovalMode(next.toolApprovalMode);
-    if (next.speedTier !== "fast" && next.speedTier !== "expert") {
-      next.speedTier = "fast";
+    const migratedFast = next.speedTier !== "expert";
+    next.speedTier = "expert";
+    if (migratedFast) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // quota / private mode
+      }
     }
     return next;
   } catch {
@@ -117,9 +126,7 @@ export function resolveApiKey(settings: AppSettings): string {
 
 export function resolveModel(settings: AppSettings): string {
   if (settings.accessMode === "hosted") {
-    return resolveCloudTierModel(
-      settings.speedTier === "expert" ? "expert" : "fast",
-    );
+    return resolveCloudTierModel(settings.speedTier);
   }
   if (settings.useCustomModel && settings.customModel.trim()) {
     return settings.customModel.trim();
@@ -150,7 +157,7 @@ export function buildChatHeaders(settings: AppSettings): Record<string, string> 
     return {
       "x-access-mode": "hosted",
       "x-model": resolveModel(settings),
-      "x-speed-tier": settings.speedTier === "expert" ? "expert" : "fast",
+      "x-speed-tier": "expert",
       "x-tools": settings.enableTools ? "1" : "0",
       "x-tool-approval-mode": parseToolApprovalMode(settings.toolApprovalMode),
     };

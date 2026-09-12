@@ -85,10 +85,10 @@ export async function POST(req: Request) {
 
     let model: LanguageModel;
     if (hosted) {
-      // Titles follow Cloud Fast (Ultra → Lightning). Leftover catalog
+      // Titles follow Cloud Expert (Luna → Sol → DeepSeek). Leftover catalog
       // ids in x-model must not select a dead specialty hop.
       const hostedModel = createHostedLanguageModel(
-        modelId || "fast",
+        modelId || "expert",
         req.headers.get("origin"),
       );
       if (!hostedModel) {

@@ -5,13 +5,13 @@
  */
 
 import type { RankedFamily, RankedModelOption } from "./rank-models";
-import { FAST_OPENROUTER_MODEL } from "./speed-tiers";
+import { EXPERT_CATALOG_MODEL } from "./speed-tiers";
 
 export type HostedModelFamily = RankedFamily;
 export type HostedModelOption = RankedModelOption;
 
-/** Fallback default when live catalog has not loaded yet — Cloud Fast route. */
-export const DEFAULT_HOSTED_MODEL: string = FAST_OPENROUTER_MODEL;
+/** Fallback default when live catalog has not loaded yet — Cloud Expert route. */
+export const DEFAULT_HOSTED_MODEL: string = EXPERT_CATALOG_MODEL;
 
 /** @deprecated Static catalog removed — kept empty for import safety. */
 export const HOSTED_CATALOG: HostedModelOption[] = [];

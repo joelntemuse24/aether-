@@ -127,10 +127,7 @@ export async function POST(req: Request) {
         { status: 503 },
       );
     }
-    const hostedRoute = resolveHostedRoute(
-      parsed.data.model,
-      parsed.data.speedTier === "expert" ? "expert" : "fast",
-    );
+    const hostedRoute = resolveHostedRoute(parsed.data.model, "expert");
     if (!hostedRoute) {
       return NextResponse.json(
         { error: HOSTED_CLOUD_UNAVAILABLE_MESSAGE },

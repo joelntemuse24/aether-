@@ -21,7 +21,6 @@ import {
 import { ChatRenderErrorBoundary } from "@/components/chat-render-error";
 import { toToolPartLike } from "@/lib/tool-part";
 import "@/components/assistant-ui/agent-activity.css";
-import { ModelPicker } from "@/components/model-picker";
 import {
   filterMentionOptions,
   insertAppMention,
@@ -441,7 +440,6 @@ const Composer: FC = () => {
     setOpenSettings,
     openConnectedAccounts,
     chatHeaders,
-    settings,
   } = useSettings();
   const { addFiles, hasAttachments, attachments } = useAttachments();
   const {
@@ -545,10 +543,7 @@ const Composer: FC = () => {
     });
     if (remoteGuess && !remoteGuess.startsWith("__LOCALID_")) {
       persistThreadUIMessages(remoteGuess, [userDraft]);
-      persistThreadSpeedTier(
-        remoteGuess,
-        settings.speedTier === "expert" ? "expert" : "fast",
-      );
+      persistThreadSpeedTier(remoteGuess, "expert");
     }
 
     const pathnameHasThread = !!readThreadIdFromLocation();
@@ -1212,8 +1207,6 @@ const ComposerAction: FC<{
             </div>
           )}
         </div>
-
-        <ModelPicker />
       </div>
 
       <div className="flex items-center gap-1.5">

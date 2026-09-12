@@ -193,10 +193,6 @@ export async function runUiTurn(input: UiTurnInput): Promise<{
     await dismissPreferences(page);
     await page.locator('textarea[aria-label="Message input"]').waitFor({ timeout: 15_000 });
 
-    const tierName = input.tier === "expert" ? "Expert" : "Fast";
-    const radio = page.getByRole("radio", { name: tierName });
-    if (await visible(radio)) await radio.click();
-
     await typeComposer(page, input.prompt);
     const send = page.locator('button[aria-label="Send message"]');
     await send.click({ timeout: 5000 });

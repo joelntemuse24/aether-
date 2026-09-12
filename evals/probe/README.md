@@ -1,6 +1,6 @@
 # Aether probe harness
 
-Repeatable breakage probe for hosted Aether (Fast and Expert) on **API and UI**. This is not a quality rubric — it fires the capability-gap seed pack and fails on the modes Joel was firefighting.
+Repeatable breakage probe for hosted Aether (Expert) on **API and UI**. This is not a quality rubric — it fires the capability-gap seed pack and fails on the modes Joel was firefighting. Fast-only cases were dropped 2026-09-12.
 
 API: blank transcripts, raw DSML/tool XML, client/Application errors, `This step failed`, `ZoneInfoNotFoundError`, stuck Stop, duplicate Working strips, no answer after N seconds, leaked upstream auth errors.
 
@@ -33,7 +33,7 @@ npm run probe:smoke
 npm run probe:ui          # API fixtures + UI detector fixtures
 ```
 
-Live API against local / preview / prod (small Fast subset):
+Live API against local / preview / prod (small Expert subset):
 
 ```bash
 AETHER_PROBE_BASE_URL=http://localhost:3000 npm run probe:smoke -- --live
@@ -49,7 +49,7 @@ AETHER_PROBE_BASE_URL=https://YOUR-PREVIEW \
   npm run probe:ui -- --live
 ```
 
-Full pack on Fast + Expert (spendier):
+Full pack on Expert (spendier):
 
 ```bash
 AETHER_PROBE_BASE_URL=https://YOUR-PROD-OR-PREVIEW npm run probe:full -- --live --ui
@@ -69,7 +69,7 @@ AETHER_PROBE_BASE_URL=… npm run probe:ui -- --live --ui-only --id blank-surviv
 | `AETHER_PROBE_BASE_URL` | Target origin (`https://…` or `http://localhost:3000`) |
 | `AETHER_PROBE_COOKIE` | Optional `Cookie` header (Auth.js session / preview protection) |
 | `AETHER_PROBE_SESSION_TOKEN` | Optional `Authorization: Bearer …` |
-| `AETHER_PROBE_TIERS` | `fast`, `expert`, or `fast,expert` |
+| `AETHER_PROBE_TIERS` | `expert` (Fast is retired; `--tier fast` is skipped) |
 | `AETHER_PROBE_TIMEOUT_MS` | Override per-prompt timeout |
 
 Hosted keys stay on the **server** you point at. The probe never embeds keys.
@@ -87,10 +87,9 @@ Hosted keys stay on the **server** you point at. The probe never embeds keys.
 
 1. Chromium opens `AETHER_PROBE_BASE_URL`.
 2. Dismiss Preferences if hosted is ready (`Close preferences`).
-3. Click Fast/Expert (`aria-label="Response speed"`).
-4. Fill `textarea[aria-label="Message input"]`, click Send.
-5. Assert wired chrome only: welcome `h1` (Howzit? / we uup / in the trenches?), `.aether-activity` Working / Worked for, `Stop generating`, `[data-role="assistant"]`, `.aether-tool-trace__error`.
-6. On any UI finding, screenshot `evals/probe/artifacts/<id>-<tier>-ui.png`.
+3. Fill `textarea[aria-label="Message input"]`, click Send.
+4. Assert wired chrome only: welcome `h1` (Howzit? / we uup / in the trenches?), `.aether-activity` Working / Worked for, `Stop generating`, `[data-role="assistant"]`, `.aether-tool-trace__error`.
+5. On any UI finding, screenshot `evals/probe/artifacts/<id>-<tier>-ui.png`.
 
 ## Grok harvest
 

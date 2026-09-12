@@ -101,7 +101,7 @@ export function planUrlToThread(input: {
   pendingPath: string | null;
   pendingNewChat: boolean;
   itemIsNew: boolean;
-  /** Already-mounted conversation — remounting blanks Fast failover transcripts. */
+  /** Already-mounted conversation — remounting blanks live failover transcripts. */
   canonicalId?: string | null;
 }): UrlToThreadAction {
   if (input.urlThreadId) {

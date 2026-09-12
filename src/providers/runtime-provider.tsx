@@ -225,10 +225,7 @@ function useChatThreadRuntime() {
           });
           if (remoteId && outgoing.length > 0) {
             persistThreadUIMessages(remoteId, outgoing);
-            persistThreadSpeedTier(
-              remoteId,
-              settingsRef.current.speedTier === "expert" ? "expert" : "fast",
-            );
+            persistThreadSpeedTier(remoteId, "expert");
             persistedKeyRef.current = remoteId;
           }
           return {

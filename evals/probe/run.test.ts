@@ -9,7 +9,7 @@ describe("probe runner", () => {
     const report = await runProbe({ smoke: true, offline: true });
     assert.equal(report.mode, "offline-fixtures");
     assert.equal(report.subset, "smoke");
-    assert.equal(report.tiers[0], "fast");
+    assert.equal(report.tiers[0], "expert");
     assert.ok(report.totals.runs >= 1 && report.totals.runs <= 3);
     assert.equal(report.totals.failed, 0);
     const json = JSON.parse(readFileSync(DEFAULT_REPORT_JSON, "utf8")) as {

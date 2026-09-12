@@ -1,26 +1,14 @@
 /**
- * Fast / Expert speed tiers — Cloud think-depth / model route.
+ * Cloud model route — Expert only (2026-09-12).
  *
- * Fast (default): OpenRouter free Nemotron Ultra → paid Lightning.
  * Expert: Buzz GPT Luna → Buzz GPT Sol → OpenRouter DeepSeek V4 Flash.
+ * Legacy `fast` stored prefs and request headers coerce to Expert.
  *
- * Fast/Expert is not a tools gate (Ask/Auto lives in Settings). Product UI
+ * Speed is not a tools gate (Ask/Auto lives in Settings). Product UI
  * must never name vendors.
- *
- * OpenRouter has no literal "Nemotron 3.5 Ultra" slug. Fast hop 1 is the
- * free Ultra variant. Fast's 3.5 hop is paid Lightning, not Ultra.
  */
 
 export type SpeedTier = "fast" | "expert";
-
-/**
- * Free OpenRouter Nemotron Ultra (Joel: Fast primary must be `:free`).
- * Verified against OpenRouter /models — slug exists alongside the paid Ultra.
- */
-export const FAST_OPENROUTER_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
-
-/** Paid OpenRouter Nemotron 3.5 Lightning — Fast hop 2 if Ultra fails. */
-export const FAST_OPENROUTER_FALLBACK_MODEL = "nvidia/nemotron-3.5-lightning";
 
 /** Expert default: paid Buzz ChatGPT group, Luna. */
 export const EXPERT_PRIMARY_MODEL = "gpt-5.6-luna";
@@ -43,33 +31,32 @@ export const EXPERT_SOL_CATALOG_MODEL = "openai/gpt-5.6-sol";
 /** Short-context cap for Luna — beyond this, long-ctx is required. */
 export const EXPERT_SHORT_CONTEXT_TOKENS = 272_000;
 
-/** Fast tier's user-facing label shown in the picker. */
-export const FAST_TIER_LABEL = "Fast";
 export const EXPERT_TIER_LABEL = "Expert";
 
-export function parseSpeedTier(value: unknown): SpeedTier {
-  return value === "expert" ? "expert" : "fast";
+/** Fast is retired — leftover `fast` values become Expert. */
+export function parseSpeedTier(_value: unknown): SpeedTier {
+  void _value;
+  return "expert";
 }
 
-/** Canonical Cloud model id for a speed tier (gateway form for Expert). */
-export function resolveCloudTierModel(speedTier: SpeedTier): string {
-  return speedTier === "expert" ? EXPERT_PRIMARY_MODEL : FAST_OPENROUTER_MODEL;
+/** Canonical Cloud model id (gateway form). Legacy Fast requests map here too. */
+export function resolveCloudTierModel(_speedTier?: SpeedTier): string {
+  void _speedTier;
+  return EXPERT_PRIMARY_MODEL;
 }
 
 /** Public /api/hosted/status defaults — model ids only, no vendor names. */
 export function hostedCloudRouteAdvertisement(): {
   defaultModel: string;
-  routes: { fast: string; expert: string };
-  failover: { fast: string[]; expert: string[] };
+  routes: { expert: string; fast?: string };
+  failover: { expert: string[]; fast?: string[] };
 } {
   return {
-    defaultModel: FAST_OPENROUTER_MODEL,
+    defaultModel: EXPERT_CATALOG_MODEL,
     routes: {
-      fast: FAST_OPENROUTER_MODEL,
       expert: EXPERT_CATALOG_MODEL,
     },
     failover: {
-      fast: [FAST_OPENROUTER_MODEL, FAST_OPENROUTER_FALLBACK_MODEL],
       expert: [
         EXPERT_CATALOG_MODEL,
         EXPERT_SOL_CATALOG_MODEL,
@@ -80,19 +67,16 @@ export function hostedCloudRouteAdvertisement(): {
 }
 
 /**
- * Composer Fast/Expert is the base. Deep harness or a vision attachment
- * floors to Expert (premium / vision-capable).
+ * Cloud chats are Expert only. Leftover Fast / missing requests coerce here.
+ * Deep harness and vision attachments stay on the same path.
  */
-export function resolveEffectiveSpeedTier(input: {
+export function resolveEffectiveSpeedTier(_input: {
   requested?: string | null;
   harnessDepth?: string | null;
   hasImageAttachment?: boolean;
 }): SpeedTier {
-  const requested = parseSpeedTier(input.requested);
-  if (input.harnessDepth === "deep" || input.hasImageAttachment) {
-    return "expert";
-  }
-  return requested;
+  void _input;
+  return "expert";
 }
 
 /**

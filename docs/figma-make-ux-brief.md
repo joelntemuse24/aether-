@@ -118,7 +118,6 @@ Re-attach from the Aether repo (zip or multi-file). Prefer **current `master` / 
 | `src/components/assistant-ui/thread.tsx` | Composer, Continue/Retry, attachments, mic/stop |
 | `src/components/assistant-ui/tool-ui.tsx` | Tool shells + streaming artifact construction |
 | `src/components/assistant-ui/agent-status-strip.tsx` | Status line (keep quiet) |
-| `src/components/model-picker.tsx` | Featured models + search |
 | `src/components/settings/settings-dialog.tsx` | Preferences / Advanced |
 | `src/components/drive/drive-browser-modal.tsx` | Load more, Slides, filters |
 | `src/components/sync-local-chats-banner.tsx` | Sync notice |

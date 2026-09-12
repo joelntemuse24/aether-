@@ -6,8 +6,6 @@ import {
   EXPERT_BUZZ_FALLBACK_MODEL,
   EXPERT_OPENROUTER_FALLBACK_MODEL,
   EXPERT_PRIMARY_MODEL,
-  FAST_OPENROUTER_FALLBACK_MODEL,
-  FAST_OPENROUTER_MODEL,
   hostedCloudRouteAdvertisement,
   resolveCloudTierModel,
   resolveEffectiveSpeedTier,
@@ -54,35 +52,25 @@ function hopIds(route: NonNullable<ReturnType<typeof resolveHostedRoute>>) {
 }
 
 describe("resolveCloudTierModel", () => {
-  it("maps Fast to the free OpenRouter Nemotron Ultra slug", () => {
-    assert.equal(resolveCloudTierModel("fast"), FAST_OPENROUTER_MODEL);
-    assert.equal(FAST_OPENROUTER_MODEL, "nvidia/nemotron-3-ultra-550b-a55b:free");
-    assert.match(FAST_OPENROUTER_MODEL, /:free$/);
-  });
-
-  it("maps Expert to Buzz Luna (gateway id)", () => {
+  it("always maps Cloud chats to the Expert primary (legacy fast included)", () => {
     assert.equal(resolveCloudTierModel("expert"), EXPERT_PRIMARY_MODEL);
+    assert.equal(resolveCloudTierModel("fast"), EXPERT_PRIMARY_MODEL);
     assert.equal(EXPERT_PRIMARY_MODEL, "gpt-5.6-luna");
   });
 });
 
 describe("hostedCloudRouteAdvertisement", () => {
-  it("advertises Fast/Expert primaries and the confirmed failover order", () => {
+  it("advertises Expert as the only Cloud route", () => {
     const advertised = hostedCloudRouteAdvertisement();
-    assert.equal(advertised.defaultModel, FAST_OPENROUTER_MODEL);
-    assert.equal(advertised.routes.fast, FAST_OPENROUTER_MODEL);
+    assert.equal(advertised.defaultModel, "openai/gpt-5.6-luna");
     assert.equal(advertised.routes.expert, "openai/gpt-5.6-luna");
-    assert.deepEqual(advertised.failover.fast, [
-      "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "nvidia/nemotron-3.5-lightning",
-    ]);
+    assert.equal(advertised.routes.fast, undefined);
+    assert.equal(advertised.failover.fast, undefined);
     assert.deepEqual(advertised.failover.expert, [
       "openai/gpt-5.6-luna",
       "openai/gpt-5.6-sol",
       "deepseek/deepseek-v4-flash",
     ]);
-    assert.match(advertised.failover.fast[0], /:free$/);
-    assert.doesNotMatch(advertised.failover.fast[1], /:free/);
     assert.doesNotMatch(
       advertised.failover.expert.join(" "),
       /openai\/gpt-5\.6-luna$/,
@@ -91,13 +79,10 @@ describe("hostedCloudRouteAdvertisement", () => {
 });
 
 describe("resolveEffectiveSpeedTier", () => {
-  it("honors the composer Fast/Expert choice", () => {
-    assert.equal(resolveEffectiveSpeedTier({ requested: "fast" }), "fast");
+  it("always resolves to Expert, including leftover Fast requests", () => {
+    assert.equal(resolveEffectiveSpeedTier({ requested: "fast" }), "expert");
     assert.equal(resolveEffectiveSpeedTier({ requested: "expert" }), "expert");
-    assert.equal(resolveEffectiveSpeedTier({}), "fast");
-  });
-
-  it("floors to Expert for deep harness or vision attachments", () => {
+    assert.equal(resolveEffectiveSpeedTier({}), "expert");
     assert.equal(
       resolveEffectiveSpeedTier({ requested: "fast", harnessDepth: "deep" }),
       "expert",
@@ -112,54 +97,8 @@ describe("resolveEffectiveSpeedTier", () => {
   });
 });
 
-describe("resolveHostedRoute speed tiers", () => {
-  it("Fast is OpenRouter free Ultra then paid Lightning, never Buzz", () => {
-    withBuzzAndOpenRouter(() => {
-      const route = resolveHostedRoute("gpt-5.6-luna", "fast");
-      assert.ok(route, "route should resolve when OpenRouter is configured");
-      assert.deepEqual(hopIds(route), [
-        { upstream: "openrouter", model: FAST_OPENROUTER_MODEL },
-        { upstream: "openrouter", model: FAST_OPENROUTER_FALLBACK_MODEL },
-      ]);
-      assert.equal(FAST_OPENROUTER_FALLBACK_MODEL, "nvidia/nemotron-3.5-lightning");
-      assert.doesNotMatch(FAST_OPENROUTER_FALLBACK_MODEL, /:free/);
-      assert.equal(
-        hopIds(route).some((h) => h.upstream === "gpt" || h.upstream === "claude"),
-        false,
-      );
-    });
-  });
-
-  it("Fast remaps from speedTier only — leftover catalog ids and empty model are ignored", () => {
-    withBuzzAndOpenRouter(() => {
-      for (const leftover of [
-        "anthropic/claude-sonnet-5",
-        "moonshotai/kimi-k3",
-        "",
-        "   ",
-      ]) {
-        const route = resolveHostedRoute(leftover, "fast");
-        assert.ok(route, `Fast must resolve when leftover model is ${JSON.stringify(leftover)}`);
-        assert.deepEqual(hopIds(route).map((h) => h.model), [
-          FAST_OPENROUTER_MODEL,
-          FAST_OPENROUTER_FALLBACK_MODEL,
-        ]);
-      }
-    });
-  });
-
-  it("preserves the :free OpenRouter variant through id mapping", () => {
-    assert.equal(
-      toOpenRouterModelId(FAST_OPENROUTER_MODEL),
-      "nvidia/nemotron-3-ultra-550b-a55b:free",
-    );
-    assert.equal(
-      toOpenRouterModelId("nemotron-3-ultra-550b-a55b:free"),
-      "nvidia/nemotron-3-ultra-550b-a55b:free",
-    );
-  });
-
-  it("Expert is Buzz Luna, then Buzz Sol, then OpenRouter DeepSeek V4 Flash", () => {
+describe("resolveHostedRoute Cloud Expert path", () => {
+  it("is Buzz Luna, then Buzz Sol, then OpenRouter DeepSeek V4 Flash", () => {
     withBuzzAndOpenRouter(() => {
       const route = resolveHostedRoute("openai/gpt-5.5", "expert");
       assert.ok(route);
@@ -180,7 +119,38 @@ describe("resolveHostedRoute speed tiers", () => {
     });
   });
 
-  it("Expert keeps Luna as the Buzz primary", () => {
+  it("maps leftover Fast requests onto the same Expert chain", () => {
+    withBuzzAndOpenRouter(() => {
+      for (const leftover of [
+        "anthropic/claude-sonnet-5",
+        "moonshotai/kimi-k3",
+        "",
+        "   ",
+      ]) {
+        const route = resolveHostedRoute(leftover, "fast");
+        assert.ok(route, `Expert must resolve when leftover model is ${JSON.stringify(leftover)}`);
+        assert.deepEqual(hopIds(route).map((h) => h.model), [
+          EXPERT_PRIMARY_MODEL,
+          EXPERT_BUZZ_FALLBACK_MODEL,
+          EXPERT_OPENROUTER_FALLBACK_MODEL,
+        ]);
+        assert.equal(
+          hopIds(route).some((h) => /nemotron|lightning/i.test(h.model)),
+          false,
+        );
+      }
+    });
+  });
+
+  it("preserves OpenRouter provider prefixes through id mapping", () => {
+    assert.equal(toOpenRouterModelId("gpt-4o"), "openai/gpt-4o");
+    assert.equal(
+      toOpenRouterModelId("deepseek/deepseek-v4-flash"),
+      "deepseek/deepseek-v4-flash",
+    );
+  });
+
+  it("keeps Luna as the Buzz primary", () => {
     withBuzzAndOpenRouter(() => {
       const route = resolveHostedRoute("gpt-5.6-luna", "expert");
       assert.ok(route);
@@ -189,7 +159,7 @@ describe("resolveHostedRoute speed tiers", () => {
     });
   });
 
-  it("Expert without Buzz goes to OpenRouter DeepSeek, not OpenRouter Luna", () => {
+  it("without Buzz goes to OpenRouter DeepSeek, not an OpenRouter Fast hop", () => {
     withEnv(
       {
         AETHER_HOSTED_BUZZ_API_KEY: undefined,
@@ -201,7 +171,7 @@ describe("resolveHostedRoute speed tiers", () => {
         OPENROUTER_API_KEY: "test-or-key",
       },
       () => {
-        const route = resolveHostedRoute("openai/gpt-5.5", "expert");
+        const route = resolveHostedRoute("openai/gpt-5.5", "fast");
         assert.ok(route);
         assert.deepEqual(hopIds(route), [
           {
@@ -213,15 +183,19 @@ describe("resolveHostedRoute speed tiers", () => {
     );
   });
 
-  it("Fast without OpenRouter does not fall back to Buzz and surfaces a loud Cloud error", () => {
+  it("without Buzz or OpenRouter surfaces a loud Cloud error", () => {
     withEnv(
       {
-        AETHER_HOSTED_BUZZ_API_KEY: "test-key",
-        AETHER_HOSTED_BUZZ_BASE_URL: "https://api.buzzai.cc/v1",
+        AETHER_HOSTED_BUZZ_API_KEY: undefined,
+        AETHER_HOSTED_BUZZ_BASE_URL: undefined,
+        AETHER_HOSTED_CLAUDE_API_KEY: undefined,
+        AETHER_HOSTED_GPT_API_KEY: undefined,
+        AETHER_HOSTED_CHATGPT_API_KEY: undefined,
+        ANTHROPIC_AUTH_TOKEN: undefined,
         OPENROUTER_API_KEY: undefined,
       },
       () => {
-        const route = resolveHostedRoute("anthropic/claude-sonnet-5", "fast");
+        const route = resolveHostedRoute("anthropic/claude-sonnet-5", "expert");
         assert.equal(route, null);
         assert.match(HOSTED_CLOUD_UNAVAILABLE_MESSAGE, /Aether Cloud/);
         assert.match(HOSTED_CLOUD_UNAVAILABLE_MESSAGE, /Bring your own key/i);

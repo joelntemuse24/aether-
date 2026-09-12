@@ -64,7 +64,7 @@ export function resolveTurnLanguageModel(input: {
     const candidates = listHostedCandidates(
       input.modelId,
       input.origin ?? null,
-      input.speedTier ?? "fast",
+      input.speedTier ?? "expert",
     );
     if (candidates.length === 0) return null;
     return createFailoverLanguageModel(candidates);

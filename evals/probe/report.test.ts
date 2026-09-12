@@ -10,7 +10,7 @@ describe("probe report", () => {
     const pass = toCaseResult({
       id: "blank-survival-hello",
       category: "blank-survival",
-      tier: "fast",
+      tier: "expert",
       prompt: "hi",
       findings: [],
       elapsedMs: 20,
@@ -40,7 +40,7 @@ describe("probe report", () => {
       baseUrl: null,
       chatTransport: null,
       hostedAvailable: null,
-      tiers: ["fast", "expert"],
+      tiers: ["expert"],
       results: [pass, fail],
     });
     assert.equal(report.totals.failed, 1);
@@ -61,12 +61,12 @@ describe("probe report", () => {
       baseUrl: null,
       chatTransport: null,
       hostedAvailable: null,
-      tiers: ["fast"],
+      tiers: ["expert"],
       results: [
         toCaseResult({
           id: "math-final-price",
           category: "math",
-          tier: "fast",
+          tier: "expert",
           prompt: "math",
           findings: [],
           elapsedMs: 10,

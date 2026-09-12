@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  EXPERT_PRIMARY_MODEL,
-  FAST_OPENROUTER_MODEL,
-} from "../hosted/speed-tiers";
+import { EXPERT_PRIMARY_MODEL } from "../hosted/speed-tiers";
 import { prepareDurableChatTurn } from "./prepare-turn";
 
-describe("prepareDurableChatTurn Cloud Fast/Expert routing", () => {
-  it("rewrites hosted Fast turns to OpenRouter free Nemotron Ultra", async () => {
+describe("prepareDurableChatTurn Cloud Expert routing", () => {
+  it("rewrites leftover Fast turns to Expert Luna", async () => {
     const prepared = await prepareDurableChatTurn({
       clientData: {
         accessMode: "hosted",
@@ -18,11 +15,11 @@ describe("prepareDurableChatTurn Cloud Fast/Expert routing", () => {
       userText: "hello",
     });
     assert.equal(prepared.hosted, true);
-    assert.equal(prepared.speedTier, "fast");
-    assert.equal(prepared.requestedModel, FAST_OPENROUTER_MODEL);
+    assert.equal(prepared.speedTier, "expert");
+    assert.equal(prepared.requestedModel, EXPERT_PRIMARY_MODEL);
   });
 
-  it("ignores leftover catalog model on hosted Fast (speedTier only)", async () => {
+  it("ignores leftover catalog model on hosted Cloud (Expert only)", async () => {
     const prepared = await prepareDurableChatTurn({
       clientData: {
         accessMode: "hosted",
@@ -32,8 +29,8 @@ describe("prepareDurableChatTurn Cloud Fast/Expert routing", () => {
       chatId: "c-stale",
       userText: "hello",
     });
-    assert.equal(prepared.speedTier, "fast");
-    assert.equal(prepared.requestedModel, FAST_OPENROUTER_MODEL);
+    assert.equal(prepared.speedTier, "expert");
+    assert.equal(prepared.requestedModel, EXPERT_PRIMARY_MODEL);
     assert.notEqual(prepared.requestedModel, "anthropic/claude-sonnet-5");
   });
 
@@ -52,7 +49,7 @@ describe("prepareDurableChatTurn Cloud Fast/Expert routing", () => {
     assert.equal(prepared.requestedModel, EXPERT_PRIMARY_MODEL);
   });
 
-  it("floors Fast + image attachment to Expert Luna", async () => {
+  it("keeps image attachments on Expert Luna", async () => {
     const prepared = await prepareDurableChatTurn({
       clientData: {
         accessMode: "hosted",

@@ -60,9 +60,9 @@ describe("probe pack", () => {
     assert.ok(smoke.length >= 1 && smoke.length <= 3);
     assert.ok(smoke.every((p) => p.smoke === true));
     assert.ok(smoke.every((p) => p.source !== "grok-history"));
-    const cases = expandCases(smoke, ["fast"]);
+    const cases = expandCases(smoke, ["expert"]);
     assert.equal(cases.length, smoke.length);
-    assert.ok(cases.every((c) => c.tier === "fast"));
+    assert.ok(cases.every((c) => c.tier === "expert"));
   });
 
   it("includes harvested prompts on --all without a runner change", () => {

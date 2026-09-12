@@ -131,7 +131,7 @@ describe("chat transport wiring contract", () => {
     assert.match(initialize, /return \{ remoteId, externalId: undefined \}/);
   });
 
-  it("wires Fast/Expert through durable agent and request fallback", () => {
+  it("wires Expert through durable agent and request fallback with no Fast picker", () => {
     const agent = readFileSync(
       new URL("../../trigger/chat.ts", import.meta.url),
       "utf8",
@@ -148,12 +148,11 @@ describe("chat transport wiring contract", () => {
     assert.match(requestPath, /resolveCloudTierModel/);
     assert.match(requestPath, /speedTier,/);
 
-    const picker = readFileSync(
-      new URL("../../components/model-picker.tsx", import.meta.url),
+    const thread = readFileSync(
+      new URL("../../components/assistant-ui/thread.tsx", import.meta.url),
       "utf8",
     );
-    assert.match(picker, /Fast/);
-    assert.match(picker, /Expert/);
-    assert.doesNotMatch(picker, /OpenRouter|Buzz|Nemotron|Luna|Trigger|Hermes|Vercel/);
+    assert.doesNotMatch(thread, /ModelPicker|Response speed/);
+    assert.doesNotMatch(thread, />\s*Fast\s*</);
   });
 });
