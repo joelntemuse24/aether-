@@ -185,6 +185,15 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
 
   const tools: ToolSet = {
     ...schemas,
+    ...(ctx.executeAetherOwned
+      ? {
+          [TOOL_NAMES.executePython]: tool({
+            ...schemas[TOOL_NAMES.executePython],
+            execute: async (input) =>
+              ctx.executeAetherOwned!(TOOL_NAMES.executePython, input),
+          }),
+        }
+      : {}),
     [TOOL_NAMES.currentTime]: tool({
       ...schemas[TOOL_NAMES.currentTime],
       execute: async ({ timeZone }) => resolveCurrentTime({ timeZone }),

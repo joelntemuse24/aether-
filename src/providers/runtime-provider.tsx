@@ -43,7 +43,11 @@ import { resolveVoicePrompt } from "@/lib/voice";
 import { runPython } from "@/lib/pyodide";
 import { resolveCurrentTime } from "@/lib/current-time";
 import { persistThreadSpeedTier } from "@/lib/thread-speed";
-import { TOOL_NAMES, type ExecutePythonInput } from "@/lib/tools";
+import {
+  shouldExecutePythonInBrowser,
+  TOOL_NAMES,
+  type ExecutePythonInput,
+} from "@/lib/tools";
 import { useHarness } from "./harness-provider";
 import { useProjects } from "./projects-provider";
 import { localMemoryContextForChat } from "@/lib/memory/local";
@@ -456,6 +460,7 @@ function useChatThreadRuntime() {
         return;
       }
       if (toolCall.toolName !== TOOL_NAMES.executePython) return;
+      if (!shouldExecutePythonInBrowser(chatTransport)) return;
 
       const { code } = toolCall.input as ExecutePythonInput;
       const output = await runPython(code);

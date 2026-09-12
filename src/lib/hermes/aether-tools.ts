@@ -35,7 +35,8 @@ import {
 } from "@/lib/harness/confirmation";
 import { isCloudDbConfigured } from "@/lib/db";
 import { searchMemories, writeMemory } from "@/lib/memory/store";
-import { TOOL_NAMES } from "@/lib/tools";
+import { TOOL_NAMES, type ExecutePythonOutput } from "@/lib/tools";
+import { workspacePythonCommand } from "@/lib/python-tzdata";
 import {
   workspaceExec,
   workspaceListFiles,
@@ -242,6 +243,7 @@ const AETHER_TOOL_NAMES = new Set<string>([
   TOOL_NAMES.githubCreatePullRequest,
   TOOL_NAMES.githubMergePullRequest,
   TOOL_NAMES.workspaceExec,
+  TOOL_NAMES.executePython,
   TOOL_NAMES.workspaceFfmpeg,
   TOOL_NAMES.scheduleCreate,
   TOOL_NAMES.scheduleList,
@@ -726,6 +728,33 @@ export async function executeAetherTool(input: {
       timeoutMs:
         typeof args.timeoutMs === "number" ? args.timeoutMs : undefined,
     });
+  }
+
+  if (name === TOOL_NAMES.executePython) {
+    const code = str(args.code);
+    if (!code.trim()) {
+      return { ok: false, stdout: "", error: "code is required." };
+    }
+    const exec = ctx.deps?.workspaceExec ?? workspaceExec;
+    const ran = await exec(workspaceIdentity, {
+      command: workspacePythonCommand(code),
+      timeoutMs:
+        typeof args.timeoutMs === "number" ? args.timeoutMs : undefined,
+    });
+    const stdout = typeof ran.stdout === "string" ? ran.stdout : "";
+    const mapped: ExecutePythonOutput = ran.ok
+      ? { ok: true, stdout, durationMs: ran.durationMs }
+      : {
+          ok: false,
+          stdout,
+          error:
+            ran.error ||
+            (typeof ran.stderr === "string" && ran.stderr.trim()
+              ? ran.stderr
+              : "Python execution failed."),
+          durationMs: ran.durationMs,
+        };
+    return mapped;
   }
 
   if (name === TOOL_NAMES.workspaceFfmpeg) {

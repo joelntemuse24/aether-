@@ -86,13 +86,24 @@ export const TOOL_NAMES = {
 
 export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
 
-/** Tools executed in the browser (no server-side `execute`). */
+/** Tools executed in the browser (no server-side `execute`) on the request path. */
 export const CLIENT_TOOLS: ReadonlySet<string> = new Set([
   TOOL_NAMES.executePython,
 ]);
 
 export function isClientTool(name: string): boolean {
   return CLIENT_TOOLS.has(name);
+}
+
+/**
+ * Durable/Trigger turns execute `execute_python` on the worker via the
+ * Aether tool callback. Running Pyodide here too leaves streamText waiting
+ * for a client result that never re-enters the worker loop (stuck Working).
+ */
+export function shouldExecutePythonInBrowser(
+  chatTransport: "durable" | "request" | string,
+): boolean {
+  return chatTransport !== "durable";
 }
 
 // ─── Input schemas ───

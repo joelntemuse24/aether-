@@ -22,3 +22,15 @@ export function wrapWorkspaceCommandForPythonTzdata(command: string): string {
   if (trimmed.includes("pip install") && /tzdata/.test(trimmed)) return command;
   return `${WORKSPACE_ENSURE_TZDATA_COMMAND} && ${trimmed}`;
 }
+
+/** Run user code via a quoted heredoc so multi-line snippets stay intact. */
+export function workspacePythonCommand(code: string): string {
+  const trimmed = code.trim();
+  let token = "AETHER_PY";
+  let n = 0;
+  while (trimmed.includes(token)) {
+    n += 1;
+    token = `AETHER_PY_${n}`;
+  }
+  return `python3 - <<'${token}'\n${trimmed}\n${token}`;
+}
