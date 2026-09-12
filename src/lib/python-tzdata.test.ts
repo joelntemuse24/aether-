@@ -26,6 +26,19 @@ describe("IANA tzdata for workspace + execute_python", () => {
     assert.equal(wrapWorkspaceCommandForPythonTzdata("ls -la"), "ls -la");
   });
 
+  it("wraps execute_python snippets as a heredoc python3 command", async () => {
+    const { workspacePythonCommand } = await import("./python-tzdata");
+    const cmd = workspacePythonCommand(
+      "from zoneinfo import ZoneInfo\nprint(ZoneInfo('Europe/Dublin'))",
+    );
+    assert.match(cmd, /python3 -/);
+    assert.match(cmd, /from zoneinfo import ZoneInfo/);
+    assert.match(cmd, /Europe\/Dublin/);
+    const wrapped = wrapWorkspaceCommandForPythonTzdata(cmd);
+    assert.match(wrapped, /tzdata/);
+    assert.match(wrapped, /&&/);
+  });
+
   it("Pyodide worker installs tzdata before user code", () => {
     const src = readFileSync(new URL("./pyodide.ts", import.meta.url), "utf8");
     assert.match(src, /tzdata/);

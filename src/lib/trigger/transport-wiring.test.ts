@@ -155,4 +155,13 @@ describe("chat transport wiring contract", () => {
     assert.doesNotMatch(thread, /ModelPicker|Response speed/);
     assert.doesNotMatch(thread, />\s*Fast\s*</);
   });
+
+  it("does not run browser Pyodide for execute_python on durable turns", () => {
+    const runtime = readFileSync(
+      new URL("../../providers/runtime-provider.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.match(runtime, /shouldExecutePythonInBrowser/);
+    assert.match(runtime, /chatTransport/);
+  });
 });

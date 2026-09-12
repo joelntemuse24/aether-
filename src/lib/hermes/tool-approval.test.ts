@@ -146,6 +146,7 @@ describe("Ask vs Auto policy", () => {
       "workspace_exec",
       "workspace_write_file",
       "workspace_publish_file",
+      "execute_python",
     ]) {
       assert.equal(shouldConfirmAetherTool({ name, mode: "ask" }), false, name);
       assert.equal(shouldConfirmAetherTool({ name, mode: "auto" }), false, name);

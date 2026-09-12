@@ -168,6 +168,53 @@ describe("executeAetherTool", () => {
     assert.equal(result.needs_confirmation, true);
   });
 
+  it("runs execute_python in the workspace without a confirm card", async () => {
+    const result = await executeAetherTool({
+      name: "execute_python",
+      args: {
+        code: "from zoneinfo import ZoneInfo\nprint(ZoneInfo('Europe/Dublin'))",
+      },
+      ctx: baseCtx({
+        approvalMode: "ask",
+        deps: {
+          workspaceExec: async (identity, input) => {
+            assert.equal(identity.conversationId, "c1");
+            assert.match(input.command, /python3/);
+            assert.match(input.command, /Europe\/Dublin/);
+            return {
+              ok: true,
+              exitCode: 0,
+              stdout: "Europe/Dublin\n",
+              stderr: "",
+              truncated: false,
+              durationMs: 12,
+            };
+          },
+        },
+      }),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.needs_confirmation, undefined);
+    assert.equal((result as { stdout?: string }).stdout, "Europe/Dublin\n");
+  });
+
+  it("returns a failed execute_python result instead of hanging", async () => {
+    const result = await executeAetherTool({
+      name: "execute_python",
+      args: { code: "print(1)" },
+      ctx: baseCtx({
+        deps: {
+          workspaceExec: async () => ({
+            ok: false,
+            error: "The isolated workspace is unavailable.",
+          }),
+        },
+      }),
+    });
+    assert.equal(result.ok, false);
+    assert.match(String(result.error), /unavailable/);
+  });
+
   it("executes workspace tools without a confirmation card", async () => {
     const result = await executeAetherTool({
       name: "workspace_exec",
