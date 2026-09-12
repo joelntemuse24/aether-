@@ -87,8 +87,7 @@ export async function prepareDurableChatTurn(input: {
   const parsed = parseHarnessFields(data.harness);
   const timeBudget = resolveTurnTimeBudget(data.harness, userText);
 
-  // Speed tier: composer Fast/Expert is the base; deep reasoning or a vision
-  // attachment forces Expert (Luna / vision) as a floor.
+  // Cloud chats are Expert only. Leftover Fast / vision / deep harness stay here.
   const hasImageAttachment = (data.attachments ?? []).some(
     (a) => a.mime?.startsWith("image/"),
   );

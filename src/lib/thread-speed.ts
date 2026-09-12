@@ -50,22 +50,23 @@ function saveThreads(threads: StoredThread[]) {
   storageSet(threadsKey, JSON.stringify(threads));
 }
 
-/** Remember Fast/Expert on this conversation so /c/:id does not desync the picker. */
+/** Remember Expert on this conversation. Leftover Fast values are written as Expert. */
 export function persistThreadSpeedTier(
   remoteId: string,
-  speedTier: SpeedTier,
+  speedTier: SpeedTier = "expert",
 ): void {
   const id = remoteId.trim();
   if (!id) return;
+  const next = parseSpeedTier(speedTier);
   const threads = loadThreads();
   const existing = threads.find((t) => t.remoteId === id);
   if (existing) {
-    existing.custom = { ...existing.custom, speedTier };
+    existing.custom = { ...existing.custom, speedTier: next };
   } else {
     threads.unshift({
       remoteId: id,
       status: "regular",
-      custom: { speedTier },
+      custom: { speedTier: next },
     });
   }
   saveThreads(threads);
@@ -77,5 +78,20 @@ export function loadThreadSpeedTier(remoteId: string): SpeedTier | null {
   const thread = loadThreads().find((t) => t.remoteId === id);
   const raw = thread?.custom?.speedTier;
   if (raw !== "fast" && raw !== "expert") return null;
-  return parseSpeedTier(raw);
+  if (raw === "fast") persistThreadSpeedTier(id, "expert");
+  return "expert";
+}
+
+/** Rewrite leftover `fast` conversation prefs so old chats stay on Expert. */
+export function migrateStoredFastTiersToExpert(): number {
+  const threads = loadThreads();
+  let changed = 0;
+  for (const thread of threads) {
+    if (thread.custom?.speedTier === "fast") {
+      thread.custom = { ...thread.custom, speedTier: "expert" };
+      changed += 1;
+    }
+  }
+  if (changed) saveThreads(threads);
+  return changed;
 }

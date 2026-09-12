@@ -46,7 +46,7 @@ function parseArgs(argv: string[]): ProbeCliOptions {
       opts.baseUrl = next;
       i += 1;
     } else if (arg === "--tier" && next) {
-      opts.tiers = next.split(",").map((t) => (t.trim() === "expert" ? "expert" : "fast"));
+      opts.tiers = next.split(",").map((t) => (t.trim() === "expert" ? "expert" : "fast" as SpeedTier));
       i += 1;
     } else if (arg === "--id" && next) {
       opts.ids = next.split(",").map((s) => s.trim()).filter(Boolean);
@@ -76,17 +76,25 @@ function resolveAuth(): ProbeAuth {
   };
 }
 
-function resolveTiers(opts: ProbeCliOptions, smoke: boolean): SpeedTier[] {
-  if (opts.tiers?.length) return [...new Set(opts.tiers)];
-  const env = process.env.AETHER_PROBE_TIERS?.trim();
-  if (env) {
-    return [
-      ...new Set(
-        env.split(",").map((t) => (t.trim() === "expert" ? "expert" : "fast" as SpeedTier)),
-      ),
-    ];
+function resolveTiers(opts: ProbeCliOptions, _smoke: boolean): SpeedTier[] {
+  const requested = (() => {
+    if (opts.tiers?.length) return [...new Set(opts.tiers)];
+    const env = process.env.AETHER_PROBE_TIERS?.trim();
+    if (env) {
+      return [
+        ...new Set(
+          env.split(",").map((t) => (t.trim() === "expert" ? "expert" : "fast" as SpeedTier)),
+        ),
+      ];
+    }
+    return ["expert"] as SpeedTier[];
+  })();
+  const filtered = requested.filter((t) => t === "expert");
+  if (requested.includes("fast")) {
+    // Fast tier removed 2026-09-12 — skip Fast-only cases.
+    console.warn("Fast tier removed; skipping Fast probe cases.");
   }
-  return smoke ? ["fast"] : ["fast", "expert"];
+  return filtered.length ? filtered : ["expert"];
 }
 
 const FIXTURES: Record<

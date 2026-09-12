@@ -10,7 +10,7 @@ function snap(
   return fixtureSnapshot({
     promptId: "t",
     category: "math",
-    tier: "fast",
+    tier: "expert",
     prompt: "2+2",
     finished: true,
     ...override,

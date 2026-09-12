@@ -6,7 +6,7 @@ import {
 import type { HarnessChatContext } from "@/lib/harness/types";
 import type { AccessMode, AppSettings } from "@/lib/settings";
 import { resolveApiKey, resolveBaseURL, resolveModel } from "@/lib/settings";
-import { resolveCloudTierModel } from "@/lib/hosted/speed-tiers";
+import { parseSpeedTier, resolveCloudTierModel } from "@/lib/hosted/speed-tiers";
 
 export type ChatAccessMode = "hosted" | "byok";
 
@@ -22,6 +22,7 @@ export type ChatClientData = {
   model: string;
   toolsEnabled?: boolean;
   approvalMode?: ToolApprovalMode;
+  /** Leftover `fast` is accepted then coerced to Expert. */
   speedTier?: "fast" | "expert";
   provider?: ProviderId;
   apiKey?: string;
@@ -81,10 +82,10 @@ export function parseChatClientData(raw: unknown): ParseChatClientDataResult {
 
   const accessMode: ChatAccessMode =
     rec.accessMode === "byok" ? "byok" : "hosted";
-  const speedTier = rec.speedTier === "expert" ? "expert" : "fast";
+  const speedTier = parseSpeedTier(rec.speedTier);
   let model = str(rec.model).trim();
   if (accessMode === "hosted") {
-    // Cloud turns are remapped from Fast/Expert only. Ignore leftover catalog ids.
+    // Cloud turns are Expert only. Ignore leftover catalog ids and Fast.
     model = resolveCloudTierModel(speedTier);
   } else if (!model) {
     return { ok: false, error: "No model selected. Open Settings and choose a model." };
@@ -225,7 +226,7 @@ export function buildBrowserChatClientData(input: {
     model: resolveModel(input.settings),
     toolsEnabled: input.settings.enableTools,
     approvalMode: parseToolApprovalMode(input.settings.toolApprovalMode),
-    speedTier: input.settings.speedTier === "expert" ? "expert" : "fast",
+    speedTier: "expert",
     origin: input.origin,
     system: input.system,
     harness: input.harness ?? undefined,

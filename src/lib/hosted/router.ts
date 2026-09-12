@@ -9,8 +9,6 @@ import {
   EXPERT_BUZZ_FALLBACK_MODEL,
   EXPERT_OPENROUTER_FALLBACK_MODEL,
   EXPERT_PRIMARY_MODEL,
-  FAST_OPENROUTER_FALLBACK_MODEL,
-  FAST_OPENROUTER_MODEL,
   type SpeedTier,
 } from "./speed-tiers";
 
@@ -83,21 +81,19 @@ function buzzGptUpstream(): ReturnType<typeof getGptUpstream> | null {
 }
 
 /**
- * Resolve Cloud Fast/Expert to primary + failover chain.
+ * Resolve Cloud Expert to primary + failover chain.
  *
- * Fast → OpenRouter free Ultra → OpenRouter paid Lightning (no Buzz).
  * Expert → Buzz Luna → Buzz Sol → [optional relays] → OpenRouter DeepSeek.
  *
- * `modelId` is required for call-site compat but does not select the Cloud
- * route; Fast/Expert is the product control after the catalog picker was
- * removed.
+ * `modelId` and leftover `speedTier: "fast"` are ignored. Cloud hops are
+ * Expert only after the Fast picker was removed (2026-09-12).
  */
 export function resolveHostedRoute(
   _modelId: string = "",
-  speedTier: SpeedTier = "fast",
+  _speedTier: SpeedTier = "expert",
 ): HostedRoute | null {
-  // Cloud hops are chosen from speedTier only. Leftover catalog ids
-  // (e.g. anthropic/claude-sonnet-5 in stale client payloads) are ignored.
+  void _modelId;
+  void _speedTier;
   const openrouter = getOpenRouterUpstream();
   const gpt = getGptUpstream();
   const buzz = buzzGptUpstream();
@@ -110,22 +106,17 @@ export function resolveHostedRoute(
   const chain: RoutedUpstream[] = [];
   const seen = new Set<string>();
 
-  if (speedTier === "expert") {
-    const lunaId = toGatewayModelId(EXPERT_PRIMARY_MODEL);
-    const solId = toGatewayModelId(EXPERT_BUZZ_FALLBACK_MODEL);
-    const specialty = gpt.configured ? gpt : buzz;
-    if (specialty) {
-      pushUnique(chain, { upstream: specialty, modelId: lunaId }, seen);
-      pushUnique(chain, { upstream: specialty, modelId: solId }, seen);
-    }
-    for (const relay of relayRoutes(lunaId)) {
-      pushUnique(chain, relay, seen);
-    }
-    pushUnique(chain, openrouterRoute(EXPERT_OPENROUTER_FALLBACK_MODEL), seen);
-  } else {
-    pushUnique(chain, openrouterRoute(FAST_OPENROUTER_MODEL), seen);
-    pushUnique(chain, openrouterRoute(FAST_OPENROUTER_FALLBACK_MODEL), seen);
+  const lunaId = toGatewayModelId(EXPERT_PRIMARY_MODEL);
+  const solId = toGatewayModelId(EXPERT_BUZZ_FALLBACK_MODEL);
+  const specialty = gpt.configured ? gpt : buzz;
+  if (specialty) {
+    pushUnique(chain, { upstream: specialty, modelId: lunaId }, seen);
+    pushUnique(chain, { upstream: specialty, modelId: solId }, seen);
   }
+  for (const relay of relayRoutes(lunaId)) {
+    pushUnique(chain, relay, seen);
+  }
+  pushUnique(chain, openrouterRoute(EXPERT_OPENROUTER_FALLBACK_MODEL), seen);
 
   if (chain.length === 0) return null;
   const [primary, ...fallbacks] = chain;

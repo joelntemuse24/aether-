@@ -25,13 +25,14 @@ import {
 } from "@/lib/settings";
 import { getHostedModelLabel } from "@/lib/hosted/catalog";
 import { getModelLabel } from "@/lib/models";
+import { migrateStoredFastTiersToExpert } from "@/lib/thread-speed";
 
 export type HostedStatus = {
   available: boolean;
   chatTransport?: "durable" | "request";
   defaultModel: string;
-  routes?: { fast: string; expert: string };
-  failover?: { fast: string[]; expert: string[] };
+  routes?: { expert: string; fast?: string };
+  failover?: { expert: string[]; fast?: string[] };
   models: Array<{
     id: string;
     label: string;
@@ -77,6 +78,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const loaded = loadSettings();
+    migrateStoredFastTiersToExpert();
     setSettingsState(loaded);
     setHydrated(true);
 
@@ -106,11 +108,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       .then((status) => {
         if (cancelled) return;
         setHostedStatus(status);
-        // Cloud Fast/Expert remap leftover catalog ids (e.g. Claude).
+        // Cloud Expert remaps leftover catalog ids (e.g. Claude).
         if (loaded.accessMode === "hosted" && status.available) {
-          const tier = loaded.speedTier === "expert" ? "expert" : "fast";
           const remapped =
-            status.routes?.[tier] || status.defaultModel || loaded.model;
+            status.routes?.expert || status.defaultModel || loaded.model;
           if (remapped && remapped !== loaded.model) {
             const next = { ...loaded, model: remapped, useCustomModel: false };
             setSettingsState(next);

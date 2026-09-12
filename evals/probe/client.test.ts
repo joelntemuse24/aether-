@@ -49,7 +49,7 @@ describe("probe hosted client", () => {
         void readBody(req).then((body) => {
           assert.match(body, /What time is it in Dublin/);
           assert.equal(req.headers["x-access-mode"], "hosted");
-          assert.equal(req.headers["x-speed-tier"], "fast");
+          assert.equal(req.headers["x-speed-tier"], "expert");
           res.writeHead(200, { "content-type": "text/event-stream" });
           res.write('data: {"type":"text-delta","delta":"16:10 in Dublin (Europe/Dublin)."}\n\n');
           res.write('data: {"type":"finish"}\n\n');
@@ -67,7 +67,7 @@ describe("probe hosted client", () => {
         promptId: "time-dublin",
         category: "time-dublin",
         prompt: "What time is it in Dublin, Ireland right now?",
-        tier: "fast",
+        tier: "expert",
         timeoutMs: 5000,
         preferHeadStart: true,
       });
@@ -95,7 +95,7 @@ describe("probe hosted client", () => {
         promptId: "blank-survival-hello",
         category: "blank-survival",
         prompt: "Say hello",
-        tier: "fast",
+        tier: "expert",
         timeoutMs: 2000,
         preferHeadStart: false,
       });

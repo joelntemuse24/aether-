@@ -4,7 +4,7 @@ import { friendlyChatError } from "@/lib/chat-errors";
 
 export { friendlyChatError };
 
-/** Per-hop cap so a hung Fast Ultra request can still reach Lightning. */
+/** Per-hop cap so a hung Expert hop can still reach Sol / DeepSeek. */
 export const HOSTED_HOP_TIMEOUT_MS = 8_000;
 
 export async function withHostedHopTimeout<T>(

@@ -25,7 +25,7 @@ function createChatModel(
 
 /**
  * Build a LanguageModel for hosted mode with automatic upstream failover.
- * Defaults to the Fast Cloud route (OpenRouter free Nemotron Ultra).
+ * Defaults to the Expert Cloud route (Buzz Luna).
  */
 export function createHostedLanguageModel(
   modelId: string,
@@ -36,11 +36,11 @@ export function createHostedLanguageModel(
   return createFailoverLanguageModel(candidates);
 }
 
-/** Ordered candidates: Fast Ultra→Lightning; Expert Luna→Sol→DeepSeek. */
+/** Ordered candidates: Expert Luna → Sol → DeepSeek. */
 export function listHostedCandidates(
   modelId: string,
   origin?: string | null,
-  speedTier: SpeedTier = "fast",
+  speedTier: SpeedTier = "expert",
 ): Array<{ model: LanguageModel; upstreamId: string; upstreamModelId: string }> {
   const route = resolveHostedRoute(modelId, speedTier);
   if (!route) return [];

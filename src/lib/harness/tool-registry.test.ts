@@ -3,8 +3,8 @@ import { describe, it } from "node:test";
 import { TOOL_NAMES } from "@/lib/tools";
 import { resolveAvailableToolNames } from "./tool-registry";
 
-describe("tool availability vs Fast/Expert", () => {
-  it("keeps workspace and office-file tools on Cloud regardless of speed tier", () => {
+describe("tool availability vs Cloud route", () => {
+  it("keeps workspace and office-file tools on Cloud (tools are not a speed-tier gate)", () => {
     const names = resolveAvailableToolNames({ userId: "user-1" });
     for (const name of [
       TOOL_NAMES.workspaceExec,

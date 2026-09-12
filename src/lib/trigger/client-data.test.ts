@@ -9,7 +9,7 @@ import {
   sessionSafeChatClientData,
 } from "./client-data";
 import { DEFAULT_SETTINGS } from "../settings";
-import { FAST_OPENROUTER_MODEL } from "../hosted/speed-tiers";
+import { EXPERT_PRIMARY_MODEL } from "../hosted/speed-tiers";
 
 const hosted = {
   accessMode: "hosted" as const,
@@ -92,8 +92,8 @@ describe("chat clientData secrets", () => {
     });
     assert.equal(hostedSpeedOnly.ok, true);
     if (hostedSpeedOnly.ok) {
-      assert.equal(hostedSpeedOnly.data.speedTier, "fast");
-      assert.equal(hostedSpeedOnly.data.model, FAST_OPENROUTER_MODEL);
+      assert.equal(hostedSpeedOnly.data.speedTier, "expert");
+      assert.equal(hostedSpeedOnly.data.model, EXPERT_PRIMARY_MODEL);
     }
 
     const leftoverIgnored = parseChatClientData({
@@ -103,8 +103,8 @@ describe("chat clientData secrets", () => {
     });
     assert.equal(leftoverIgnored.ok, true);
     if (leftoverIgnored.ok) {
-      assert.equal(leftoverIgnored.data.model, FAST_OPENROUTER_MODEL);
-      assert.equal(leftoverIgnored.data.speedTier, "fast");
+      assert.equal(leftoverIgnored.data.model, EXPERT_PRIMARY_MODEL);
+      assert.equal(leftoverIgnored.data.speedTier, "expert");
     }
 
     const byokOk = parseChatClientData(byok);
@@ -130,7 +130,7 @@ describe("chat clientData secrets", () => {
     assert.equal("apiKey" in persistableChatClientData(data), false);
   });
 
-  it("forwards composer Fast/Expert on hosted clientData without a BYOK key", () => {
+  it("forwards hosted clientData without a BYOK key", () => {
     const data = buildBrowserChatClientData({
       settings: {
         ...DEFAULT_SETTINGS,
@@ -143,7 +143,7 @@ describe("chat clientData secrets", () => {
     assert.equal(data.apiKey, undefined);
   });
 
-  it("hosted clientData remaps leftover catalog model from speedTier", () => {
+  it("hosted clientData remaps leftover catalog model to Expert", () => {
     const data = buildBrowserChatClientData({
       settings: {
         ...DEFAULT_SETTINGS,
@@ -152,8 +152,8 @@ describe("chat clientData secrets", () => {
         speedTier: "fast",
       },
     });
-    assert.equal(data.model, FAST_OPENROUTER_MODEL);
-    assert.equal(data.speedTier, "fast");
+    assert.equal(data.model, EXPERT_PRIMARY_MODEL);
+    assert.equal(data.speedTier, "expert");
   });
 
   it("keeps the context JWT on the sticky session payload but not the BYOK key", () => {
