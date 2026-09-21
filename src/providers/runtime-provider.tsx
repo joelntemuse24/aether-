@@ -23,7 +23,7 @@ import {
   parseMintedAccessToken,
   parseStartSessionResult,
 } from "@/lib/trigger/session-auth";
-import { bindDurableChatId } from "@/lib/trigger/thread-remote-id";
+import { bindDurableChatId, peekBoundDurableChatId } from "@/lib/trigger/thread-remote-id";
 import { DURABLE_HEAD_START_PATH } from "@/lib/trigger/head-start";
 import { wrapDurableChatTransport } from "@/lib/trigger/head-start-reconnect";
 import {
@@ -68,7 +68,7 @@ import {
   shouldCopyDraftToRemoteId,
   shouldReplaceLiveWithStored,
 } from "@/lib/chat-transcript";
-import { clearFirstSendDraft, mergeSeedWithDraft } from "@/lib/chat-turn-draft";
+import { clearFirstSendDraft, mergeSeedWithDraft, rememberLiveTurn } from "@/lib/chat-turn-draft";
 import { resetActivityClock } from "@/lib/agent-activity";
 import {
   STREAMING_PERSIST_DEBOUNCE_MS,
@@ -741,6 +741,22 @@ function useChatThreadRuntime() {
     void (async () => {
       try {
         const state = aui.threadListItem().getState();
+        const persistKey =
+          state.remoteId ||
+          peekBoundDurableChatId(state.id) ||
+          durableChatId;
+        persistThreadUIMessages(persistKey, messagesRef.current);
+        persistedKeyRef.current = persistKey;
+        rememberLiveTurn({
+          keys: [
+            persistKey,
+            durableChatId,
+            state.id,
+            state.remoteId,
+            readThreadIdFromLocation(),
+          ],
+          messages: messagesRef.current,
+        });
         if (!state.remoteId) {
           await aui.threadListItem().initialize();
         }
@@ -776,6 +792,10 @@ function useChatThreadRuntime() {
       threadIdRef.current ??
       readThreadStorageKey(auiRef.current) ??
       durableChatId;
+    rememberLiveTurn({
+      keys: [key, durableChatId, readThreadIdFromLocation()],
+      messages,
+    });
     if (!key || messages.length === 0) return;
     const last = messages[messages.length - 1];
     if (

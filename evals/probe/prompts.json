@@ -15,6 +15,16 @@
       "notes": "Guest/first-send must not vanish into a blank Howzit / transcript after send."
     },
     {
+      "id": "blank-survival-remount",
+      "category": "blank-survival",
+      "prompt": "Hey, are you still there? One sentence is enough.",
+      "tiers": ["expert"],
+      "smoke": false,
+      "timeoutMs": 45000,
+      "surfaces": ["api", "ui"],
+      "notes": "Live turn must stay visible after /c/<id> assignment — no sidebar click."
+    },
+    {
       "id": "math-final-price",
       "category": "math",
       "prompt": "A jacket costs $120. After a 15% discount and then 8% sales tax on the discounted price, what is the final price? Show the arithmetic.",

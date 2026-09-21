@@ -4,7 +4,7 @@ Repeatable breakage probe for hosted Aether (Expert) on **API and UI**. This is 
 
 API: blank transcripts, raw DSML/tool XML, client/Application errors, `This step failed`, `ZoneInfoNotFoundError`, stuck Stop, duplicate Working strips, no answer after N seconds, leaked upstream auth errors, snapshot research slower than the Ireland cite budget (`slow_research`).
 
-UI (Playwright against the wired chrome): blank **Howzit?** after send, duplicate Working strips, raw DSML visible, “Application error” client exception, stuck Stop, missing **Worked for Ns**, “This step failed” without recovery. Failures write a PNG under `evals/probe/artifacts/`.
+UI (Playwright against the wired chrome): blank **Howzit?** after send, remount-blank after `/c/<id>` (answer gone until a sidebar click), duplicate Working strips, raw DSML visible, “Application error” client exception, stuck Stop, missing **Worked for Ns**, “This step failed” without recovery. Failures write a PNG under `evals/probe/artifacts/`.
 
 ## Layout
 
@@ -88,7 +88,7 @@ Hosted keys stay on the **server** you point at. The probe never embeds keys.
 1. Chromium opens `AETHER_PROBE_BASE_URL`.
 2. Dismiss Preferences if hosted is ready (`Close preferences`).
 3. Fill `textarea[aria-label="Message input"]`, click Send.
-4. Assert wired chrome only: welcome `h1` (Howzit? / we uup / in the trenches?), `.aether-activity` Working / Worked for, `Stop generating`, `[data-role="assistant"]`, `.aether-tool-trace__error`.
+4. Assert wired chrome only: welcome `h1` (Howzit? / we uup / in the trenches?), `.aether-activity` Working / Worked for, `Stop generating`, `[data-role="assistant"]`, `.aether-tool-trace__error`. Stay on the live canvas after `/c/<id>` — do not click the sidebar to recover a remount-blank.
 5. On any UI finding, screenshot `evals/probe/artifacts/<id>-<tier>-ui.png`.
 
 ## Grok harvest
