@@ -116,6 +116,23 @@ describe("chat transport wiring contract", () => {
     );
   });
 
+  it("does not initialize() from history append when a durable id is already bound", () => {
+    const adapter = readFileSync(
+      new URL("../local-thread-adapter.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.match(adapter, /resolveHistoryPersistId/);
+    const withFormat = adapter.slice(
+      adapter.indexOf("async append(item: MessageFormatItem"),
+      adapter.indexOf("async update("),
+    );
+    assert.match(withFormat, /resolveHistoryPersistId/);
+    assert.doesNotMatch(
+      withFormat,
+      /const remoteId = await ensureRemoteId\(\);/,
+    );
+  });
+
   it("returns initialize remoteId without awaiting conversation create", () => {
     const adapter = readFileSync(
       new URL("../local-thread-adapter.tsx", import.meta.url),

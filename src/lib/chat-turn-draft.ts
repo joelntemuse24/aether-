@@ -1,9 +1,11 @@
 import type { UIMessage } from "ai";
+import { mergeStoredThreadWithIncoming } from "./chat-history-merge";
 
 /**
  * Survive the first-send remount: initialize() assigns a remoteId and
- * assistant-ui remounts useChat before persist can flush. Keep the user
- * turn in module memory keyed by local + durable + remote ids.
+ * assistant-ui remounts useChat before persist can flush. Keep the live
+ * turn (user + assistant) in module memory keyed by local + durable +
+ * remote ids so the answer stays visible without a sidebar click.
  */
 
 type FirstSendDraft = {
@@ -37,6 +39,28 @@ export function stashFirstSendDraft(input: {
   };
 }
 
+/** Grow the in-flight draft as the live turn streams so remounts keep the answer. */
+export function rememberLiveTurn(input: {
+  keys?: Array<string | undefined | null>;
+  messages: UIMessage[];
+}): void {
+  const live = prune();
+  if (!live || input.messages.length === 0) return;
+  const keys = new Set(live.keys);
+  for (const key of input.keys ?? []) {
+    const trimmed = key?.trim();
+    if (trimmed) keys.add(trimmed);
+  }
+  draft = {
+    keys,
+    messages:
+      input.messages.length >= live.messages.length
+        ? input.messages
+        : live.messages,
+    at: Date.now(),
+  };
+}
+
 export function peekFirstSendDraft(key?: string | null): UIMessage[] {
   const live = prune();
   if (!live) return [];
@@ -54,20 +78,28 @@ export function clearFirstSendDraft(): void {
   draft = null;
 }
 
+function hasAssistant(messages: UIMessage[]): boolean {
+  return messages.some((message) => message.role === "assistant");
+}
+
 /** Merge localStorage seed with an in-flight first-send draft. */
 export function mergeSeedWithDraft(
   key: string | undefined,
   stored: UIMessage[],
 ): UIMessage[] {
+  const keyed = peekFirstSendDraft(key);
   const pending =
-    peekFirstSendDraft(key).length > 0
-      ? peekFirstSendDraft(key)
-      : stored.length === 0
+    keyed.length > 0
+      ? keyed
+      : stored.length === 0 || !hasAssistant(stored)
         ? peekInFlightFirstSendDraft()
         : [];
   if (pending.length === 0) return stored;
   if (stored.length === 0) return pending;
-  const seen = new Set(stored.map((m) => m.id).filter(Boolean));
-  const extra = pending.filter((m) => !m.id || !seen.has(m.id));
-  return extra.length === 0 ? stored : [...stored, ...extra];
+  const preferPending =
+    pending.length > stored.length ||
+    (hasAssistant(pending) && !hasAssistant(stored));
+  const base = preferPending ? pending : stored;
+  const other = preferPending ? stored : pending;
+  return mergeStoredThreadWithIncoming(base, other).messages;
 }
