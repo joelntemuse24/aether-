@@ -113,6 +113,50 @@ describe("probe UI detectors", () => {
     assert.equal(findings.some((f) => f.code === "missing_worked_for"), true);
   });
 
+  it("flags remount-blank when /c/<id> assigned and the live answer vanished", () => {
+    const vanished = detectUiFailures(
+      fixtureUiSnapshot({
+        pathIsConversation: true,
+        welcomeVisible: false,
+        userMessageCount: 1,
+        assistantVisibleText: "",
+        workedForVisible: false,
+        sawWorkingDuringTurn: true,
+        stopVisible: false,
+        sendVisible: true,
+        timedOut: false,
+        finished: true,
+        bodyText: "Hey, are you still there?",
+      }),
+    );
+    assert.equal(vanished.some((f) => f.code === "remount_blank"), true);
+
+    const howzitAfterUrl = detectUiFailures(
+      fixtureUiSnapshot({
+        pathIsConversation: true,
+        welcomeVisible: true,
+        welcomePhrase: "Howzit?",
+        userMessageCount: 0,
+        assistantVisibleText: "",
+        sawWorkingDuringTurn: false,
+        workedForVisible: false,
+        timedOut: false,
+        bodyText: "Howzit?",
+      }),
+    );
+    assert.equal(howzitAfterUrl.some((f) => f.code === "remount_blank"), true);
+
+    const stillVisible = detectUiFailures(
+      fixtureUiSnapshot({
+        pathIsConversation: true,
+        userMessageCount: 1,
+        assistantVisibleText: "Yes — still here.",
+        bodyText: "Hey, are you still there?\nYes — still here.",
+      }),
+    );
+    assert.equal(stillVisible.some((f) => f.code === "remount_blank"), false);
+  });
+
   it("flags This step failed without recovery, but not a recovered answer", () => {
     const noRecovery = detectUiFailures(
       fixtureUiSnapshot({

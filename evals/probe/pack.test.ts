@@ -70,6 +70,7 @@ describe("probe pack", () => {
     const all = selectPrompts(pack, {});
     assert.ok(all.some((p) => p.id === "grok-head-start-bullets"));
     assert.ok(all.some((p) => p.id === "grok-time-dublin"));
+    assert.ok(all.some((p) => p.id === "blank-survival-remount"));
     assert.ok(all.filter((p) => p.source === "grok-history").length >= MIN_HARVESTED_PROMPTS);
     const ui = selectPrompts(pack, { surface: "ui" });
     assert.ok(ui.filter((p) => p.source === "grok-history").length >= MIN_HARVESTED_PROMPTS);

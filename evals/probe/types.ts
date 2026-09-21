@@ -30,6 +30,7 @@ export type ProbeFailureCode =
   | "duplicate_working"
   | "missing_worked_for"
   | "blank_howzit"
+  | "remount_blank"
   | "no_answer_timeout"
   | "http_error";
 
