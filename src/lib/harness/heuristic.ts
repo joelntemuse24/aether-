@@ -34,6 +34,15 @@ export function heuristicClassify(message: string): HarnessClassification {
     intent = "code";
   }
 
+  const wantsExplicitDeep =
+    /\b(deep|thorough|detailed|comprehensive|go deep|extra mile|deep dive)\b/.test(
+      lower,
+    );
+  const wantsDeck =
+    /\b(slides?|deck|presentation|powerpoint|keynote|pptx)\b/.test(lower);
+  const wantsCompare =
+    /\b(compare|versus|\bvs\.?\b|two (current )?approaches)\b/.test(lower);
+
   let depth: HarnessDepth = "standard";
   if (
     len < 40 &&
@@ -41,13 +50,16 @@ export function heuristicClassify(message: string): HarnessClassification {
   ) {
     depth = "shallow";
   } else if (
-    intent === "research" ||
+    wantsExplicitDeep ||
+    wantsDeck ||
+    wantsCompare ||
     intent === "study" ||
-    intent === "write" ||
-    /\b(deep|thorough|detailed|comprehensive|go deep|extra mile)\b/.test(lower)
+    intent === "write"
   ) {
+    // Snapshot cite/search stays standard (maxSteps 8). Deep is for decks,
+    // compares, write/study, or an explicit deep-dive ask — not every "cite".
     depth = "deep";
-  } else if (len < 80) {
+  } else if (len < 80 && intent !== "research") {
     depth = "shallow";
   }
 

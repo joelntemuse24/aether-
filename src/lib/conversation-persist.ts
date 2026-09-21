@@ -5,6 +5,8 @@
  */
 
 export const CLOUD_PERSIST_MIN_GAP_MS = 1_200;
+/** Debounce local+cloud snapshot writes while assistant tokens stream. */
+export const STREAMING_PERSIST_DEBOUNCE_MS = 800;
 
 export type PersistStatus = "submitted" | "streaming" | "ready" | "error" | string;
 

@@ -68,7 +68,6 @@ export function verifySystemAddendum(input: {
 }): string | null {
   const needs =
     input.depth === "deep" ||
-    input.intent === "research" ||
     input.intent === "write" ||
     input.intent === "study" ||
     !!input.timeBudget?.forceEarlyDraft;

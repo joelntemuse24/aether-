@@ -44,4 +44,21 @@ describe("verifySystemAddendum", () => {
     });
     assert.equal(block, null);
   });
+
+  it("skips required verify for standard snapshot research", () => {
+    const block = verifySystemAddendum({
+      depth: "standard",
+      intent: "research",
+    });
+    assert.equal(block, null);
+  });
+
+  it("still requires verify for deep research", () => {
+    const block = verifySystemAddendum({
+      depth: "deep",
+      intent: "research",
+    });
+    assert.ok(block);
+    assert.match(block!, /verify_checklist/);
+  });
 });

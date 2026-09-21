@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { countWorkingStrips, detectFailures } from "./detectors";
+import {
+  countWorkingStrips,
+  detectFailures,
+  snapshotResearchBudgetMs,
+} from "./detectors";
 import { fixtureSnapshot } from "./client";
 import type { TranscriptSnapshot } from "./types";
 
@@ -141,5 +145,47 @@ describe("probe failure detectors", () => {
       }),
     );
     assert.equal(findings.some((f) => f.code === "zoneinfo_error"), false);
+  });
+
+  it("flags snapshot research that still takes Grok×5 wall time", () => {
+    const budget = snapshotResearchBudgetMs({
+      category: "cite-search",
+      promptId: "cite-search-ireland-unemployment",
+    });
+    assert.ok(budget !== null && budget <= 35_000);
+
+    const slow = detectFailures(
+      snap({
+        promptId: "cite-search-ireland-unemployment",
+        category: "cite-search",
+        prompt: "What is Ireland's latest published unemployment rate?",
+        visibleText: "Ireland’s unemployment rate is 4.9% [1].",
+        elapsedMs: 65_000,
+        budgetMs: budget ?? undefined,
+      }),
+    );
+    assert.equal(slow.some((f) => f.code === "slow_research"), true);
+
+    const ok = detectFailures(
+      snap({
+        promptId: "cite-search-ireland-unemployment",
+        category: "cite-search",
+        prompt: "What is Ireland's latest published unemployment rate?",
+        visibleText: "Ireland’s unemployment rate is 4.9% [1].",
+        elapsedMs: 14_000,
+        budgetMs: budget ?? undefined,
+      }),
+    );
+    assert.equal(ok.some((f) => f.code === "slow_research"), false);
+  });
+
+  it("does not apply the snapshot budget to deep research-then-deck turns", () => {
+    assert.equal(
+      snapshotResearchBudgetMs({
+        category: "research-deep",
+        promptId: "research-deep-dublin-fund-admin",
+      }),
+      null,
+    );
   });
 });
