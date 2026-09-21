@@ -140,6 +140,17 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(finishedTextOnly.steps.length, 0);
   });
 
+  it("does not vanish Working into a blank transcript after a short tool turn", () => {
+    const vanished = deriveAgentActivity({
+      messages: [{ id: "dublin-blank", role: "assistant", parts: [] }],
+      isRunning: false,
+      elapsedSeconds: 0,
+    });
+    assert.equal(vanished.visible, true);
+    assert.equal(vanished.mode, "collapsed");
+    assert.match(vanished.summaryLabel ?? "", /Worked for /);
+  });
+
   it("mutates one live line to the current real step, keeping others for collapse", () => {
     const view = deriveAgentActivity({
       messages: [

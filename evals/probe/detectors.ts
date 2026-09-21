@@ -113,6 +113,30 @@ export function detectFailures(snap: TranscriptSnapshot): ProbeFinding[] {
   }
 
   if (
+    !visible &&
+    snap.finished &&
+    !snap.timedOut &&
+    needsGroundedNumber(snap)
+  ) {
+    findings.push({
+      code: "vanished_working",
+      detail: "Turn finished blank after a clock/research tool turn (Working vanished).",
+    });
+  }
+
+  if (
+    visible &&
+    needsGroundedNumber(snap) &&
+    !/\d/.test(visible) &&
+    !/fixture placeholder/i.test(visible)
+  ) {
+    findings.push({
+      code: "empty_synthesis",
+      detail: "Finished without a grounded number (estimate, rate, or clock).",
+    });
+  }
+
+  if (
     snap.timedOut &&
     !snap.finished &&
     visible &&
@@ -126,6 +150,21 @@ export function detectFailures(snap: TranscriptSnapshot): ProbeFinding[] {
   }
 
   return dedupeFindings(findings);
+}
+
+function needsGroundedNumber(snap: TranscriptSnapshot): boolean {
+  if (
+    snap.category === "research" ||
+    snap.category === "cite-search" ||
+    snap.category === "research-deep" ||
+    snap.category === "time-dublin"
+  ) {
+    return true;
+  }
+  const prompt = snap.prompt ?? "";
+  if (/how many|office vs hospitality|unemployment/i.test(prompt)) return true;
+  if (/what time is it in dublin/i.test(prompt)) return true;
+  return false;
 }
 
 function dedupeFindings(findings: ProbeFinding[]): ProbeFinding[] {

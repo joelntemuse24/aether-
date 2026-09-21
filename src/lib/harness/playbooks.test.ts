@@ -108,6 +108,17 @@ describe("chat playbooks", () => {
   it("returns empty addendum when no playbook applies", () => {
     assert.equal(playbooksSystemAddendum([]), "");
   });
+
+  it("loads research for a natural office vs hospitality headcount question", () => {
+    const playbooks = resolvePlaybooks({
+      text: "How many people in Ireland work in an office vs hospitality",
+      intent: "research",
+    });
+    const block = playbooksSystemAddendum(playbooks);
+    assert.ok(playbooks.some((p) => p.id === "research"));
+    assert.match(block, /estimate|numeric|caveat/i);
+    assert.match(block, /\[1\]/);
+  });
 });
 
 describe("playbooks stay addenda — budgets and approval unchanged", () => {

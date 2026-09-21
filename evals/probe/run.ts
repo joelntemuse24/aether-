@@ -106,7 +106,7 @@ const FIXTURES: Record<
     visibleText: "Discounted $102, then 8% tax → $110.16 final price.",
   },
   "time-dublin": {
-    visibleText: "It is afternoon in Dublin, Ireland (Europe/Dublin).",
+    visibleText: "It is 15:02 in Dublin, Ireland (Europe/Dublin).",
   },
 };
 

@@ -142,4 +142,44 @@ describe("probe failure detectors", () => {
     );
     assert.equal(findings.some((f) => f.code === "zoneinfo_error"), false);
   });
+
+  it("flags empty synthesis when research finishes without a number or cite", () => {
+    const findings = detectFailures(
+      snap({
+        category: "research",
+        promptId: "grok-ireland-office-workers",
+        prompt: "How many people in Ireland work in an office? As opposed to strictly hospitality…",
+        visibleText:
+          "I looked at several sources but couldn't really pin this down as a category.",
+      }),
+    );
+    assert.equal(findings.some((f) => f.code === "empty_synthesis"), true);
+  });
+
+  it("passes grounded research with a number and a cite", () => {
+    const findings = detectFailures(
+      snap({
+        category: "research",
+        promptId: "grok-ireland-office-workers",
+        visibleText:
+          "Hospitality is about 178,000 [1]. Office-type professional + ICT is a proxy, not a CSO 'office' bucket [2].",
+      }),
+    );
+    assert.equal(findings.some((f) => f.code === "empty_synthesis"), false);
+  });
+
+  it("flags vanished Working when a clock turn finishes blank", () => {
+    const findings = detectFailures(
+      snap({
+        category: "time-dublin",
+        promptId: "time-dublin",
+        prompt: "What time is it in Dublin, Ireland right now? Include the timezone name.",
+        visibleText: "",
+        finished: true,
+        workingStripCount: 0,
+      }),
+    );
+    assert.equal(findings.some((f) => f.code === "empty_transcript"), true);
+    assert.equal(findings.some((f) => f.code === "vanished_working"), true);
+  });
 });

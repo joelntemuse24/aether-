@@ -94,10 +94,17 @@ export function detectUiFailures(snap: UiSnapshot): ProbeFinding[] {
   }
 
   if (snap.sawWorkingDuringTurn && snap.finished && !snap.stopVisible && !snap.workedForVisible) {
-    findings.push({
-      code: "missing_worked_for",
-      detail: "Turn showed Working but never collapsed to “Worked for Ns”.",
-    });
+    if (!assistant) {
+      findings.push({
+        code: "vanished_working",
+        detail: "Turn showed Working, then vanished with an empty transcript.",
+      });
+    } else {
+      findings.push({
+        code: "missing_worked_for",
+        detail: "Turn showed Working but never collapsed to “Worked for Ns”.",
+      });
+    }
   }
 
   if (snap.stepFailedVisible && !assistant) {

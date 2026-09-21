@@ -44,6 +44,7 @@ import { runPython } from "@/lib/pyodide";
 import { resolveCurrentTime } from "@/lib/current-time";
 import { persistThreadSpeedTier } from "@/lib/thread-speed";
 import {
+  shouldExecuteCurrentTimeInBrowser,
   shouldExecutePythonInBrowser,
   TOOL_NAMES,
   type ExecutePythonInput,
@@ -446,6 +447,7 @@ function useChatThreadRuntime() {
       const add = addToolResultRef.current;
       if (!add) return;
       if (toolCall.toolName === TOOL_NAMES.currentTime) {
+        if (!shouldExecuteCurrentTimeInBrowser(chatTransport)) return;
         const timeZone =
           toolCall.input &&
           typeof toolCall.input === "object" &&

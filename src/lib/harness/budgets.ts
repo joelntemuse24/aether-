@@ -77,6 +77,7 @@ export function harnessSystemAddendum(input: {
   } else if (input.depth === "standard") {
     lines.push(
       "Use tools when they improve accuracy. Prefer a clear structure. One follow-up question at the end is fine if useful.",
+      "If the user asked how many / a split, finish with a grounded numeric estimate from tool results, caveats, and cites. Never end on tool calls.",
     );
   } else {
     lines.push(
@@ -94,7 +95,7 @@ export function harnessSystemAddendum(input: {
     }
     if (input.intent === "research") {
       lines.push(
-        "Research depth: prefer cited snippets from tools; separate facts from inference.",
+    "Research depth: prefer cited snippets from tools; separate facts from inference. Ambiguous quantitative questions still need a grounded numeric estimate, caveats, and [n] cites — do not finish with searches and no number.",
       );
     }
     if (input.intent === "write") {

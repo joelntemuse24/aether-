@@ -33,6 +33,10 @@ import {
 import type { HarnessDepth, HarnessIntent } from "@/lib/harness/types";
 import type { ToolApprovalMode } from "@/lib/hermes/tool-approval";
 import { ensureDurableToolStubs } from "@/lib/chat-tool-transcript";
+import {
+  shouldForceTextStep,
+  wrapStreamTextWithFallbackAnswer,
+} from "@/lib/final-answer";
 
 export type LegacyProviderId = "openrouter" | "openai" | "anthropic" | "custom";
 
@@ -137,6 +141,11 @@ export async function runLegacyLocalChat(args: LegacyLocalStreamArgs) {
         })
       : undefined);
 
+  const userText =
+    collectMessageText(args.messages) ||
+    collectMessageText(args.enrichedMessages) ||
+    lastUserTextFromModelMessages(modelMessages);
+
   const result = streamText({
     ...(args.extraStreamTextOptions as object | undefined),
     model,
@@ -147,7 +156,13 @@ export async function runLegacyLocalChat(args: LegacyLocalStreamArgs) {
           tools,
           activeTools: loop.initialActiveTools,
           toolOrder: loop.toolOrder,
-          prepareStep: () => loop.prepareStep(),
+          prepareStep: ({ stepNumber }: { stepNumber: number }) => {
+            const base = loop.prepareStep();
+            if (shouldForceTextStep({ stepNumber, maxSteps: args.maxSteps })) {
+              return { ...base, activeTools: [], toolChoice: "none" as const };
+            }
+            return base;
+          },
           stopWhen: stepCountIs(args.maxSteps),
           repairToolCall: async ({ toolCall, error }) => {
             if (NoSuchToolError.isInstance(error)) return null;
@@ -183,9 +198,11 @@ export async function runLegacyLocalChat(args: LegacyLocalStreamArgs) {
     },
   });
 
-  if (args.asStreamResult) return result;
+  const withFallback = wrapStreamTextWithFallbackAnswer(result, { userText });
 
-  return result.toUIMessageStreamResponse({
+  if (args.asStreamResult) return withFallback;
+
+  return withFallback.toUIMessageStreamResponse({
     onError: (error) => {
       console.error("[api/chat]", error);
       if (args.harnessRunId && args.userId) {
@@ -203,6 +220,28 @@ export async function runLegacyLocalChat(args: LegacyLocalStreamArgs) {
       return friendlyChatError(error);
     },
   });
+}
+
+function lastUserTextFromModelMessages(
+  messages: ModelMessage[] | undefined,
+): string {
+  if (!messages?.length) return "";
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role !== "user") continue;
+    const content = msg.content;
+    if (typeof content === "string") return content;
+    if (!Array.isArray(content)) continue;
+    return content
+      .map((part) =>
+        part && typeof part === "object" && part.type === "text"
+          ? String(part.text ?? "")
+          : "",
+      )
+      .filter(Boolean)
+      .join("\n");
+  }
+  return "";
 }
 
 export async function streamLegacyLocalChat(

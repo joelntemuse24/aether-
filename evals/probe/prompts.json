@@ -131,7 +131,7 @@
       "tiers": ["expert"],
       "surfaces": ["api", "ui"],
       "timeoutMs": 120000,
-      "notes": "ambiguous labour category"
+      "notes": "ambiguous labour category — must still return a grounded numeric estimate + caveats + cite"
     },
     {
       "id": "grok-polymarket-perps",
@@ -351,7 +351,7 @@
       "tiers": ["expert"],
       "surfaces": ["api", "ui"],
       "timeoutMs": 90000,
-      "notes": "tzdata regression"
+      "notes": "tzdata regression — clock tool turns must leave a spoken time, not a blank Working"
     }
   ]
 }
