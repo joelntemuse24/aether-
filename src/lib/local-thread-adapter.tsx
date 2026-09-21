@@ -36,7 +36,10 @@ import {
   uiMessagesFromFormatRepo,
 } from "@/lib/chat-history-merge";
 import { ensureDurableToolStubs } from "@/lib/chat-tool-transcript";
-import { resolveInitializedRemoteId } from "@/lib/trigger/thread-remote-id";
+import {
+  resolveHistoryPersistId,
+  resolveInitializedRemoteId,
+} from "@/lib/trigger/thread-remote-id";
 
 const PREFIX = "aether:";
 export const ACTIVE_THREAD_KEY = `${PREFIX}active-thread`;
@@ -326,6 +329,7 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
     private getRemoteId: () => string | undefined,
     private ensureRemoteId: () => Promise<string>,
     private isCloudEnabled: () => boolean,
+    private getLocalThreadId: () => string | undefined,
   ) {}
 
   async load(): Promise<ExportedMessageRepository> {
@@ -344,6 +348,7 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
     const getRemoteId = this.getRemoteId;
     const ensureRemoteId = this.ensureRemoteId;
     const isCloudEnabled = this.isCloudEnabled;
+    const getLocalThreadId = this.getLocalThreadId;
 
     const readRepo = async (remoteId: string): Promise<StoredFormatRepo> => {
       if (isCloudEnabled()) {
@@ -397,7 +402,11 @@ class LocalHistoryAdapter implements ThreadHistoryAdapter {
       },
 
       async append(item: MessageFormatItem<TMessage>): Promise<void> {
-        const remoteId = await ensureRemoteId();
+        const plan = resolveHistoryPersistId({
+          existingRemoteId: getRemoteId(),
+          localThreadId: getLocalThreadId(),
+        });
+        const remoteId = plan.initialize ? await ensureRemoteId() : plan.id;
         const repo = await readRepo(remoteId);
         const id = formatAdapter.getId(item.message);
         const encoded = formatAdapter.encode(item);
@@ -463,6 +472,7 @@ function LocalHistoryProvider({ children }: { children: ReactNode }) {
   const helpers = useMemo(
     () => ({
       getRemoteId: () => aui.threadListItem().getState().remoteId,
+      getLocalThreadId: () => aui.threadListItem().getState().id,
       ensureRemoteId: async () => {
         const { remoteId } = await aui.threadListItem().initialize();
         return remoteId;
@@ -478,6 +488,7 @@ function LocalHistoryProvider({ children }: { children: ReactNode }) {
         helpers.getRemoteId,
         helpers.ensureRemoteId,
         helpers.isCloudEnabled,
+        helpers.getLocalThreadId,
       ),
     [helpers],
   );

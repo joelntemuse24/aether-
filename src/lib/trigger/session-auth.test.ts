@@ -7,7 +7,9 @@ import {
 } from "./session-auth";
 import {
   bindDurableChatId,
+  peekBoundDurableChatId,
   resetDurableChatIdBindings,
+  resolveHistoryPersistId,
   resolveInitializedRemoteId,
 } from "./thread-remote-id";
 
@@ -127,5 +129,40 @@ describe("new-thread remoteId alignment", () => {
     assert.notEqual(b, "durable-thread-a");
     assert.notEqual(b, "__LOCALID_b");
     assert.equal(resolveInitializedRemoteId("__LOCALID_a"), "durable-thread-a");
+  });
+
+  it("peeks a bound durable id without minting a second UUID", () => {
+    resetDurableChatIdBindings();
+    bindDurableChatId("durable-usechat-id", "__LOCALID_abc");
+    assert.equal(peekBoundDurableChatId("__LOCALID_abc"), "durable-usechat-id");
+    assert.equal(peekBoundDurableChatId("__LOCALID_unbound"), undefined);
+    assert.equal(peekBoundDurableChatId(""), undefined);
+  });
+
+  it("persists history against the bound durable id without initialize()", () => {
+    resetDurableChatIdBindings();
+    bindDurableChatId("durable-usechat-id", "__LOCALID_abc");
+    assert.deepEqual(
+      resolveHistoryPersistId({
+        existingRemoteId: undefined,
+        localThreadId: "__LOCALID_abc",
+      }),
+      { id: "durable-usechat-id", initialize: false },
+    );
+    assert.deepEqual(
+      resolveHistoryPersistId({
+        existingRemoteId: "already-remote",
+        localThreadId: "__LOCALID_abc",
+      }),
+      { id: "already-remote", initialize: false },
+    );
+    resetDurableChatIdBindings();
+    assert.deepEqual(
+      resolveHistoryPersistId({
+        existingRemoteId: undefined,
+        localThreadId: "__LOCALID_abc",
+      }),
+      { id: null, initialize: true },
+    );
   });
 });

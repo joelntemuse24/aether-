@@ -228,12 +228,27 @@ describe("composer send wiring", () => {
     assert.match(runtime, /mergeSeedWithDraft/);
     assert.match(runtime, /shouldReplaceLiveWithStored/);
     assert.match(runtime, /do not initialize\(\) while a turn is/);
+    assert.match(runtime, /rememberLiveTurn/);
     const startAt = runtime.indexOf("startSession:");
     const startFn = runtime.slice(startAt, startAt + 1600);
     assert.doesNotMatch(startFn, /\.initialize\(\)/);
     const prepareAt = runtime.indexOf("prepareSendMessagesRequest:");
     const prepareFn = runtime.slice(prepareAt, prepareAt + 900);
     assert.doesNotMatch(prepareFn, /\.initialize\(\)/);
+  });
+
+  it("persists the live transcript before initialize() remounts", () => {
+    const runtime = readFileSync(
+      new URL("../providers/runtime-provider.tsx", import.meta.url),
+      "utf8",
+    );
+    const initAt = runtime.indexOf("do not initialize() while a turn is");
+    assert.ok(initAt >= 0);
+    const initEffect = runtime.slice(initAt, initAt + 1800);
+    const persistAt = initEffect.indexOf("persistThreadUIMessages");
+    const initializeAt = initEffect.indexOf("threadListItem().initialize()");
+    assert.ok(persistAt >= 0 && initializeAt > persistAt);
+    assert.match(initEffect, /rememberLiveTurn/);
   });
 
   it("never silent-skips composer.send — plans a keep-and-explain path", () => {

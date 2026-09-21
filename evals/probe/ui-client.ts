@@ -7,6 +7,7 @@ import type { ProbeCategory } from "./types";
 import {
   detectUiFailures,
   isWelcomePhrase,
+  pathLooksLikeConversation,
   type UiSnapshot,
 } from "./ui-detectors";
 
@@ -54,6 +55,7 @@ type PlaywrightPage = {
   content: () => Promise<string>;
   innerText: () => Promise<string>;
   waitForTimeout: (ms: number) => Promise<void>;
+  url: () => string;
   on: (event: string, fn: (err: Error) => void) => void;
 };
 
@@ -115,6 +117,12 @@ async function collectUiDom(page: PlaywrightPage): Promise<Omit<
   const stepFailedVisible = await visible(page.locator(".aether-tool-trace__error"));
   const bodyText = await page.locator("body").innerText().catch(() => "");
   const applicationErrorVisible = /application error/i.test(bodyText);
+  let pathIsConversation = false;
+  try {
+    pathIsConversation = pathLooksLikeConversation(page.url());
+  } catch {
+    pathIsConversation = false;
+  }
 
   return {
     welcomeVisible,
@@ -127,6 +135,7 @@ async function collectUiDom(page: PlaywrightPage): Promise<Omit<
     sendVisible,
     stepFailedVisible,
     applicationErrorVisible,
+    pathIsConversation,
     bodyText,
   };
 }
@@ -213,7 +222,9 @@ export async function runUiTurn(input: UiTurnInput): Promise<{
         !mid.stopVisible &&
         Date.now() - started > 400
       ) {
-        await page.waitForTimeout(400);
+        // Stay on the live canvas after /c/<id> assignment so remount-blank
+        // is visible here — do not click the sidebar to recover.
+        await page.waitForTimeout(600);
         break;
       }
       await page.waitForTimeout(250);

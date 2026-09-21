@@ -16,6 +16,7 @@ export type UiSnapshot = {
   stepFailedVisible: boolean;
   applicationErrorVisible: boolean;
   pageError: string | null;
+  pathIsConversation: boolean;
   bodyText: string;
   elapsedMs: number;
   timedOut: boolean;
@@ -25,6 +26,17 @@ export type UiSnapshot = {
 export function isWelcomePhrase(text: string | null | undefined): boolean {
   const t = (text ?? "").trim();
   return (WELCOME_PHRASES as readonly string[]).includes(t);
+}
+
+export function pathLooksLikeConversation(urlOrPath: string): boolean {
+  const raw = (urlOrPath ?? "").trim();
+  if (!raw) return false;
+  try {
+    const path = raw.includes("://") ? new URL(raw).pathname : raw;
+    return /^\/c\/[^/]+/.test(path);
+  } catch {
+    return false;
+  }
 }
 
 export function detectUiFailures(snap: UiSnapshot): ProbeFinding[] {
@@ -60,6 +72,13 @@ export function detectUiFailures(snap: UiSnapshot): ProbeFinding[] {
       code: "blank_howzit",
       detail: `Welcome “${snap.welcomePhrase ?? "Howzit?"}” still showing and the send vanished (blank after send).`,
     });
+    if (snap.pathIsConversation) {
+      findings.push({
+        code: "remount_blank",
+        detail:
+          "Howzit came back after /c/<id> assignment — live turn remounted blank (no sidebar click needed).",
+      });
+    }
   } else if (snap.welcomeVisible && snap.userMessageCount > 0) {
     findings.push({
       code: "blank_howzit",
@@ -69,8 +88,10 @@ export function detectUiFailures(snap: UiSnapshot): ProbeFinding[] {
 
   if (!assistant && !snap.timedOut && snap.userMessageCount > 0 && !snap.welcomeVisible) {
     findings.push({
-      code: "empty_transcript",
-      detail: "User message is on the thread but the assistant bubble is blank.",
+      code: snap.pathIsConversation ? "remount_blank" : "empty_transcript",
+      detail: snap.pathIsConversation
+        ? "Live turn vanished after /c/<id> assignment (no sidebar click needed)."
+        : "User message is on the thread but the assistant bubble is blank.",
     });
   }
 
@@ -174,6 +195,7 @@ export function fixtureUiSnapshot(
     stepFailedVisible: false,
     applicationErrorVisible: false,
     pageError: null,
+    pathIsConversation: false,
     bodyText: "Hello — I am here and ready. Worked for 2s",
     elapsedMs: 40,
     timedOut: false,

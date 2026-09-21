@@ -102,6 +102,7 @@ const FIXTURES: Record<
   { visibleText: string; rawText?: string; finished?: boolean }
 > = {
   "blank-survival-hello": { visibleText: "Hello — I am here and ready." },
+  "blank-survival-remount": { visibleText: "Yes — still here." },
   "math-final-price": {
     visibleText: "Discounted $102, then 8% tax → $110.16 final price.",
   },
