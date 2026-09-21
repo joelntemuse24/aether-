@@ -293,6 +293,7 @@ export function composeChatSystem(input: ComposeChatSystemInput): ComposedChatSy
   const playbooksBlock = input.toolsEnabled
     ? playbooksSystemAddendum(
         resolvePlaybooks({ text: input.userText, intent: input.harnessIntent }),
+        { depth: harnessDepth },
       )
     : "";
   const verifyBlock = verifySystemAddendum({

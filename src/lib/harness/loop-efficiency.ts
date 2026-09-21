@@ -8,6 +8,7 @@
  * - Stable tool order (prompt-cache friendly prefixes)
  * - Deferred tool discovery (core tools + tool_search)
  * - Hard per-turn web_search quotas + near-duplicate rejection
+ * - Hard per-turn browse_page / fetch_url quotas (snapshot research)
  *
  * See: https://blog.bytebytego.com/p/how-chatgpt-optimizes-its-agent-loop
  */
@@ -381,6 +382,12 @@ export function webSearchBudgetForDepth(depth: HarnessDepth): number {
   return 2;
 }
 
+/** Cap browse_page / fetch_url so snapshot research answers from snippets. */
+export function pageFetchBudgetForDepth(depth: HarnessDepth): number {
+  if (depth === "deep") return 6;
+  return 1;
+}
+
 /** Optional tighter cap from time pressure ("5 minutes"). */
 export function webSearchBudgetWithTimeCap(
   depth: HarnessDepth,
@@ -648,7 +655,17 @@ export type AgentLoopController = {
    * to proceed with the real search.
    */
   gateWebSearch: (query: string) => WebSearchOutput | null;
+  /**
+   * Gate browse_page / fetch_url. Returns an error-shaped output to
+   * short-circuit, or null to proceed with the real fetch.
+   */
+  gatePageFetch: (toolName: string) => {
+    ok: false;
+    error: string;
+    warning?: string;
+  } | null;
   webSearchBudget: number;
+  pageFetchBudget: number;
 };
 
 export function createAgentLoopController(input: {
@@ -679,6 +696,8 @@ export function createAgentLoopController(input: {
     input.depth,
     input.maxWebSearches,
   );
+  const pageFetchBudget = pageFetchBudgetForDepth(input.depth);
+  let pageFetches = 0;
 
   const toolOrder = [...CORE_TOOL_ORDER, ...DEFERRED_TOOL_ORDER].filter((n) => {
     if (n === TOOL_NAMES.toolSearch) return hasDeferred;
@@ -700,6 +719,7 @@ export function createAgentLoopController(input: {
     toolOrder,
     initialActiveTools: activeTools(),
     webSearchBudget,
+    pageFetchBudget,
     prepareStep: () => ({
       activeTools: activeTools(),
       toolOrder,
@@ -775,6 +795,19 @@ export function createAgentLoopController(input: {
         };
       }
       priorQueries.push(trimmed);
+      return null;
+    },
+    gatePageFetch: (toolName: string) => {
+      if (pageFetches >= pageFetchBudget) {
+        return {
+          ok: false as const,
+          error: `Page fetch budget exhausted for this turn (${pageFetchBudget} max at ${input.depth} depth). Answer now from existing search snippets.`,
+          warning:
+            "Fetch budget reached. Draft the answer from snippets rather than opening more pages.",
+        };
+      }
+      pageFetches += 1;
+      void toolName;
       return null;
     },
   };

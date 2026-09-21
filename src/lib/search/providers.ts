@@ -55,6 +55,82 @@ export function configuredSearchProviders(): SearchProviderId[] {
   return order.filter((p) => available.includes(p));
 }
 
+export const TAVILY_SEARCH_DEPTH = "basic";
+export const SEARCH_PROVIDER_TIMEOUT_MS = 6_000;
+
+export function firecrawlSearchPayload(query: string): {
+  query: string;
+  limit: number;
+} {
+  return { query, limit: 8 };
+}
+
+export async function raceFirstNonEmpty<T>(
+  tasks: Array<{
+    id: string;
+    run: (signal: AbortSignal) => Promise<T[]>;
+  }>,
+  options: { parentSignal?: AbortSignal; perTaskMs: number },
+): Promise<{ id: string; results: T[] } | null> {
+  if (tasks.length === 0) return null;
+  const controllers = tasks.map(() => new AbortController());
+  const onParentAbort = () => {
+    for (const controller of controllers) {
+      if (!controller.signal.aborted) controller.abort();
+    }
+  };
+  if (options.parentSignal?.aborted) return null;
+  options.parentSignal?.addEventListener("abort", onParentAbort, { once: true });
+
+  try {
+    return await new Promise((resolve) => {
+      let remaining = tasks.length;
+      let settled = false;
+      const finish = (value: { id: string; results: T[] } | null) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+
+      for (let i = 0; i < tasks.length; i += 1) {
+        const task = tasks[i]!;
+        const controller = controllers[i]!;
+        const timer = setTimeout(() => {
+          if (!controller.signal.aborted) controller.abort();
+        }, options.perTaskMs);
+        controller.signal.addEventListener(
+          "abort",
+          () => clearTimeout(timer),
+          { once: true },
+        );
+
+        void (async () => {
+          try {
+            const results = await task.run(controller.signal);
+            if (!settled && Array.isArray(results) && results.length > 0) {
+              for (let j = 0; j < controllers.length; j += 1) {
+                if (j !== i && !controllers[j]!.signal.aborted) {
+                  controllers[j]!.abort();
+                }
+              }
+              finish({ id: task.id, results });
+              return;
+            }
+          } catch {
+            // empty, abort, or provider error — try remaining tasks
+          } finally {
+            clearTimeout(timer);
+            remaining -= 1;
+            if (!settled && remaining === 0) finish(null);
+          }
+        })();
+      }
+    });
+  } finally {
+    options.parentSignal?.removeEventListener("abort", onParentAbort);
+  }
+}
+
 export async function searchFirecrawl(
   query: string,
   signal?: AbortSignal,
@@ -69,11 +145,7 @@ export async function searchFirecrawl(
       Authorization: `Bearer ${key}`,
       "User-Agent": SEARCH_UA,
     },
-    body: JSON.stringify({
-      query,
-      limit: 8,
-      scrapeOptions: { formats: ["markdown"], onlyMainContent: true },
-    }),
+    body: JSON.stringify(firecrawlSearchPayload(query)),
   });
   if (!res.ok) return [];
   const parsed = await readJson(res);
@@ -188,7 +260,7 @@ export async function searchTavily(
     body: JSON.stringify({
       api_key: key,
       query,
-      search_depth: "advanced",
+      search_depth: TAVILY_SEARCH_DEPTH,
       max_results: 8,
       include_answer: false,
     }),
@@ -209,26 +281,30 @@ export async function searchTavily(
     .slice(0, 8);
 }
 
-/** Run configured API providers in order; returns first non-empty hit. */
+async function searchByProviderId(
+  id: SearchProviderId,
+  query: string,
+  signal?: AbortSignal,
+): Promise<WebSearchResult[]> {
+  if (id === "brave") return searchBrave(query, signal);
+  if (id === "exa") return searchExa(query, signal);
+  if (id === "firecrawl") return searchFirecrawl(query, signal);
+  return searchTavily(query, signal);
+}
+
+/** Race configured API providers; first non-empty hit wins. */
 export async function runApiSearchProviders(
   query: string,
   signal?: AbortSignal,
 ): Promise<SearchProviderHit | null> {
   const providers = configuredSearchProviders();
-  for (const id of providers) {
-    try {
-      const results =
-        id === "brave"
-          ? await searchBrave(query, signal)
-          : id === "exa"
-            ? await searchExa(query, signal)
-            : id === "firecrawl"
-              ? await searchFirecrawl(query, signal)
-              : await searchTavily(query, signal);
-      if (results.length > 0) return { provider: id, results };
-    } catch {
-      // try next provider
-    }
-  }
-  return null;
+  const hit = await raceFirstNonEmpty(
+    providers.map((id) => ({
+      id,
+      run: (taskSignal) => searchByProviderId(id, query, taskSignal),
+    })),
+    { parentSignal: signal, perTaskMs: SEARCH_PROVIDER_TIMEOUT_MS },
+  );
+  if (!hit) return null;
+  return { provider: hit.id as SearchProviderId, results: hit.results };
 }

@@ -74,4 +74,18 @@ describe("probe pack", () => {
     const ui = selectPrompts(pack, { surface: "ui" });
     assert.ok(ui.filter((p) => p.source === "grok-history").length >= MIN_HARVESTED_PROMPTS);
   });
+
+  it("budgets Ireland unemployment as snapshot research, not a 3-minute deep loop", () => {
+    const pack = loadProbePack();
+    const ireland = [...pack.seeds, ...pack.harvested].filter((p) =>
+      /ireland-unemployment/.test(p.id),
+    );
+    assert.ok(ireland.length >= 2);
+    for (const prompt of ireland) {
+      assert.ok(
+        typeof prompt.budgetMs === "number" && prompt.budgetMs <= 35_000,
+        `${prompt.id} needs a snapshot latency budget`,
+      );
+    }
+  });
 });

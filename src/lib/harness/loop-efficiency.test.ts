@@ -4,8 +4,11 @@ import { TOOL_NAMES } from "@/lib/tools";
 import {
   collectMessageText,
   collectSeedUnlockedToolNames,
+  createAgentLoopController,
   expandDeferredSuites,
+  pageFetchBudgetForDepth,
   rankDeferredTools,
+  webSearchBudgetForDepth,
 } from "./loop-efficiency";
 
 const GITHUB_TOOLS = [
@@ -171,5 +174,29 @@ describe("rankDeferredTools", () => {
     for (const t of GITHUB_TOOLS) {
       assert.ok(names.includes(t), `expected ${t}`);
     }
+  });
+});
+
+describe("research tool-loop budgets", () => {
+  it("caps standard research at two searches and one page fetch", () => {
+    assert.equal(webSearchBudgetForDepth("standard"), 2);
+    assert.equal(pageFetchBudgetForDepth("standard"), 1);
+    assert.ok(pageFetchBudgetForDepth("deep") >= 4);
+  });
+
+  it("blocks a second browse/fetch on standard depth so the model answers from snippets", () => {
+    const loop = createAgentLoopController({
+      depth: "standard",
+      availableToolNames: [
+        TOOL_NAMES.webSearch,
+        TOOL_NAMES.fetchUrl,
+        TOOL_NAMES.browsePage,
+      ],
+    });
+    assert.equal(loop.gatePageFetch(TOOL_NAMES.fetchUrl), null);
+    const blocked = loop.gatePageFetch(TOOL_NAMES.browsePage);
+    assert.ok(blocked);
+    assert.equal(blocked.ok, false);
+    assert.match(blocked.error ?? "", /budget|snippets|answer now/i);
   });
 });

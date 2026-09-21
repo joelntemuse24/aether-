@@ -2,7 +2,7 @@
 
 Repeatable breakage probe for hosted Aether (Expert) on **API and UI**. This is not a quality rubric — it fires the capability-gap seed pack and fails on the modes Joel was firefighting. Fast-only cases were dropped 2026-09-12.
 
-API: blank transcripts, raw DSML/tool XML, client/Application errors, `This step failed`, `ZoneInfoNotFoundError`, stuck Stop, duplicate Working strips, no answer after N seconds, leaked upstream auth errors.
+API: blank transcripts, raw DSML/tool XML, client/Application errors, `This step failed`, `ZoneInfoNotFoundError`, stuck Stop, duplicate Working strips, no answer after N seconds, leaked upstream auth errors, snapshot research slower than the Ireland cite budget (`slow_research`).
 
 UI (Playwright against the wired chrome): blank **Howzit?** after send, duplicate Working strips, raw DSML visible, “Application error” client exception, stuck Stop, missing **Worked for Ns**, “This step failed” without recovery. Failures write a PNG under `evals/probe/artifacts/`.
 

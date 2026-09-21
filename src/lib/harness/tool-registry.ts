@@ -235,11 +235,38 @@ export function buildToolRegistry(ctx: ToolRegistryContext): ToolSet {
     }),
     [TOOL_NAMES.fetchUrl]: tool({
       ...schemas[TOOL_NAMES.fetchUrl],
-      execute: async ({ url }) => fetchUrlText(url),
+      execute: async ({ url }) => {
+        const blocked = ctx.loop?.gatePageFetch(TOOL_NAMES.fetchUrl);
+        if (blocked) {
+          return {
+            ok: false,
+            url,
+            text: "",
+            error: blocked.error,
+            warning: blocked.warning,
+          };
+        }
+        return fetchUrlText(url);
+      },
     }),
     [TOOL_NAMES.browsePage]: tool({
       ...schemas[TOOL_NAMES.browsePage],
-      execute: async ({ url, instructions }) => browsePage({ url, instructions }),
+      execute: async ({ url, instructions }) => {
+        const blocked = ctx.loop?.gatePageFetch(TOOL_NAMES.browsePage);
+        if (blocked) {
+          return {
+            ok: false,
+            url,
+            headings: [],
+            links: [],
+            excerpts: [],
+            text: "",
+            error: blocked.error,
+            warning: blocked.warning,
+          };
+        }
+        return browsePage({ url, instructions });
+      },
     }),
     [TOOL_NAMES.browserSnapshot]: tool({
       ...schemas[TOOL_NAMES.browserSnapshot],

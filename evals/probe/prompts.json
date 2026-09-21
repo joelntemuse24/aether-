@@ -39,6 +39,7 @@
       "tiers": ["expert"],
       "smoke": false,
       "timeoutMs": 120000,
+      "budgetMs": 30000,
       "surfaces": ["api", "ui"]
     },
     {
@@ -120,6 +121,7 @@
       "tiers": ["expert"],
       "surfaces": ["api", "ui"],
       "timeoutMs": 120000,
+      "budgetMs": 30000,
       "notes": "live web + citation"
     },
     {

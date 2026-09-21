@@ -67,6 +67,22 @@ export function modelMessagesHaveAssistantContent(messages: unknown): boolean {
   return false;
 }
 
+export function modelMessagesHaveToolActivity(messages: unknown): boolean {
+  if (modelMessagesNeedToolHandover(messages)) return true;
+  if (!Array.isArray(messages)) return false;
+  for (const message of messages) {
+    const rec = asRecord(message);
+    if (rec.role !== "tool" && rec.role !== "assistant") continue;
+    const content = rec.content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      const type = asRecord(part).type;
+      if (type === "tool-result" || type === "tool-approval-response") return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Abort before a finishReason:
  * - pending tool calls → agent executes them (`isFinal: false`)
@@ -82,19 +98,37 @@ export function finishReasonAfterHeadStartAbort(
   return "tool-calls";
 }
 
+/**
+ * SDK `chat.headStart` only continues the durable loop when finishReason is
+ * `tool-calls` (`isFinal: false`). Executing read-only tools on step 1 makes
+ * AI SDK report `stop` after `stepCountIs(1)` even though the agent still
+ * needs to synthesize. Keep those turns on the worker.
+ */
+export function finishReasonForHeadStartHandover(
+  reason: FinishReason,
+  messages: unknown,
+): FinishReason {
+  if (reason === "tool-calls") return "tool-calls";
+  if (modelMessagesHaveToolActivity(messages)) return "tool-calls";
+  return reason;
+}
+
 export function wrapHeadStartStreamResult<T extends HeadStartStreamLike>(
   result: T,
 ): T {
+  const responseMessages = (): Promise<ModelMessage[]> =>
+    Promise.resolve(result.response)
+      .then((r) => r.messages)
+      .catch(() => [] as ModelMessage[]);
+
   const patchedFinish: Promise<FinishReason> = Promise.resolve(
     result.finishReason,
   ).then(
-    (reason) => reason,
+    async (reason) =>
+      finishReasonForHeadStartHandover(reason, await responseMessages()),
     async (error) => {
       if (!isHeadStartAbort(error)) throw error;
-      const messages = await Promise.resolve(result.response)
-        .then((r) => r.messages)
-        .catch(() => [] as ModelMessage[]);
-      return finishReasonAfterHeadStartAbort(messages);
+      return finishReasonAfterHeadStartAbort(await responseMessages());
     },
   );
 
