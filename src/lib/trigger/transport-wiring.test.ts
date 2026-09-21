@@ -181,4 +181,18 @@ describe("chat transport wiring contract", () => {
     assert.match(runtime, /shouldExecutePythonInBrowser/);
     assert.match(runtime, /chatTransport/);
   });
+
+  it("does not client-execute current_time (server clock already runs)", () => {
+    const runtime = readFileSync(
+      new URL("../../providers/runtime-provider.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.match(runtime, /shouldExecuteCurrentTimeInBrowser/);
+    const stream = readFileSync(
+      new URL("../harness/legacy-local-stream.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(stream, /shouldForceTextStep/);
+    assert.match(stream, /wrapStreamTextWithFallbackAnswer/);
+  });
 });

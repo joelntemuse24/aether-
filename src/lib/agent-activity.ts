@@ -7,7 +7,10 @@
  */
 
 import { collectSourceCitations } from "./citations";
-import { recoverToolCallsFromMarkup } from "./visible-chat-text";
+import {
+  recoverToolCallsFromMarkup,
+  sanitizeVisibleAssistantText,
+} from "./visible-chat-text";
 
 export type ActivityPart = {
   type?: string;
@@ -342,6 +345,16 @@ function latestAssistant(
   return undefined;
 }
 
+function assistantHasVisibleProse(
+  message: ActivityMessage | undefined,
+): boolean {
+  if (!message || !Array.isArray(message.parts)) return false;
+  return message.parts.some((part) => {
+    if (part?.type !== "text") return false;
+    return sanitizeVisibleAssistantText(part.text).length > 0;
+  });
+}
+
 export function deriveAgentActivity(
   input: DeriveAgentActivityInput,
 ): ActivityView {
@@ -444,6 +457,22 @@ export function deriveAgentActivity(
       elapsedSeconds: elapsed,
       elapsedLabel: elapsedText ? `Working for ${elapsedText}` : "Working",
       summaryLabel: null,
+    };
+  }
+
+  const emptyTranscript = assistant && !assistantHasVisibleProse(assistant);
+  if (emptyTranscript) {
+    const shown = Math.max(elapsed, 1);
+    return {
+      visible: true,
+      mode: "collapsed",
+      steps,
+      liveStepId: null,
+      liveLine: null,
+      lineKey: "collapsed",
+      elapsedSeconds: shown,
+      elapsedLabel: formatActivityElapsed(shown),
+      summaryLabel: `Worked for ${formatActivityElapsed(shown)}`,
     };
   }
 

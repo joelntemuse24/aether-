@@ -7,8 +7,16 @@ export function heuristicClassify(message: string): HarnessClassification {
   const lower = text.toLowerCase();
   const len = text.length;
 
+  const quantitativeFact =
+    /\b(how many|how much|headcount|unemployment(?: rate)?|employment in|labour force|labor force)\b/.test(
+      lower,
+    ) ||
+    (/\bvs\.?\b/.test(lower) &&
+      /\b(office|hospitality|workers?|jobs?)\b/.test(lower));
+
   let intent: HarnessIntent = "chat";
   if (
+    quantitativeFact ||
     /\b(research|brief|sources?|cite|look up|latest|news)\b/.test(lower)
   ) {
     intent = "research";
@@ -49,6 +57,9 @@ export function heuristicClassify(message: string): HarnessClassification {
     /^(hi|hello|hey|thanks|thank you|ok|okay|yes|no)\b/.test(lower)
   ) {
     depth = "shallow";
+  } else if (quantitativeFact && !wantsExplicitDeep) {
+    // Search, then answer — not a 16-step browse loop that never synthesizes.
+    depth = "standard";
   } else if (
     wantsExplicitDeep ||
     wantsDeck ||
@@ -69,7 +80,10 @@ export function heuristicClassify(message: string): HarnessClassification {
   const ambiguousLife =
     intent === "life_admin" &&
     !/\b(draft|plan|checklist|how to)\b/.test(lower);
-  const thinBrief = len < 120 && (intent === "research" || intent === "study");
+  const thinBrief =
+    len < 120 &&
+    (intent === "research" || intent === "study") &&
+    !quantitativeFact;
 
   const needsClarify = ambiguousWrite || ambiguousLife || thinBrief;
   const questions: HarnessClassification["questions"] = [];

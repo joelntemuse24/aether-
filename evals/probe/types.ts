@@ -20,6 +20,8 @@ export type ProbeSurface = "api" | "ui";
 
 export type ProbeFailureCode =
   | "empty_transcript"
+  | "empty_synthesis"
+  | "vanished_working"
   | "raw_tool_markup"
   | "client_exception"
   | "application_error"

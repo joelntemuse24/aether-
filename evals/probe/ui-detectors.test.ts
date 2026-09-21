@@ -100,6 +100,21 @@ describe("probe UI detectors", () => {
     assert.equal(findings.some((f) => f.code === "stuck_stop"), true);
   });
 
+  it("flags vanished Working when the strip disappears with a blank transcript", () => {
+    const findings = detectUiFailures(
+      fixtureUiSnapshot({
+        sawWorkingDuringTurn: true,
+        workedForVisible: false,
+        finished: true,
+        stopVisible: false,
+        assistantVisibleText: "",
+        bodyText: "What time is it in Dublin?",
+      }),
+    );
+    assert.equal(findings.some((f) => f.code === "vanished_working"), true);
+    assert.equal(findings.some((f) => f.code === "empty_transcript"), true);
+  });
+
   it("flags missing Worked for Ns after a Working turn", () => {
     const findings = detectUiFailures(
       fixtureUiSnapshot({

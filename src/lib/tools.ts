@@ -106,6 +106,18 @@ export function shouldExecutePythonInBrowser(
   return chatTransport !== "durable";
 }
 
+/**
+ * `current_time` already has a server `execute` on both the durable worker
+ * and `/api/chat`. Browser addToolResult races that loop and can finish the
+ * turn with Working gone and no spoken clock (blank Dublin).
+ */
+export function shouldExecuteCurrentTimeInBrowser(
+  chatTransport: "durable" | "request" | string,
+): boolean {
+  void chatTransport;
+  return false;
+}
+
 // ─── Input schemas ───
 
 export const executePythonInput = z.object({
@@ -930,6 +942,8 @@ export const TOOLS_SYSTEM_PROMPT = `You are Aether, with access to tools and an 
 - Use tools decisively when they improve correctness (current facts, repo inspection, math verification, Drive files, memory). Do not stall or ask permission to call an available tool.
 - Prefer a short tool call over confident guessing on facts that change, numbers, or private user data.
 - Always end the turn with a clear, user-visible answer — even when tools return thin, empty, or blocked results. State uncertainty briefly; never leave the user with only tool noise.
+- After any tool (including current_time), write that answer in the same turn. Do not stop on a tool call with an empty transcript.
+- Quantitative or unofficial-category questions (how many, office vs hospitality, labour splits): give a grounded numeric estimate from the tool snippets you actually have, name the definition you used, list caveats, and cite [n]. Do not invent figures that are not in the tool results. If snippets have no number, say so and still cite what you found.
 
 ## Core tools (always available when tools are on)
 - "current_time": cheap IANA clock (e.g. Europe/Dublin). Prefer this for "what time is it" questions — do not use execute_python or pip for a timezone lookup.

@@ -20,7 +20,7 @@ const PLAYBOOKS: Record<PlaybookId, Playbook> = {
     id: "research",
     label: "Research",
     promptHint:
-      "Use web_search (few focused queries) then browse_page (or fetch_url) on the best links. Cite inline as [1], [2] matching result ids. A search does not replace the thread — keep prior facts (names, numbers). End with a usable answer.",
+      "Use web_search (few focused queries) then browse_page (or fetch_url) on the best links. Cite inline as [1], [2] matching result ids. A search does not replace the thread — keep prior facts (names, numbers). End with a usable answer: a grounded numeric estimate when the user asked how many / a split, plus caveats and [1] [2] cites. Do not invent figures; do not finish with searches and no number.",
   },
   "write-doc": {
     id: "write-doc",
@@ -49,7 +49,8 @@ const PLAYBOOKS: Record<PlaybookId, Playbook> = {
 };
 
 const SLIDES_RE = /\b(slides?|deck|presentation|powerpoint|keynote|pptx)\b/;
-const RESEARCH_RE = /\b(research|search|look up|sources?|cite|latest|news)\b/;
+const RESEARCH_RE =
+  /\b(research|search|look up|sources?|cite|latest|news|how many|how much|headcount)\b/;
 
 export function resolvePlaybooks(input: {
   text?: string;
@@ -90,7 +91,7 @@ export function resolvePlaybooks(input: {
 }
 
 const SNAPSHOT_RESEARCH_HINT =
-  "Run one focused web_search. If the snippets already contain the figure and a citable URL, answer now with inline [1] citations — do not browse_page or fetch_url. Only fetch a source page if the snippets lack the number or the URL is missing. End with a usable answer.";
+  "Run one focused web_search. If the snippets already contain the figure and a citable URL, answer now with inline [1] citations — do not browse_page or fetch_url. Only fetch a source page if the snippets lack the number or the URL is missing. End with a usable answer: a grounded numeric estimate when the user asked how many / a split, plus caveats and [1] [2] cites. Do not invent figures; do not finish with searches and no number.";
 
 export function playbooksSystemAddendum(
   playbooks: Playbook[],
