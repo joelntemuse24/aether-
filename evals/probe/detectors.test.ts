@@ -100,6 +100,32 @@ describe("probe failure detectors", () => {
     assert.equal(ok.some((f) => f.code === "empty_transcript"), false);
   });
 
+  it("flags Thinking theater and stacked live tool one-liners", () => {
+    const theater = detectFailures(
+      snap({
+        visibleText: "Thinking…\nCooking…\nHere is a take.",
+        workingStripCount: 0,
+      }),
+    );
+    assert.equal(theater.some((f) => f.code === "thinking_theater"), true);
+
+    const stacked = detectFailures(
+      snap({
+        visibleText: "Working for 9s\nSearching ireland\nReading cso.ie\nCreating Grid",
+        workingStripCount: 1,
+      }),
+    );
+    assert.equal(stacked.some((f) => f.code === "status_stack"), true);
+
+    const compact = detectFailures(
+      snap({
+        visibleText: "Working for 9s\nSearching ireland unemployment",
+        workingStripCount: 1,
+      }),
+    );
+    assert.equal(compact.some((f) => f.code === "status_stack"), false);
+  });
+
   it("flags no answer after timeout", () => {
     const findings = detectFailures(
       snap({
