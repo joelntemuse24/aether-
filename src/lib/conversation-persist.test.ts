@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import {
   CLOUD_PERSIST_MIN_GAP_MS,
+  STREAMING_PERSIST_DEBOUNCE_MS,
   createLatestWriteGate,
   fingerprintFormatRepo,
   shouldHydrateThreadMessages,
@@ -156,6 +157,12 @@ describe("runtime persist wiring", () => {
       runtime.indexOf("Flush on tab close"),
     );
     assert.doesNotMatch(persistEffect, /hasCompletedToolResult\(last\)/);
+    assert.match(persistEffect, /STREAMING_PERSIST_DEBOUNCE_MS/);
+  });
+
+  it("keeps a streaming debounce above a per-chunk PUT", () => {
+    assert.ok(STREAMING_PERSIST_DEBOUNCE_MS >= 500);
+    assert.ok(CLOUD_PERSIST_MIN_GAP_MS >= 1_000);
   });
 
   it("coalesces cloud PUTs in the shared client, not per caller", () => {

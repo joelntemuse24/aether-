@@ -1,4 +1,4 @@
-import type { HarnessIntent } from "./types";
+import type { HarnessDepth, HarnessIntent } from "./types";
 
 export const PLAYBOOK_IDS = [
   "research",
@@ -90,10 +90,21 @@ export function resolvePlaybooks(input: {
   return out;
 }
 
-export function playbooksSystemAddendum(playbooks: Playbook[]): string {
+const SNAPSHOT_RESEARCH_HINT =
+  "Run one focused web_search. If the snippets already contain the figure and a citable URL, answer now with inline [1] citations — do not browse_page or fetch_url. Only fetch a source page if the snippets lack the number or the URL is missing. End with a usable answer: a grounded numeric estimate when the user asked how many / a split, plus caveats and [1] [2] cites. Do not invent figures; do not finish with searches and no number.";
+
+export function playbooksSystemAddendum(
+  playbooks: Playbook[],
+  opts?: { depth?: HarnessDepth },
+): string {
   if (playbooks.length === 0) return "";
+  const snapshot = opts?.depth !== "deep";
   return [
     "## Playbooks (this turn)",
-    ...playbooks.map((p) => `- ${p.id} (${p.label}): ${p.promptHint}`),
+    ...playbooks.map((p) => {
+      const hint =
+        p.id === "research" && snapshot ? SNAPSHOT_RESEARCH_HINT : p.promptHint;
+      return `- ${p.id} (${p.label}): ${hint}`;
+    }),
   ].join("\n");
 }

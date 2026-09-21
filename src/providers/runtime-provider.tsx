@@ -72,6 +72,7 @@ import {
 import { clearFirstSendDraft, mergeSeedWithDraft, rememberLiveTurn } from "@/lib/chat-turn-draft";
 import { resetActivityClock } from "@/lib/agent-activity";
 import {
+  STREAMING_PERSIST_DEBOUNCE_MS,
   shouldHydrateThreadMessages,
   shouldPersistMessagesImmediately,
 } from "@/lib/conversation-persist";
@@ -813,7 +814,7 @@ function useChatThreadRuntime() {
     const timer = window.setTimeout(() => {
       persistThreadUIMessages(key, messages);
       persistedKeyRef.current = key;
-    }, 350);
+    }, STREAMING_PERSIST_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [messages, status, durableChatId]);
 

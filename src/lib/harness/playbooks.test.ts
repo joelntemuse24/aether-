@@ -74,6 +74,18 @@ describe("chat playbooks", () => {
     assert.ok(budgetForDepth(classification.depth).maxSteps >= 8);
   });
 
+  it("tells snapshot cite/search to answer from one web_search, not fetch+verify", () => {
+    const playbooks = resolvePlaybooks({
+      text: "Search the web for Ireland’s current unemployment rate and cite one source.",
+      intent: "research",
+    });
+    const block = playbooksSystemAddendum(playbooks, { depth: "standard" });
+    assert.match(block, /web_search/);
+    assert.match(block, /snippets/i);
+    assert.doesNotMatch(block, /then browse_page/);
+    assert.doesNotMatch(block, /verify_checklist/);
+  });
+
   it("loads sheet for a spreadsheet / table", () => {
     const playbooks = resolvePlaybooks({
       text: "Build a spreadsheet of Q3 costs",

@@ -20,7 +20,7 @@ import {
   splitHeadStartClientData,
 } from "@/lib/trigger/head-start";
 import { wrapHeadStartStreamResult } from "@/lib/trigger/head-start-handover";
-import { buildHeadStartToolSchemas } from "@/lib/harness/tool-schemas";
+import { buildHeadStartFastTools } from "@/lib/harness/head-start-fast-tools";
 import { resolveTurnLanguageModel } from "@/lib/chat-language-model";
 import { enrichModelMessagesWithAttachments } from "@/lib/chat-turn";
 
@@ -70,7 +70,7 @@ const headStartHandler = chat.headStart({
         requestedModel: prepared.requestedModel,
       }),
     );
-    const tools = buildHeadStartToolSchemas({
+    const tools = buildHeadStartFastTools({
       toolsEnabled: prepared.toolsEnabled,
       hasDrive: prepared.hasDrive,
       hasGitHub: prepared.hasGitHub,
@@ -95,7 +95,8 @@ const headStartHandler = chat.headStart({
 
 /**
  * First durable turn: run step 1 on this warm process while the agent boots.
- * Tool execution and later turns stay on the durable agent.
+ * Read-only search/time/fetch execute here so research does not wait on boot.
+ * Mutations and later steps stay on the durable agent.
  */
 export async function POST(req: Request) {
   if (!isTriggerChatConfigured()) {

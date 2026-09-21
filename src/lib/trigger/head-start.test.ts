@@ -62,14 +62,14 @@ describe("head start first-turn contract", () => {
 });
 
 describe("head start route bundle isolation", () => {
-  it("uses chat.headStart with schema-only tools and does not import the full loop", () => {
+  it("uses chat.headStart with fast read tools and does not import the full loop", () => {
     const route = readFileSync(
       new URL("../../app/api/chat/head-start/route.ts", import.meta.url),
       "utf8",
     );
     assert.match(route, /chat\.headStart/);
     assert.match(route, /@trigger\.dev\/sdk\/chat-server/);
-    assert.match(route, /buildHeadStartToolSchemas/);
+    assert.match(route, /buildHeadStartFastTools/);
     assert.match(route, /speedTier: prepared\.speedTier/);
     assert.match(route, /requestedModel: prepared\.requestedModel/);
     assert.match(route, /HOSTED_CLOUD_UNAVAILABLE_MESSAGE|hostedCloudUnavailable/);

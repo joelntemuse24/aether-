@@ -1,4 +1,4 @@
-import { detectFailures } from "./detectors";
+import { detectFailures, snapshotResearchBudgetMs } from "./detectors";
 import {
   fetchHostedStatus,
   fixtureSnapshot,
@@ -156,6 +156,12 @@ export async function runProbe(opts: ProbeCliOptions = {}): Promise<ProbeReport>
       (Number(process.env.AETHER_PROBE_TIMEOUT_MS || "") ||
         prompt.timeoutMs ||
         90_000);
+    const budgetMs =
+      snapshotResearchBudgetMs({
+        category: prompt.category,
+        promptId: prompt.id,
+        budgetMs: prompt.budgetMs,
+      }) ?? undefined;
 
     if (mode === "offline-fixtures") {
       if (wantApi && (prompt.surfaces ?? ["api", "ui"]).includes("api")) {
@@ -170,6 +176,7 @@ export async function runProbe(opts: ProbeCliOptions = {}): Promise<ProbeReport>
           visibleText: fixture.visibleText,
           rawText: fixture.rawText ?? fixture.visibleText,
           finished: fixture.finished ?? true,
+          budgetMs,
         });
         results.push(
           toCaseResult({
@@ -223,6 +230,7 @@ export async function runProbe(opts: ProbeCliOptions = {}): Promise<ProbeReport>
           auth,
           preferHeadStart: chatTransport === "durable",
         });
+        snap.budgetMs = budgetMs;
         results.push(
           toCaseResult({
             id: prompt.id,

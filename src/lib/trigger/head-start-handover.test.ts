@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { FinishReason, ModelMessage } from "ai";
 import {
   finishReasonAfterHeadStartAbort,
+  finishReasonForHeadStartHandover,
   isHeadStartAbort,
   modelMessagesHaveAssistantContent,
   modelMessagesNeedToolHandover,
@@ -65,6 +66,30 @@ describe("head-start handover on abort", () => {
     );
   });
 
+  it("keeps handover after step 1 executed read-only tools (AI SDK stopWhen)", () => {
+    const executed = [
+      ...assistantTools(),
+      {
+        role: "tool" as const,
+        content: [
+          {
+            type: "tool-result" as const,
+            toolCallId: "c1",
+            toolName: "web_search",
+            output: { ok: true },
+          },
+        ],
+      },
+    ];
+    assert.equal(finishReasonForHeadStartHandover("stop", executed), "tool-calls");
+    assert.equal(
+      finishReasonForHeadStartHandover("stop", [
+        { role: "assistant", content: [{ type: "text", text: "pong" }] },
+      ]),
+      "stop",
+    );
+  });
+
   it("wraps a rejected finishReason into handover instead of skip", async () => {
     const abort = new Error("chat.handover: idle timeout");
     abort.name = "AbortError";
@@ -77,6 +102,14 @@ describe("head-start handover on abort", () => {
     });
     assert.equal(await result.finishReason, "tool-calls");
     assert.equal(result.toUIMessageStream(), "ok");
+  });
+
+  it("rewrites a successful stop into handover when step 1 already ran tools", async () => {
+    const result = wrapHeadStartStreamResult({
+      finishReason: Promise.resolve("stop") as Promise<FinishReason>,
+      response: Promise.resolve({ messages: assistantTools() }),
+    });
+    assert.equal(await result.finishReason, "tool-calls");
   });
 
   it("does not swallow a real model error as handover", async () => {

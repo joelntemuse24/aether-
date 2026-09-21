@@ -34,7 +34,8 @@ export type ProbeFailureCode =
   | "blank_howzit"
   | "remount_blank"
   | "no_answer_timeout"
-  | "http_error";
+  | "http_error"
+  | "slow_research";
 
 export type ProbePrompt = {
   id: string;
@@ -43,6 +44,8 @@ export type ProbePrompt = {
   tiers: SpeedTier[];
   smoke?: boolean;
   timeoutMs?: number;
+  /** Soft latency budget for snapshot research (cite-one-source). */
+  budgetMs?: number;
   enabled?: boolean;
   source?: string;
   notes?: string;
@@ -74,6 +77,7 @@ export type TranscriptSnapshot = {
   timedOut: boolean;
   finished: boolean;
   workingStripCount: number;
+  budgetMs?: number;
 };
 
 export type ProbeFinding = {

@@ -1,5 +1,6 @@
 import { looksLikeRawToolMarkup } from "../../src/lib/visible-chat-text";
 import type {
+  ProbeCategory,
   ProbeFinding,
   TranscriptSnapshot,
 } from "./types";
@@ -11,6 +12,27 @@ const STUCK_STOP = /\bstuck stop\b|\bstop stuck\b/i;
 const WORKING_LINE = /^(?:working(?: for \S+)?)$/i;
 const UPSTREAM_LEAK =
   /missing authentication header|incorrect api key|invalid api key|ai_apicallerror|aether cloud isn't available/i;
+
+/** Cite-one-source research should feel closer to Grok (~13s), not a 60s deep loop. */
+export const SNAPSHOT_RESEARCH_BUDGET_MS = 30_000;
+
+export function snapshotResearchBudgetMs(input: {
+  category: ProbeCategory;
+  promptId?: string;
+  budgetMs?: number;
+}): number | null {
+  if (typeof input.budgetMs === "number" && input.budgetMs > 0) {
+    return input.budgetMs;
+  }
+  if (input.category === "cite-search") return SNAPSHOT_RESEARCH_BUDGET_MS;
+  if (
+    input.category === "research" &&
+    /unemployment/i.test(input.promptId ?? "")
+  ) {
+    return SNAPSHOT_RESEARCH_BUDGET_MS;
+  }
+  return null;
+}
 
 export function countWorkingStrips(text: string): number {
   if (!text) return 0;
@@ -146,6 +168,23 @@ export function detectFailures(snap: TranscriptSnapshot): ProbeFinding[] {
     findings.push({
       code: "stuck_stop",
       detail: "Timed out on Working with no answer (stuck Stop).",
+    });
+  }
+
+  const budget = snapshotResearchBudgetMs({
+    category: snap.category,
+    promptId: snap.promptId,
+    budgetMs: snap.budgetMs,
+  });
+  if (
+    budget &&
+    snap.elapsedMs > budget &&
+    visible &&
+    (snap.category === "cite-search" || snap.category === "research")
+  ) {
+    findings.push({
+      code: "slow_research",
+      detail: `Snapshot research took ${snap.elapsedMs}ms (budget ${budget}ms).`,
     });
   }
 
