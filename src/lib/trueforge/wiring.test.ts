@@ -23,6 +23,7 @@ describe("TrueForge harness wiring", () => {
     const forge = route.indexOf("return streamTrueForgeHostedChat");
     const legacy = route.indexOf("return streamLegacyLocalChat");
     assert.ok(forge > 0 && legacy > forge);
+    assert.match(route, /trueforgeSidecarReachable/);
     assert.match(route, /system,/);
     assert.match(route, /attachments,/);
   });

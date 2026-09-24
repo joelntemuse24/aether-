@@ -39,7 +39,7 @@ Approvals use the existing confirm card. Approving or declining resumes the paus
 
 ## What still uses the old path
 
-- BYOK turns still use the in-process `/api/chat` loop. TrueForge handles hosted Expert only.
+- BYOK turns still use the in-process `/api/chat` loop. TrueForge handles hosted Expert only when the sidecar answers `/api/v1/capabilities`. If it does not, that turn uses the in-process loop.
 - `AETHER_TRUEFORGE=0` sends hosted turns through Trigger when `TRIGGER_SECRET_KEY` and `TRIGGER_PROJECT_ID` are set, otherwise the in-process loop.
 - Auth.js, Neon / PGlite conversations, Drive, and GitHub connectors stay on the Next app.
 
@@ -48,7 +48,7 @@ Approvals use the existing confirm card. Approving or declining resumes the paus
 - Sandbox provider credentials (Daytona and others)
 - Full MCP OAuth redirect parity when the public origin differs from the sidecar bind address
 - Hosted Postgres + Redis (this cut is standalone SQLite)
-- Vercel serverless: set `AETHER_TRUEFORGE=0` until a long-lived sidecar exists. Hosted chat errors if the sidecar is not running.
+- Vercel serverless has no sidecar. Hosted turns detect that and use the in-process `/api/chat` loop. No `AETHER_TRUEFORGE=0` flag is required.
 - Customer BYOK inside TrueForge (hosted Expert keys only)
 - Aether-owned tools (Drive, GitHub, memory, artifacts) are not registered on the TrueForge session
 - Source chips, the artifact panel, and a structured ask-user card. `tool.response_required` is a sentence in the thread; connect-to-continue is text for `mcp.auth_required`
