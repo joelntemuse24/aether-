@@ -194,8 +194,11 @@ export const Thread: FC = () => {
               <ThreadPrimitive.Messages>
                 {() => <ThreadMessage />}
               </ThreadPrimitive.Messages>
+              {/* Pending Working lives in the thread column, not the composer. */}
+              <AgentStatusStrip />
             </div>
           )}
+          {!hasMessages ? <AgentStatusStrip /> : null}
         </div>
       </ThreadPrimitive.Viewport>
       <div className="aether-composer-dock mx-auto w-full max-w-[var(--thread-max-width)] px-4 pb-4 md:pb-6 sm:px-6">
@@ -792,7 +795,6 @@ const Composer: FC = () => {
       )}
 
       <ContinuePausedBar />
-      <AgentStatusStrip />
 
       {pending && (
         <ClarifyCard

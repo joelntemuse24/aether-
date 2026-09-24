@@ -334,9 +334,9 @@ const ToolShell: FC<{
   const hasBody = !!children;
 
   if (running && !stayOpen) {
-    return hasBody ? (
-      <div className="aether-tool-trace aether-tool-trace--live">{children}</div>
-    ) : null;
+    // Live work is the compact activity one-liner. Rendering bodies here
+    // grows the thread and jumps the docked composer.
+    return null;
   }
 
   if (stayOpen) {

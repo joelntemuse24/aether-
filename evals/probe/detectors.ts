@@ -1,4 +1,5 @@
 import { looksLikeRawToolMarkup } from "../../src/lib/visible-chat-text";
+import { looksLikeThinkingTheater } from "../../src/lib/agent-activity";
 import type {
   ProbeCategory,
   ProbeFinding,
@@ -10,6 +11,8 @@ const STEP_FAILED = /this step failed/i;
 const ZONEINFO = /zoneinfonotfounderror/i;
 const STUCK_STOP = /\bstuck stop\b|\bstop stuck\b/i;
 const WORKING_LINE = /^(?:working(?: for \S+)?)$/i;
+const TOOL_STATUS_LINE =
+  /^(?:Searching|Searched|Reading|Read|Running|Ran|Creating|Created|Writing|Wrote|Checking|Checked|Looking|Looked|Building|Built|Saving|Saved|Generating|Generated|Listing|Listed)\b/;
 const UPSTREAM_LEAK =
   /missing authentication header|incorrect api key|invalid api key|ai_apicallerror|aether cloud isn't available/i;
 
@@ -39,6 +42,18 @@ export function countWorkingStrips(text: string): number {
   let count = 0;
   for (const line of text.split(/\r?\n/)) {
     if (WORKING_LINE.test(line.trim())) count += 1;
+  }
+  return count;
+}
+
+/** Live tool one-liners. Compact status keeps at most one while Working. */
+export function countStackedStatusLines(text: string): number {
+  if (!text) return 0;
+  let count = 0;
+  for (const line of text.split(/\r?\n/)) {
+    const t = line.trim();
+    if (WORKING_LINE.test(t) || /^worked for /i.test(t)) continue;
+    if (TOOL_STATUS_LINE.test(t)) count += 1;
   }
   return count;
 }
@@ -117,6 +132,21 @@ export function detectFailures(snap: TranscriptSnapshot): ProbeFinding[] {
     findings.push({
       code: "duplicate_working",
       detail: `Saw ${working} Working strips (expected at most one).`,
+    });
+  }
+
+  if (looksLikeThinkingTheater(haystack)) {
+    findings.push({
+      code: "thinking_theater",
+      detail: "Decorative Thinking / Planning / Cooking status leaked into the transcript.",
+    });
+  }
+
+  const stacked = countStackedStatusLines(snap.visibleText);
+  if (working >= 1 && stacked >= 2) {
+    findings.push({
+      code: "status_stack",
+      detail: `Saw ${stacked} live tool one-liners under Working (expected at most one).`,
     });
   }
 

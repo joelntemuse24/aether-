@@ -35,7 +35,10 @@ export type ProbeFailureCode =
   | "remount_blank"
   | "no_answer_timeout"
   | "http_error"
-  | "slow_research";
+  | "slow_research"
+  | "thinking_theater"
+  | "status_stack"
+  | "chip_jank";
 
 export type ProbePrompt = {
   id: string;

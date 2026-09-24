@@ -1,18 +1,16 @@
 /*
  * Aether activity chrome.
- * Narration: honest named work (Grok-inspired).
- * Motion: interruptible ChatGPT / Claude / GLM swaps (interfaces.dev).
- * Look: cream canvas, Inter, terracotta / wine. Not Grok’s chevron language.
+ * Narration: honest named work (Grok-inspired). One column: Working →
+ * current tool one-liner → Worked for Ns. No ChatGPT thinking theater.
+ * Look: cream canvas, Inter, terracotta / wine.
  */
 
 @keyframes aether-line-enter {
   from {
     opacity: 0;
-    transform: translateY(3px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -23,6 +21,12 @@
   letter-spacing: 0.01em;
   color: var(--muted);
   -webkit-font-smoothing: antialiased;
+}
+
+.aether-activity--live,
+.aether-activity--pending {
+  /* Reserved one-column slot so the clock swapping in does not jump layout. */
+  min-height: 1.25rem;
 }
 
 .aether-activity__line {
@@ -54,7 +58,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -131,9 +135,10 @@
 .aether-activity__named,
 .aether-activity__chips {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 8px 0 0;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 2px;
+  margin: 4px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -150,11 +155,11 @@
 .aether-activity__chip {
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  background: var(--elevated);
-  font-size: 11px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 12px;
 }
 
 .aether-activity__summary-btn:focus-visible {
@@ -174,7 +179,8 @@
 }
 
 .aether-tool-trace--live {
-  margin: 0.15rem 0;
+  margin: 0;
+  min-height: 0;
 }
 
 .aether-tool-trace__summary {
@@ -236,18 +242,22 @@
   color: var(--error-text);
 }
 
-/* Collapsed source tray: one line — count + first hosts, expands on click. */
+/* Collapsed source tray: reserved one line — count + hosts. Never wrap. */
 .aether-source-tray {
-  margin: 0.7rem 0 0.15rem;
+  margin: 0.5rem 0 0;
+  min-height: 1.5rem;
   font-family: var(--font-ui), Inter, system-ui, sans-serif;
   font-size: 11px;
   -webkit-font-smoothing: antialiased;
 }
 
 .aether-source-tray summary {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
+  max-width: 100%;
+  min-height: 1.5rem;
+  overflow: hidden;
   cursor: pointer;
   list-style: none;
   color: var(--muted);
@@ -261,13 +271,23 @@
   color: var(--accent);
   font-weight: 500;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .aether-source-tray__hosts {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 6px;
-  overflow: hidden;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
   white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.aether-source-tray__hosts::-webkit-scrollbar {
+  display: none;
 }
 
 .aether-source-tray__host,
@@ -278,7 +298,8 @@
 .aether-source-tray__pill {
   display: inline-flex;
   align-items: center;
-  max-width: 10rem;
+  flex-shrink: 0;
+  max-width: 9rem;
   overflow: hidden;
   text-overflow: ellipsis;
   padding: 2px 8px;
@@ -286,6 +307,7 @@
   border-radius: 999px;
   background: var(--elevated);
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .aether-source-tray[open] summary {
@@ -296,8 +318,11 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 0.7rem 0 0.15rem;
+  max-height: 6.5rem;
+  margin: 0.15rem 0 0;
   padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   list-style: none;
   font-family: var(--font-ui), Inter, system-ui, sans-serif;
   font-size: 11px;
@@ -551,32 +576,7 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .aether-activity--enter {
-    animation: aether-line-enter 180ms ease-out both;
-  }
-
-  .aether-activity__named-item,
-  .aether-activity__chip {
-    animation: aether-line-enter 180ms ease-out both;
-  }
-
-  .aether-activity__named-item:nth-child(2),
-  .aether-activity__chip:nth-child(2) {
-    animation-delay: 30ms;
-  }
-
-  .aether-activity__named-item:nth-child(3),
-  .aether-activity__chip:nth-child(3) {
-    animation-delay: 60ms;
-  }
-
-  .aether-activity__named-item:nth-child(4),
-  .aether-activity__chip:nth-child(4) {
-    animation-delay: 90ms;
-  }
-
-  .aether-activity__named-item:nth-child(n + 5),
-  .aether-activity__chip:nth-child(n + 5) {
-    animation-delay: 120ms;
+    animation: aether-line-enter 160ms ease-out both;
   }
 }
 
@@ -584,6 +584,11 @@
   flex-shrink: 0;
   position: relative;
   background: var(--canvas);
+}
+
+.aether-composer-dock .aether-activity {
+  /* Status never lives in the composer — keep this as a tripwire. */
+  display: none;
 }
 
 /* Streaming caret: terracotta pulse, not a solid black disc. */
