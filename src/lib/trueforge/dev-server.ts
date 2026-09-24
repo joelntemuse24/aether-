@@ -67,12 +67,8 @@ async function main() {
   const mode = process.argv[2] === "start" ? "start" : "dev";
   const sidecar = await ensureSidecar();
   if (sidecar || (trueforgeSidecarEnabled() && (await isUp(trueforgeOrigin())))) {
-    try {
-      const seeded = await seedAetherModelProviders(trueforgeOrigin());
-      console.info("[aether] TrueForge providers", seeded);
-    } catch (err) {
-      console.error("[aether] TrueForge provider seed failed", err);
-    }
+    const seeded = await seedAetherModelProviders(trueforgeOrigin());
+    console.info("[aether] TrueForge providers", seeded);
   }
 
   const nextBin = path.join(process.cwd(), "node_modules/next/dist/bin/next");
@@ -93,4 +89,7 @@ async function main() {
   });
 }
 
-void main();
+void main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

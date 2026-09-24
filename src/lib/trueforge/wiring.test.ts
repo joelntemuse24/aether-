@@ -3,9 +3,10 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 describe("TrueForge harness wiring", () => {
-  it("proxies the harness API and keeps the Aether chat shell", () => {
+  it("keeps the Aether chat shell and does not publish the sidecar", () => {
     const config = readFileSync(new URL("../../../next.config.ts", import.meta.url), "utf8");
-    assert.match(config, /\/api\/v1\/:path\*/);
+    assert.doesNotMatch(config, /\/api\/v1\/:path\*/);
+    assert.doesNotMatch(config, /rewrites\s*\(/);
     const layout = readFileSync(
       new URL("../../app/(chat)/layout.tsx", import.meta.url),
       "utf8",
@@ -22,5 +23,7 @@ describe("TrueForge harness wiring", () => {
     const forge = route.indexOf("return streamTrueForgeHostedChat");
     const legacy = route.indexOf("return streamLegacyLocalChat");
     assert.ok(forge > 0 && legacy > forge);
+    assert.match(route, /system,/);
+    assert.match(route, /attachments,/);
   });
 });

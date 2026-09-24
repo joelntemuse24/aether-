@@ -8,6 +8,7 @@ export type UiChunk = Record<string, unknown>;
 type ToolBuf = { id?: string; name?: string; args: string };
 
 export type TrueForgeUiState = {
+  textSeq: number;
   textId: string | null;
   reasoningId: string | null;
   tools: Map<number, ToolBuf>;
@@ -16,6 +17,7 @@ export type TrueForgeUiState = {
 
 export function createTrueForgeUiState(): TrueForgeUiState {
   return {
+    textSeq: 0,
     textId: null,
     reasoningId: null,
     tools: new Map(),
@@ -37,26 +39,44 @@ function textOf(content: unknown): string {
 
 function ensureText(state: TrueForgeUiState, chunks: UiChunk[]): string {
   if (state.textId) return state.textId;
-  state.textId = "tf-text";
+  state.textSeq += 1;
+  state.textId = `tf-text-${state.textSeq}`;
   chunks.push({ type: "text-start", id: state.textId });
   return state.textId;
 }
 
-function openTool(state: TrueForgeUiState, chunks: UiChunk[], tool: ToolBuf) {
-  if (!tool.id || !tool.name || state.opened.has(tool.id)) return;
-  state.opened.add(tool.id);
-  let input: unknown = {};
+function parseToolInput(args: string): unknown {
+  if (!args) return {};
   try {
-    input = tool.args ? JSON.parse(tool.args) : {};
+    return JSON.parse(args);
   } catch {
-    input = { raw: tool.args };
+    return { raw: args };
   }
-  chunks.push({
-    type: "tool-input-available",
-    toolCallId: tool.id,
-    toolName: tool.name,
-    input,
-  });
+}
+
+/** Emit tool-input-available once arguments have stopped streaming. */
+export function flushPendingTools(state: TrueForgeUiState, chunks: UiChunk[]) {
+  for (const tool of state.tools.values()) {
+    if (!tool.id || !tool.name || state.opened.has(tool.id)) continue;
+    state.opened.add(tool.id);
+    state.textId = null;
+    chunks.push({
+      type: "tool-input-available",
+      toolCallId: tool.id,
+      toolName: tool.name,
+      input: parseToolInput(tool.args),
+    });
+  }
+}
+
+function toolPreview(state: TrueForgeUiState, toolCallId: string): string {
+  for (const tool of state.tools.values()) {
+    if (tool.id !== toolCallId) continue;
+    const name = tool.name || "tool";
+    const args = tool.args ? ` ${tool.args.slice(0, 280)}` : "";
+    return `${name}${args}`;
+  }
+  return toolCallId;
 }
 
 function absorbToolDelta(
@@ -78,7 +98,6 @@ function absorbToolDelta(
     if (row.function?.name) buf.name = row.function.name;
     if (row.function?.arguments) buf.args += row.function.arguments;
     state.tools.set(index, buf);
-    openTool(state, chunks, buf);
   }
 }
 
@@ -99,6 +118,7 @@ export function chunksForTrueForgeEvent(
       }
       chunks.push({ type: "reasoning-delta", id: state.reasoningId, delta: reasoning });
     }
+    if (event.finishReason) flushPendingTools(state, chunks);
     const delta = textOf(event.content);
     if (delta) {
       const id = ensureText(state, chunks);
@@ -132,9 +152,9 @@ export function chunksForTrueForgeEvent(
         if (row.function?.name) buf.name = row.function.name;
         if (row.function?.arguments && !buf.args) buf.args = row.function.arguments;
         state.tools.set(index, buf);
-        openTool(state, chunks, buf);
       });
     }
+    flushPendingTools(state, chunks);
     return chunks;
   }
 
@@ -158,18 +178,36 @@ export function chunksForTrueForgeEvent(
   }
 
   if (type === "tool.approval_required" && Array.isArray(event.toolCalls)) {
+    flushPendingTools(state, chunks);
+    const sessionId = typeof event.sessionId === "string" ? event.sessionId : "";
     for (const call of event.toolCalls) {
       if (!call || typeof call !== "object") continue;
       const toolCallId = String((call as { id?: string }).id ?? "");
       if (!toolCallId) continue;
-      const confirmationId = `tf_${toolCallId}`;
+      const preview = toolPreview(state, toolCallId);
+      const callConfirmation =
+        call && typeof call === "object" && "confirmationId" in call
+          ? (call as { confirmationId?: unknown }).confirmationId
+          : undefined;
+      const confirmationId =
+        typeof callConfirmation === "string" && callConfirmation
+          ? callConfirmation
+          : typeof event.confirmationId === "string" && event.confirmationId
+            ? event.confirmationId
+            : "";
+      chunks.push({
+        type: "tool-output-available",
+        toolCallId,
+        output: { pending_approval: true },
+      });
+      if (!confirmationId) continue;
       chunks.push({
         type: "tool-input-available",
         toolCallId: `confirm-${toolCallId}`,
         toolName: "request_confirmation",
         input: {
           title: "Allow this step?",
-          preview: toolCallId,
+          preview,
           action: "approve",
         },
       });
@@ -180,10 +218,22 @@ export function chunksForTrueForgeEvent(
           needs_confirmation: true,
           confirmation_id: confirmationId,
           title: "Allow this step?",
-          preview: "TrueForge is waiting for approval before it continues.",
+          preview,
+          session_id: sessionId,
         },
       });
     }
+    return chunks;
+  }
+
+  if (type === "tool.response_required") {
+    flushPendingTools(state, chunks);
+    const id = ensureText(state, chunks);
+    chunks.push({
+      type: "text-delta",
+      id,
+      delta: "\n\nThis step needs an answer in the composer before it can continue.",
+    });
     return chunks;
   }
 
@@ -221,6 +271,7 @@ export function chunksForTrueForgeEvent(
 
 export function closeTrueForgeUi(state: TrueForgeUiState): UiChunk[] {
   const chunks: UiChunk[] = [];
+  flushPendingTools(state, chunks);
   if (state.reasoningId) chunks.push({ type: "reasoning-end", id: state.reasoningId });
   if (state.textId) chunks.push({ type: "text-end", id: state.textId });
   return chunks;

@@ -7,6 +7,7 @@ export const AETHER_BUZZ_PROVIDER = "buzz";
 export const AETHER_OPENROUTER_PROVIDER = "openrouter";
 /** Composer FQN. Expert default is GPT-5.6 Luna on Buzz. */
 export const AETHER_EXPERT_MODEL_FQN = "buzz/gpt-5-6-luna";
+export const AETHER_OPENROUTER_EXPERT_FQN = "openrouter/gpt-5-6-luna";
 
 export const DEFAULT_BUZZ_BASE_URL = "https://api.buzzai.cc/v1";
 export const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
@@ -47,9 +48,13 @@ const LUNA_PROPERTIES: AetherConfiguredModel["properties"] = {
   reasoningEfforts: LUNA_EFFORTS,
 };
 
-function envValue(env: Record<string, string | undefined>, name: string): string {
-  const value = (env[name] ?? "").trim();
-  // A copied base URL in the key slot must not be stored as a credential.
+function envPlain(env: Record<string, string | undefined>, name: string): string {
+  return (env[name] ?? "").trim();
+}
+
+/** Keys only. A copied base URL in the key slot is not a credential. */
+function envSecret(env: Record<string, string | undefined>, name: string): string {
+  const value = envPlain(env, name);
   if (/^https?:\/\//i.test(value)) return "";
   return value;
 }
@@ -90,12 +95,12 @@ export function aetherProviderManifests(
   const manifests: AetherProviderManifest[] = [];
 
   const buzzKey =
-    envValue(env, "AETHER_HOSTED_BUZZ_API_KEY") ||
-    envValue(env, "AETHER_HOSTED_CLAUDE_API_KEY");
+    envSecret(env, "AETHER_HOSTED_BUZZ_API_KEY") ||
+    envSecret(env, "AETHER_HOSTED_CLAUDE_API_KEY");
   if (buzzKey) {
     const base = normalizeBuzzBaseUrl(
-      envValue(env, "AETHER_HOSTED_BUZZ_BASE_URL") ||
-        envValue(env, "AETHER_HOSTED_CLAUDE_BASE_URL"),
+      envPlain(env, "AETHER_HOSTED_BUZZ_BASE_URL") ||
+        envPlain(env, "AETHER_HOSTED_CLAUDE_BASE_URL"),
     );
     manifests.push({
       type: "custom",
@@ -109,10 +114,10 @@ export function aetherProviderManifests(
     });
   }
 
-  const openRouterKey = envValue(env, "OPENROUTER_API_KEY");
+  const openRouterKey = envSecret(env, "OPENROUTER_API_KEY");
   if (openRouterKey) {
     const base =
-      envValue(env, "OPENROUTER_BASE_URL").replace(/\/$/, "") ||
+      envPlain(env, "OPENROUTER_BASE_URL").replace(/\/$/, "") ||
       DEFAULT_OPENROUTER_BASE_URL;
     manifests.push({
       type: "custom",

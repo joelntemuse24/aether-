@@ -41,6 +41,14 @@ describe("aether TrueForge providers", () => {
     assert.equal(manifests[0]?.baseUrl, DEFAULT_BUZZ_BASE_URL);
   });
 
+  it("keeps a custom Buzz base URL", () => {
+    const manifests = aetherProviderManifests({
+      AETHER_HOSTED_BUZZ_API_KEY: "buzz-secret",
+      AETHER_HOSTED_BUZZ_BASE_URL: "https://buzz.example/v1/",
+    });
+    assert.equal(manifests[0]?.baseUrl, "https://buzz.example/v1");
+  });
+
   it("skips a key that is actually a URL", () => {
     assert.deepEqual(
       aetherProviderManifests({ OPENROUTER_API_KEY: "https://openrouter.ai/api/v1" }),

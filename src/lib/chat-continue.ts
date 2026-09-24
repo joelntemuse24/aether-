@@ -95,12 +95,23 @@ export function hasIncompleteToolWork(messages: UIMessage[]): boolean {
   return parts.some((part) => isToolPart(part) && !toolPartIsComplete(part));
 }
 
+function toolWaitsForConfirmation(part: UIMessage["parts"][number]): boolean {
+  const rec = asPartRecord(part);
+  const output = rec.output ?? rec.result;
+  return (
+    !!output &&
+    typeof output === "object" &&
+    (output as { needs_confirmation?: boolean }).needs_confirmation === true
+  );
+}
+
 /** Stream ended between tools, or tools never resolved — not a finished answer. */
 export function looksLikeUnfinishedTurn(messages: UIMessage[]): boolean {
-  if (hasIncompleteToolWork(messages)) return true;
   const last = messages[messages.length - 1];
+  const parts = last && last.role === "assistant" && Array.isArray(last.parts) ? last.parts : [];
+  if (parts.some((part) => isToolPart(part) && toolWaitsForConfirmation(part))) return false;
+  if (hasIncompleteToolWork(messages)) return true;
   if (!last || last.role !== "assistant") return false;
-  const parts = Array.isArray(last.parts) ? last.parts : [];
   const hasTools = parts.some((part) => isToolPart(part));
   if (!hasTools) return false;
   const text = parts

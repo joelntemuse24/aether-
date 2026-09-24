@@ -137,9 +137,17 @@ function ConfirmCardActions({
       }
       const data = (await res.json().catch(() => ({}))) as {
         execution?: ConfirmExecution;
+        assistantText?: string;
       };
       setResolved(approved ? "approved" : "declined");
       if (approved && data.execution) onApprovedExecution?.(data.execution);
+      if (typeof data.assistantText === "string" && data.assistantText.trim()) {
+        window.dispatchEvent(
+          new CustomEvent("aether:trueforge-followup", {
+            detail: data.assistantText,
+          }),
+        );
+      }
       window.dispatchEvent(
         new CustomEvent("aether:notice", {
           detail: approved ? copy.approvedNotice : copy.cancelledNotice,

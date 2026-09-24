@@ -279,6 +279,8 @@ export async function POST(req: Request) {
       return streamTrueForgeHostedChat({
         conversationId,
         userText: lastUserText(enrichedMessages) || lastUserText(messages),
+        system,
+        attachments,
         abortSignal: req.signal,
       });
     }

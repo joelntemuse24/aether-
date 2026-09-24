@@ -21,11 +21,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). Node `>=22.14`. Set `AETHER_HOSTED_BUZZ_API_KEY` in `.env.local` for Luna. `npm run dev` starts the TrueForge sidecar beside Next.
 
-Legacy hosted path (`AETHER_TRUEFORGE=0`):
-
-1. Open **Settings** (opens automatically on first visit).
-2. Paste an [OpenRouter](https://openrouter.ai/keys) API key (`sk-or-…`).
-3. Pick a model in the composer and start chatting.
+Legacy hosted path (`AETHER_TRUEFORGE=0`): hosted turns use Trigger when `TRIGGER_SECRET_KEY` and `TRIGGER_PROJECT_ID` are set, otherwise the in-process `/api/chat` loop. BYOK still uses Settings → Bring your own key.
 
 Keys and conversations live in **browser localStorage** only.
 
