@@ -273,6 +273,16 @@ export async function POST(req: Request) {
       }
     }
 
+    // TrueForge runs hosted Expert turns. The Aether thread still renders the stream.
+    if (hosted && process.env.AETHER_TRUEFORGE !== "0") {
+      const { streamTrueForgeHostedChat } = await import("@/lib/trueforge/chat-stream");
+      return streamTrueForgeHostedChat({
+        conversationId,
+        userText: lastUserText(enrichedMessages) || lastUserText(messages),
+        abortSignal: req.signal,
+      });
+    }
+
     // Hermes owns the hosted tool loop. BYOK (and hosted without Hermes)
     // stay on the isolated local streamText path — user keys never leave Vercel.
     if (hermesLive) {

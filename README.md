@@ -1,6 +1,6 @@
 # Aether
 
-A high-fidelity AI chat workspace inspired by modern cream-canvas assistants. Built with **Next.js 15**, **assistant-ui**, and the **Vercel AI SDK**. Bring your own key — nothing is stored on a server.
+A high-fidelity AI chat workspace. The screen is the existing Aether shell. Hosted Expert turns run on the **TrueForge** harness (GPT-5.6 Luna on Buzz, OpenRouter as fallback) instead of Trigger.dev. See [docs/trueforge-harness.md](docs/trueforge-harness.md).
 
 ## Features
 
@@ -19,7 +19,9 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). Node `>=22.14`. Set `AETHER_HOSTED_BUZZ_API_KEY` in `.env.local` for Luna. `npm run dev` starts the TrueForge sidecar beside Next.
+
+Legacy hosted path (`AETHER_TRUEFORGE=0`):
 
 1. Open **Settings** (opens automatically on first visit).
 2. Paste an [OpenRouter](https://openrouter.ai/keys) API key (`sk-or-…`).

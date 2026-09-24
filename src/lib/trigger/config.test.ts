@@ -31,13 +31,24 @@ describe("Trigger chat feature flag", () => {
   });
 
   it("selects durable transport when configured and request fallback otherwise", () => {
-    assert.equal(resolveChatTransportMode({}), "request");
+    assert.equal(resolveChatTransportMode({ AETHER_TRUEFORGE: "0" }), "request");
+    assert.equal(
+      resolveChatTransportMode({
+        AETHER_TRUEFORGE: "0",
+        TRIGGER_SECRET_KEY: "tr_dev_x",
+        TRIGGER_PROJECT_ID: "proj_x",
+      }),
+      "durable",
+    );
+  });
+
+  it("keeps hosted turns on the request path while TrueForge is the harness", () => {
     assert.equal(
       resolveChatTransportMode({
         TRIGGER_SECRET_KEY: "tr_dev_x",
         TRIGGER_PROJECT_ID: "proj_x",
       }),
-      "durable",
+      "request",
     );
   });
 

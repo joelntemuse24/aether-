@@ -18,6 +18,8 @@ export function isTriggerChatConfigured(
 export function resolveChatTransportMode(
   env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
 ): ChatTransportMode {
+  // TrueForge owns hosted turns. Trigger stays available only when that sidecar is off.
+  if (env.AETHER_TRUEFORGE !== "0") return "request";
   return isTriggerChatConfigured(env) ? "durable" : "request";
 }
 
