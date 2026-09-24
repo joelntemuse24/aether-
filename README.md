@@ -31,6 +31,8 @@
 
 # TrueForge
 
+**Aether fork.** This tree is skinned as Aether and talks to Buzz (GPT-5.6 Luna) and OpenRouter. It does not use Trigger.dev. Local SQLite is the first runnable path. Setup, env vars, and what is deferred: [docs/aether.md](docs/aether.md).
+
 TrueForge runs the agent execution loop for you - model calls, MCP tools, skills, sandboxing, approvals, context management, and session state - and exposes it three ways: a **chat UI**, an **HTTP API** with a TypeScript **SDK**, and an embeddable **UI SDK**.
 
 ![TrueForge Chat UI](./docs/images/hero.png)

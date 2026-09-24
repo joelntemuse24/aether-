@@ -1,0 +1,51 @@
+import type { ThemeConfig } from '@truefoundry/trueforge-ui';
+
+/**
+ * Aether cream canvas. Inter for chrome, Cormorant Garamond for assistant reading
+ * (see index.css). Terracotta is the only accent.
+ */
+export const aetherTheme: ThemeConfig = {
+  mode: 'light',
+  brand: { mode: 'icon-title', name: 'Aether' },
+  tokens: {
+    sidebarBg: '#f4efe6',
+    sidebarText: '#1a1714',
+    topbarBg: '#faf7f1',
+    primaryBg: '#faf7f1',
+    secondaryBg: '#f4efe6',
+    border: 'rgba(26, 23, 20, 0.08)',
+    fontFamily: '"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
+    inputBoxBg: '#faf7f1',
+    inputBorder: 'rgba(26, 23, 20, 0.08)',
+    textPrimary: '#1a1714',
+    textSecondary: '#6b6458',
+    cardBg: '#faf7f1',
+    dropdownSelectedItemBg: 'rgba(212, 115, 79, 0.10)',
+    dropdownSelectedItemText: '#1a1714',
+    userMessageBg: '#ece6d9',
+    userMessageText: '#1a1714',
+    assistantMessageBg: 'transparent',
+    assistantMessageText: '#1a1714',
+    primaryButtonBg: '#d4734f',
+    primaryButtonHover: '#c26442',
+    primaryButtonText: '#faf7f1',
+    secondaryButtonBg: '#f4efe6',
+    secondaryButtonHover: '#ece6d9',
+    secondaryButtonText: '#1a1714',
+    ghostButtonBg: 'transparent',
+    ghostButtonHover: 'rgba(0, 0, 0, 0.04)',
+    ghostButtonText: '#2e2a24',
+    successBg: '#3f6b4a',
+    successText: '#faf7f1',
+    failureBg: '#b42318',
+    failureText: '#faf7f1',
+    warningBg: '#a15c2a',
+    warningText: '#faf7f1',
+    focusRing: 'rgba(212, 115, 79, 0.35)',
+    radius: '0.75rem',
+    composerRadius: '1.25rem',
+    overlay: 'rgba(26, 23, 20, 0.28)',
+    shadowColor: '#1a1714',
+    scrollbarThumb: 'rgba(26, 23, 20, 0.18)',
+  },
+};

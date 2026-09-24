@@ -8,9 +8,10 @@ body,
 }
 
 body {
-  /* Pre-hydration paint before the SDK theme root mounts; kept literal intentionally. */
-  color: #09090b;
-  background: #fff;
+  /* Pre-hydration paint before the SDK theme root mounts. Cream, not white. */
+  color: #1a1714;
+  background: #faf7f1;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 
 .app-root {
@@ -22,25 +23,18 @@ body {
   height: 100%;
 }
 
-/* Primary CTA fill: gradient isn't a valid Tailwind color token, so paint it as background-image. */
-.harness-primary-gradient button.bg-primary-button-bg,
-.harness-primary-gradient .auth-screen-button {
-  background-image: radial-gradient(289.46% 144.73% at 8.33% 7.41%, #b27aff 0%, #155dfc 58.99%, #4f39f6 100%);
+/* Assistant reading face. Chrome stays Inter via the theme token. */
+[data-slot='aui_assistant-message-root'] {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.125rem;
+  line-height: 1.55;
 }
 
-.harness-primary-gradient[data-theme='light'] aside.bg-sidebar-bg button.bg-primary-button-bg {
-  box-shadow: 0 0.25rem 0.75rem color-mix(in oklab, #4f39f6 35%, transparent);
-}
-
-/* New Agent welcome only: polka-dot canvas on the empty thread viewport.
-   `.new-agent-welcome` is set by NewAgentWelcomeScreen; WelcomeScreen unmounts once the thread has messages. */
-[data-slot='aui_thread-viewport']:has(.new-agent-welcome) {
-  background-image: radial-gradient(
-    circle,
-    color-mix(in oklab, var(--border, #d4d4d8) 85%, transparent) 1px,
-    transparent 1px
-  );
-  background-size: 1.25rem 1.25rem;
+/* Real tool steps only: small type, no shimmer. */
+[data-slot='tool-group-card'],
+[data-slot='tool-call-card'] {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.75rem;
 }
 
 .boot-screen {

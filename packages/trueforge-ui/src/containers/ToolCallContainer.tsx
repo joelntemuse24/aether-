@@ -151,8 +151,13 @@ export const ToolCallContainer: ToolCallMessagePartComponent = part => {
 
   const showApproval = isRequiresAction && hasPendingToolApproval(part.approval);
 
-  const durationText = elapsedMs === undefined ? undefined : formatDuration(elapsedMs);
   const status = toStatus(part.status?.type);
+  const durationText =
+    elapsedMs === undefined
+      ? undefined
+      : status === 'success'
+        ? `Worked for ${formatDuration(elapsedMs)}`
+        : formatDuration(elapsedMs);
   const onToggle = () => setExpanded(prev => !prev);
   const expandSubAgent = useCallback(() => setExpanded(true), []);
   useRegisterApprovalExpand(isSubAgent ? part.toolCallId : '', expandSubAgent);

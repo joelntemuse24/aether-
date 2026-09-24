@@ -21,6 +21,8 @@ import { parseAuthErrorReason, shouldShowAuthErrorScreen, stripAuthErrorSearch }
 import { GetStartedScreen } from './GetStartedScreen';
 import { LogoutButton } from './LogoutButton';
 import { NewAgentWelcomeScreen } from './NewAgentWelcomeScreen';
+import { aetherTheme } from './aetherTheme';
+import { preferAetherExpertModel } from './preferExpertModel';
 import { API_BASE_URL, uiRouterBasename } from './publicPath';
 
 /** Shared cookie/OIDC fetch for boot helpers and `<TrueForgeUI server />`. */
@@ -29,14 +31,7 @@ const authAwareFetch = createAuthAwareFetch();
 const bootClient = createTrueForgeClient({ baseUrl: API_BASE_URL, fetch: authAwareFetch });
 const routerBasename = uiRouterBasename();
 
-/** Host brand: primary CTA fill is a gradient (see `index.css`); keep solid token for accents. */
-const appTheme: ThemeConfig = {
-  className: 'harness-primary-gradient',
-  tokens: {
-    primaryButtonBg: '#6366F1',
-    primaryButtonHover: '#3d2dd4',
-  },
-};
+const appTheme: ThemeConfig = aetherTheme;
 
 function Loader() {
   const { mode } = useTheme();
@@ -110,7 +105,7 @@ export function App() {
         if (state.cancelled) {
           return;
         }
-        const first = models[0];
+        const first = preferAetherExpertModel(models);
         const sandboxConfig = { sandbox: { enabled: capabilities.sandbox.enabled } };
         if (first === undefined) {
           setBoot({

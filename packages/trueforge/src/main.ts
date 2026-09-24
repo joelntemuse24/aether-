@@ -60,6 +60,7 @@ import { RequestReplyExecutor, RequestReplyRouter, type RedisClient } from '@tru
 import type { Kysely, Transaction } from 'kysely';
 import type { Logger } from 'winston';
 
+import { seedAetherModelProviders } from './aether/seedAetherProviders';
 import { createServerApp } from './app';
 import { TrueForgeAuthorizer, type Authorizer } from './auth/authorizer';
 import { createAuthenticator } from './auth/createAuthenticator';
@@ -347,6 +348,9 @@ async function createStandalonePersistence(options: {
   const sandboxProviderStore = new SqliteSandboxProviderStore(db);
   const webSearchProviderStore = new SqliteWebSearchProviderStore(db);
   const skillStore = new SqliteSkillStore(db);
+  if (!isTrueFoundryModeEnabled(configuration)) {
+    await seedAetherModelProviders(modelProviderStore, logger);
+  }
   return {
     withTransaction: callback => db.transaction().execute(callback),
     sessionStore: new SqliteSessionStore(db),
@@ -452,6 +456,9 @@ async function createDistributedPersistence(options: {
   const sandboxProviderStore = new PostgresSandboxProviderStore(db);
   const webSearchProviderStore = new PostgresWebSearchProviderStore(db);
   const skillStore = new PostgresSkillStore(db);
+  if (serviceFoundryClient === undefined) {
+    await seedAetherModelProviders(modelProviderStore, logger);
+  }
   const agentStore = new PostgresAgentStore(db);
   const turnSkillsResolverStore = buildTurnSkillsResolverStore({
     persistenceStore: skillStore,
