@@ -192,6 +192,35 @@ describe("chat-continue", () => {
     );
   });
 
+  it("does not auto-continue while a confirm card is waiting", () => {
+    const messages: UIMessage[] = [
+      {
+        id: "a1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-request_confirmation",
+            state: "output-available",
+            toolCallId: "confirm-1",
+            output: { needs_confirmation: true, confirmation_id: "tf_abc" },
+          } as UIMessage["parts"][number],
+        ],
+      },
+    ];
+    assert.equal(looksLikeUnfinishedTurn(messages), false);
+    assert.equal(
+      shouldAutoContinue({
+        isAbort: false,
+        isDisconnect: false,
+        isError: false,
+        messages,
+        runDurationMs: 4_000,
+        continueCount: 0,
+      }),
+      false,
+    );
+  });
+
   it("does not treat a completed answer with tools as unfinished", () => {
     const messages: UIMessage[] = [
       {

@@ -69,6 +69,12 @@ export async function POST(req: Request) {
     );
   }
 
+  if (confirmationId.startsWith("tf_")) {
+    const { resumeTrueForgeApproval } = await import("@/lib/trueforge/approvals");
+    const resumed = await resumeTrueForgeApproval(confirmationId, body.approved);
+    if (resumed) return resumed;
+  }
+
   const peek = await peekConfirmation(confirmationId);
   const replay = confirmationReplayPayload(body.payload);
 

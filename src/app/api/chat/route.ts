@@ -273,6 +273,20 @@ export async function POST(req: Request) {
       }
     }
 
+    // TrueForge runs hosted Expert turns when the sidecar is up. Otherwise the
+    // existing in-process / Hermes path handles the turn (Vercel has no sidecar).
+    const { trueforgeSidecarReachable } = await import("@/lib/trueforge/config");
+    if (hosted && (await trueforgeSidecarReachable())) {
+      const { streamTrueForgeHostedChat } = await import("@/lib/trueforge/chat-stream");
+      return streamTrueForgeHostedChat({
+        conversationId,
+        userText: lastUserText(enrichedMessages) || lastUserText(messages),
+        system,
+        attachments,
+        abortSignal: req.signal,
+      });
+    }
+
     // Hermes owns the hosted tool loop. BYOK (and hosted without Hermes)
     // stay on the isolated local streamText path — user keys never leave Vercel.
     if (hermesLive) {

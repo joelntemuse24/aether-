@@ -613,6 +613,25 @@ function useChatThreadRuntime() {
 
   const { messages, setMessages, status, error } = chat;
   messagesRef.current = messages;
+
+  useEffect(() => {
+    const onFollowup = (event: Event) => {
+      const text = (event as CustomEvent<string>).detail;
+      if (typeof text !== "string" || !text.trim()) return;
+      const next = [
+        ...messagesRef.current,
+        {
+          id: `tf-followup-${crypto.randomUUID()}`,
+          role: "assistant" as const,
+          parts: [{ type: "text" as const, text }],
+        },
+      ];
+      messagesRef.current = next;
+      setMessages(next);
+    };
+    window.addEventListener("aether:trueforge-followup", onFollowup);
+    return () => window.removeEventListener("aether:trueforge-followup", onFollowup);
+  }, [setMessages]);
   statusRef.current = status;
   errorRef.current = error;
 

@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   // `import.meta.url` resolution breaks with ERR_INVALID_ARG_TYPE on URL.
   // `@trigger.dev/sdk` is transpiled for the client transport hook — do not
   // also list it in serverExternalPackages (Next 15 treats that as a conflict).
-  serverExternalPackages: ["@electric-sql/pglite"],
+  serverExternalPackages: ["@electric-sql/pglite", "@truefoundry/trueforge-sdk"],
   transpilePackages: ["@trigger.dev/sdk"],
 };
 
