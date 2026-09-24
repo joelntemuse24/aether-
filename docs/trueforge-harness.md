@@ -13,9 +13,11 @@ The chat the user sees is the existing Aether shell: cream canvas, Inter chrome,
 | `AETHER_HOSTED_CLAUDE_API_KEY` / `AETHER_HOSTED_CLAUDE_BASE_URL` | Legacy aliases for the Buzz key and base URL. |
 | `OPENROUTER_API_KEY` | Optional fallback catalog (`openrouter/gpt-5-6-luna`, sol, terra). |
 | `OPENROUTER_BASE_URL` | Defaults to `https://openrouter.ai/api/v1`. |
-| `TRUEFORGE_PORT` | Sidecar port. Default `8790`. Bound to `127.0.0.1`. The browser never talks to it. |
+| `AETHER_TRUEFORGE_URL` | Remote sidecar origin, for example `https://forge.example.com`. Unset uses loopback. |
+| `AETHER_TRUEFORGE_TOKEN` | Shared secret. Required with the URL. Sent as `Authorization: Bearer`. |
+| `TRUEFORGE_PORT` | Public port. Default `8790`. |
 | `APP_DATA_DIR_SUFFIX` | SQLite directory suffix. Default `aether`. |
-| `AETHER_TRUEFORGE=0` | Do not start the sidecar. Trigger owns hosted turns when it is configured. |
+| `AETHER_TRUEFORGE=0` | Do not use the sidecar. Trigger owns hosted turns when it is configured. |
 
 Keys are read on the server at sidecar boot and upserted into TrueForge. They are not written to git or sent to the browser.
 
@@ -48,7 +50,46 @@ Approvals use the existing confirm card. Approving or declining resumes the paus
 - Sandbox provider credentials (Daytona and others)
 - Full MCP OAuth redirect parity when the public origin differs from the sidecar bind address
 - Hosted Postgres + Redis (this cut is standalone SQLite)
-- Vercel serverless has no sidecar. Hosted turns detect that and use the in-process `/api/chat` loop. No `AETHER_TRUEFORGE=0` flag is required.
+- Running TrueForge inside a Vercel function. Point `AETHER_TRUEFORGE_URL` at the VM instead. If that URL is unset or the VM does not answer, hosted chat uses the in-process loop.
 - Customer BYOK inside TrueForge (hosted Expert keys only)
 - Aether-owned tools (Drive, GitHub, memory, artifacts) are not registered on the TrueForge session
 - Source chips, the artifact panel, and a structured ask-user card. `tool.response_required` is a sentence in the thread; connect-to-continue is text for `mcp.auth_required`
+
+## VM
+
+The sidecar is a long-lived process. Vercel only calls it.
+
+Install Docker (or Node.js `>=22.14` and this repo) on the Linux box.
+
+On the VM:
+
+| Variable | Purpose |
+| --- | --- |
+| `AETHER_TRUEFORGE_TOKEN` | Shared secret. The process refuses to listen without it. |
+| `AETHER_HOSTED_BUZZ_API_KEY` | Buzz token. Seeded at boot. |
+| `AETHER_HOSTED_BUZZ_BASE_URL` | Optional. `https://api.buzzai.cc` becomes `https://api.buzzai.cc/v1`. |
+| `OPENROUTER_API_KEY` | Optional fallback. |
+| `OPENROUTER_BASE_URL` | Optional. Default `https://openrouter.ai/api/v1`. |
+
+Docker:
+
+```bash
+cd deploy/trueforge
+# export the variables above, then:
+docker compose up -d --build
+```
+
+Without Docker, from the repo root: `npm install` then `npm run trueforge`.
+
+Open port `8790` only to the HTTPS proxy, not to the public internet. `GET /health` is unauthenticated and reports whether TrueForge is up. Every other request needs `Authorization: Bearer <AETHER_TRUEFORGE_TOKEN>`.
+
+Put HTTPS in front before Vercel calls it. Caddy: reverse-proxy `localhost:8790` and let it get a certificate. Or run `cloudflared tunnel` to that port. Do not terminate TLS inside this container.
+
+On Vercel:
+
+| Variable | Purpose |
+| --- | --- |
+| `AETHER_TRUEFORGE_URL` | `https://` origin of the VM. No path. |
+| `AETHER_TRUEFORGE_TOKEN` | The same secret as the VM. |
+
+Leave the Buzz and OpenRouter keys on the VM. If the URL is unset, the token is missing, or the VM does not answer `/api/v1/capabilities`, hosted chat uses the in-process loop.

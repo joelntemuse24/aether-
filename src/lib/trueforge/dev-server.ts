@@ -6,7 +6,12 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { TRUEFORGE_PORT, trueforgeOrigin, trueforgeSidecarEnabled } from "./config";
+import {
+  TRUEFORGE_PORT,
+  trueforgeOrigin,
+  trueforgeRemoteUrl,
+  trueforgeSidecarEnabled,
+} from "./config";
 import { loadLocalEnvFiles } from "./load-env";
 import { seedAetherModelProviders } from "./seed";
 
@@ -65,8 +70,11 @@ async function ensureSidecar(): Promise<ChildProcess | null> {
 async function main() {
   loadLocalEnvFiles();
   const mode = process.argv[2] === "start" ? "start" : "dev";
-  const sidecar = await ensureSidecar();
-  if (sidecar || (trueforgeSidecarEnabled() && (await isUp(trueforgeOrigin())))) {
+  const remote = trueforgeRemoteUrl();
+  const sidecar = remote ? null : await ensureSidecar();
+  if (remote) {
+    console.info("[aether] TrueForge remote", remote);
+  } else if (sidecar || (trueforgeSidecarEnabled() && (await isUp(trueforgeOrigin())))) {
     const seeded = await seedAetherModelProviders(trueforgeOrigin());
     console.info("[aether] TrueForge providers", seeded);
   }

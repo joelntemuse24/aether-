@@ -6,6 +6,7 @@
     "dev": "tsx src/lib/trueforge/dev-server.ts dev",
     "build": "next build",
     "start": "tsx src/lib/trueforge/dev-server.ts start",
+    "trueforge": "tsx src/lib/trueforge/vm-server.ts",
     "lint": "eslint",
     "test": "tsx --test --test-force-exit src/lib/*.test.ts src/lib/**/*.test.ts evals/probe/*.test.ts",
     "probe": "tsx evals/probe/run.ts --smoke",

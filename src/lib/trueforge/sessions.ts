@@ -1,5 +1,5 @@
 import { TrueForge } from "@truefoundry/trueforge-sdk";
-import { trueforgeOrigin } from "./config";
+import { trueforgeAuthHeaders, trueforgeOrigin, trueforgeToken } from "./config";
 import {
   AETHER_EXPERT_MODEL_FQN,
   AETHER_OPENROUTER_EXPERT_FQN,
@@ -14,6 +14,10 @@ let primaryModel = AETHER_EXPERT_MODEL_FQN;
 let fallbackModel: string | null = null;
 
 function client() {
+  const token = trueforgeToken();
+  if (trueforgeAuthHeaders().Authorization && token) {
+    return new TrueForge({ baseUrl: trueforgeOrigin(), token });
+  }
   return new TrueForge({ baseUrl: trueforgeOrigin(), auth: false });
 }
 
