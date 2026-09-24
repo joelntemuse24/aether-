@@ -1,4 +1,5 @@
 import { looksLikeRawToolMarkup } from "../../src/lib/visible-chat-text";
+import { looksLikeThinkingTheater } from "../../src/lib/agent-activity";
 import type { ProbeFinding } from "./types";
 
 export const WELCOME_PHRASES = ["Howzit?", "we uup", "in the trenches?"] as const;
@@ -11,6 +12,12 @@ export type UiSnapshot = {
   workingStripCount: number;
   workedForVisible: boolean;
   sawWorkingDuringTurn: boolean;
+  liveStepCount: number;
+  pendingActivityVisible: boolean;
+  messageActivityVisible: boolean;
+  composerActivityVisible: boolean;
+  liveToolTraceVisible: boolean;
+  sourceTrayExpanded: boolean;
   stopVisible: boolean;
   sendVisible: boolean;
   stepFailedVisible: boolean;
@@ -102,6 +109,38 @@ export function detectUiFailures(snap: UiSnapshot): ProbeFinding[] {
     });
   }
 
+  if (looksLikeThinkingTheater(haystack)) {
+    findings.push({
+      code: "thinking_theater",
+      detail: "Decorative Thinking / Planning / Cooking copy is visible in the chrome.",
+    });
+  }
+
+  if (snap.liveStepCount >= 2) {
+    findings.push({
+      code: "status_stack",
+      detail: `Live status listed ${snap.liveStepCount} tool one-liners (expected a compact column of one).`,
+    });
+  }
+
+  if (
+    snap.composerActivityVisible ||
+    (snap.pendingActivityVisible && snap.messageActivityVisible) ||
+    snap.liveToolTraceVisible ||
+    (snap.sourceTrayExpanded && snap.sawWorkingDuringTurn)
+  ) {
+    findings.push({
+      code: "chip_jank",
+      detail: snap.composerActivityVisible
+        ? "Working/source chrome is inside the composer dock (jumps the input)."
+        : snap.liveToolTraceVisible
+          ? "A live tool body is expanding in the thread (jumps the composer)."
+          : snap.pendingActivityVisible && snap.messageActivityVisible
+            ? "Pending and message status are both visible (duplicate column)."
+            : "Source tray expanded while Working was still on screen.",
+    });
+  }
+
   if (snap.stopVisible && snap.timedOut) {
     findings.push({
       code: "stuck_stop",
@@ -190,6 +229,12 @@ export function fixtureUiSnapshot(
     workingStripCount: 0,
     workedForVisible: true,
     sawWorkingDuringTurn: true,
+    liveStepCount: 0,
+    pendingActivityVisible: false,
+    messageActivityVisible: false,
+    composerActivityVisible: false,
+    liveToolTraceVisible: false,
+    sourceTrayExpanded: false,
     stopVisible: false,
     sendVisible: true,
     stepFailedVisible: false,

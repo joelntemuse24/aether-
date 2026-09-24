@@ -8,12 +8,15 @@ import { MAX_AUTO_CONTINUES } from "@/lib/chat-continue";
 import {
   closeActivityClock,
   collectWebSearchHits,
+  compactLiveSteps,
   deriveAgentActivity,
   formatActivityElapsed,
   activityClockShouldRun,
+  liveWorkOneLiner,
   recalledActivityElapsed,
   shouldShowComposerActivity,
   sourceChipLabel,
+  sourceTrayPills,
   syncActivityClock,
   type ActivityMessage,
   type ActivityView,
@@ -112,30 +115,39 @@ function LiveActivity({
   view: ActivityView;
   className?: string;
 }) {
+  const oneLiner = liveWorkOneLiner(view);
+  const liveSteps = compactLiveSteps(view);
   return (
     <div
       className={cn(
-        "aether-activity aether-activity--enter",
+        "aether-activity aether-activity--enter aether-activity--live",
         className,
       )}
+      data-activity-mode={view.mode}
       role="status"
       aria-live="polite"
     >
       <WorkingHeader view={view} />
-      {view.steps.length > 0 ? (
+      {oneLiner ? (
         <ol className="aether-activity__steps" aria-label="Work in this turn">
-          {view.steps.map((step) => (
-            <li
-              key={step.id}
-              className={cn(
-                "aether-activity__step",
-                step.state === "running" && "aether-activity__step--live",
-              )}
-              title={step.label}
-            >
-              {step.label}
+          {liveSteps.length > 0 ? (
+            liveSteps.map((step) => (
+              <li
+                key={step.id}
+                className={cn(
+                  "aether-activity__step",
+                  "aether-activity__step--live",
+                )}
+                title={step.label}
+              >
+                {step.label}
+              </li>
+            ))
+          ) : (
+            <li className="aether-activity__step aether-activity__step--live">
+              {oneLiner}
             </li>
-          ))}
+          )}
         </ol>
       ) : null}
     </div>
@@ -157,6 +169,7 @@ export function AgentActivityPanel({
     return (
       <div
         className={cn("aether-activity aether-activity--enter", className)}
+        data-activity-mode="collapsed"
         role="status"
         aria-live="polite"
       >
@@ -171,14 +184,16 @@ export function AgentActivityPanel({
           ) : (
             <span>{view.summaryLabel}</span>
           )}
-          <ChevronDownIcon className="aether-activity__caret" aria-hidden />
+          {view.steps.length > 0 ? (
+            <ChevronDownIcon className="aether-activity__caret" aria-hidden />
+          ) : null}
         </button>
-        {open ? (
-          <ol className="aether-activity__chips" aria-label="Work in this turn">
+        {open && view.steps.length > 0 ? (
+          <ol className="aether-activity__steps" aria-label="Work in this turn">
             {view.steps.map((step) => (
               <li
                 key={step.id}
-                className="aether-activity__chip"
+                className="aether-activity__step"
                 title={step.label}
               >
                 {step.label}
@@ -251,7 +266,14 @@ export const AgentStatusStrip: FC = () => {
     return null;
   }
 
-  return <AgentActivityPanel view={view} className="mb-1.5 px-2.5" />;
+  return (
+    <div data-activity-slot="pending">
+      <AgentActivityPanel
+        view={view}
+        className="aether-activity--pending px-1"
+      />
+    </div>
+  );
 };
 
 function hostLabel(url?: string): string | null {
@@ -267,8 +289,10 @@ export const MessageSourceCards: FC = () => {
   const parts = useAuiState((s) => s.message?.parts);
   const hits = collectWebSearchHits(parts);
   if (hits.length === 0) return null;
+  const pills = sourceTrayPills(hits);
 
-  // One compact row: hosts as citation chips, expandable to full titles.
+  // One reserved row: count + hosts. Expand in-place with a capped list
+  // so chips never wrap the composer.
   return (
     <details className="aether-source-tray">
       <summary aria-label="Sources">
@@ -276,7 +300,7 @@ export const MessageSourceCards: FC = () => {
           {hits.length} {hits.length === 1 ? "source" : "sources"}
         </span>
         <span className="aether-source-tray__hosts">
-          {hits.slice(0, 4).map((hit, i) => (
+          {pills.map((hit, i) => (
             <span key={`host:${i}`} className="aether-source-tray__pill">
               {sourceChipLabel(hit)}
             </span>
@@ -347,9 +371,11 @@ export const MessageAgentActivity: FC = () => {
   if (!view.visible) return null;
 
   return (
-    <AgentActivityPanel
-      view={view}
-      className="mb-2 font-[family-name:var(--font-sans)]"
-    />
+    <div data-activity-slot="message">
+      <AgentActivityPanel
+        view={view}
+        className="aether-activity--message mb-2 font-[family-name:var(--font-sans)]"
+      />
+    </div>
   );
 };

@@ -56,6 +56,47 @@ export type ActivityView = {
   summaryLabel: string | null;
 };
 
+const WORKING_CLOCK_LINE = /^(?:working(?: for \S+)?)$/i;
+
+/** Decorative ChatGPT-style status — never an Aether live line. */
+export const THINKING_THEATER =
+  /Thinking…|Planning…|Cooking…|\bMulling\b|\bUntangling\b|Gathering (?:threads|context)/i;
+
+export function isWorkingClockLine(text: string | null | undefined): boolean {
+  return WORKING_CLOCK_LINE.test((text ?? "").trim());
+}
+
+export function looksLikeThinkingTheater(text: string | null | undefined): boolean {
+  return THINKING_THEATER.test(text ?? "");
+}
+
+/**
+ * Live column shows at most the current real step. Completed steps wait
+ * behind Worked for Ns so the thread never stacks ChatGPT theater.
+ */
+export function compactLiveSteps(view: ActivityView): ActivityStep[] {
+  if (view.mode === "collapsed") return view.steps;
+  const live =
+    view.steps.find((step) => step.id === view.liveStepId) ??
+    view.steps.find((step) => step.state === "running") ??
+    null;
+  return live ? [live] : [];
+}
+
+/**
+ * Tool one-liner under the Working clock. Never a second "Working" line.
+ */
+export function liveWorkOneLiner(view: ActivityView): string | null {
+  if (view.mode !== "live" && view.mode !== "elapsed") return null;
+  const line = view.liveLine?.trim() ?? "";
+  if (!line) return null;
+  if (isWorkingClockLine(line)) return null;
+  return line;
+}
+
+/** Host pills on the collapsed source row — one line, no wrap-jump. */
+export const MAX_SOURCE_PILLS = 3;
+
 export type ContinuePhase = "idle" | "continuing" | "needs-continue";
 
 export type DeriveAgentActivityInput = {
@@ -534,6 +575,19 @@ export function sourceChipLabel(hit: {
     return hit.title.replace(/\s+/g, " ").trim().slice(0, 24);
   }
   return "";
+}
+
+export function sourceTrayPills(
+  hits: readonly { title?: unknown; url?: unknown }[],
+  max = MAX_SOURCE_PILLS,
+): Array<{ title?: unknown; url?: unknown }> {
+  const out: Array<{ title?: unknown; url?: unknown }> = [];
+  for (const hit of hits) {
+    if (!sourceChipLabel(hit)) continue;
+    out.push(hit);
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
 export type ActivitySearchHit = {

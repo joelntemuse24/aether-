@@ -53,6 +53,45 @@ describe("probe UI detectors", () => {
     assert.equal(findings.some((f) => f.code === "duplicate_working"), true);
   });
 
+  it("flags Thinking theater, stacked live steps, and chip jank", () => {
+    const theater = detectUiFailures(
+      fixtureUiSnapshot({ bodyText: "Planning… Gathering context" }),
+    );
+    assert.equal(theater.some((f) => f.code === "thinking_theater"), true);
+
+    const stacked = detectUiFailures(fixtureUiSnapshot({ liveStepCount: 3 }));
+    assert.equal(stacked.some((f) => f.code === "status_stack"), true);
+
+    const composer = detectUiFailures(
+      fixtureUiSnapshot({ composerActivityVisible: true }),
+    );
+    assert.equal(composer.some((f) => f.code === "chip_jank"), true);
+
+    const overlap = detectUiFailures(
+      fixtureUiSnapshot({
+        pendingActivityVisible: true,
+        messageActivityVisible: true,
+      }),
+    );
+    assert.equal(overlap.some((f) => f.code === "chip_jank"), true);
+
+    const liveBody = detectUiFailures(
+      fixtureUiSnapshot({ liveToolTraceVisible: true }),
+    );
+    assert.equal(liveBody.some((f) => f.code === "chip_jank"), true);
+
+    const ok = detectUiFailures(
+      fixtureUiSnapshot({
+        liveStepCount: 1,
+        messageActivityVisible: true,
+        bodyText: "Working for 4s\nSearching ireland\nWorked for 8s",
+      }),
+    );
+    assert.equal(ok.some((f) => f.code === "status_stack"), false);
+    assert.equal(ok.some((f) => f.code === "chip_jank"), false);
+    assert.equal(ok.some((f) => f.code === "thinking_theater"), false);
+  });
+
   it("flags raw DSML in visible chrome", () => {
     const dsml = '<|DSML| tool_search query="current time Dublin Ireland">';
     const findings = detectUiFailures(

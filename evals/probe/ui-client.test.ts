@@ -28,4 +28,13 @@ describe("probe UI client helpers", () => {
     assert.doesNotMatch(src, /New conversation/);
     assert.doesNotMatch(src, /getByRole\("link"/);
   });
+
+  it("watches live status stack, composer activity, and source-tray expand", () => {
+    const src = readFileSync(new URL("./ui-client.ts", import.meta.url), "utf8");
+    assert.match(src, /liveStepCount/);
+    assert.match(src, /aether-composer-dock \.aether-activity/);
+    assert.match(src, /aether-tool-trace--live/);
+    assert.match(src, /aether-source-tray\[open\]/);
+    assert.match(src, /data-activity-slot="pending"/);
+  });
 });

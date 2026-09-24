@@ -112,6 +112,15 @@ async function collectUiDom(page: PlaywrightPage): Promise<Omit<
     if (liveLines.length > 0) workingStripCount += 1;
   }
 
+  const liveStepCount = await page.locator(".aether-activity--live .aether-activity__step").count();
+  const pendingActivityVisible = await visible(page.locator('[data-activity-slot="pending"]'));
+  const messageActivityVisible = await visible(page.locator('[data-activity-slot="message"]'));
+  const composerActivityVisible = await visible(
+    page.locator(".aether-composer-dock .aether-activity"),
+  );
+  const liveToolTraceVisible = await visible(page.locator(".aether-tool-trace--live"));
+  const sourceTrayExpanded = await visible(page.locator(".aether-source-tray[open]"));
+
   const stopVisible = await visible(page.locator('button[aria-label="Stop generating"]'));
   const sendVisible = await visible(page.locator('button[aria-label="Send message"]'));
   const stepFailedVisible = await visible(page.locator(".aether-tool-trace__error"));
@@ -131,6 +140,12 @@ async function collectUiDom(page: PlaywrightPage): Promise<Omit<
     assistantVisibleText,
     workingStripCount,
     workedForVisible,
+    liveStepCount,
+    pendingActivityVisible,
+    messageActivityVisible,
+    composerActivityVisible,
+    liveToolTraceVisible,
+    sourceTrayExpanded,
     stopVisible,
     sendVisible,
     stepFailedVisible,
@@ -196,6 +211,11 @@ export async function runUiTurn(input: UiTurnInput): Promise<{
   const started = Date.now();
   let timedOut = false;
   let sawWorkingDuringTurn = false;
+  let peakLiveStepCount = 0;
+  let sawComposerActivity = false;
+  let sawLiveToolTrace = false;
+  let sawPendingAndMessage = false;
+  let sawSourceTrayExpandedWhileWorking = false;
 
   try {
     await page.goto(input.baseUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
@@ -209,6 +229,15 @@ export async function runUiTurn(input: UiTurnInput): Promise<{
     while (Date.now() - started < input.timeoutMs) {
       const mid = await collectUiDom(page);
       if (mid.workingStripCount > 0) sawWorkingDuringTurn = true;
+      peakLiveStepCount = Math.max(peakLiveStepCount, mid.liveStepCount);
+      if (mid.composerActivityVisible) sawComposerActivity = true;
+      if (mid.liveToolTraceVisible) sawLiveToolTrace = true;
+      if (mid.pendingActivityVisible && mid.messageActivityVisible) {
+        sawPendingAndMessage = true;
+      }
+      if (mid.sourceTrayExpanded && mid.workingStripCount > 0) {
+        sawSourceTrayExpandedWhileWorking = true;
+      }
       const sent = mid.userMessageCount > 0 || !mid.welcomeVisible;
       const hasOutcome =
         mid.assistantVisibleText.length > 0 ||
@@ -235,6 +264,12 @@ export async function runUiTurn(input: UiTurnInput): Promise<{
     const snap: UiSnapshot = {
       ...dom,
       workingStripCount: dom.workingStripCount,
+      liveStepCount: Math.max(peakLiveStepCount, dom.liveStepCount),
+      pendingActivityVisible: sawPendingAndMessage || dom.pendingActivityVisible,
+      messageActivityVisible: sawPendingAndMessage || dom.messageActivityVisible,
+      composerActivityVisible: sawComposerActivity || dom.composerActivityVisible,
+      liveToolTraceVisible: sawLiveToolTrace || dom.liveToolTraceVisible,
+      sourceTrayExpanded: sawSourceTrayExpandedWhileWorking || dom.sourceTrayExpanded,
       sawWorkingDuringTurn,
       pageError: pageErrors[0] ?? null,
       elapsedMs: Date.now() - started,

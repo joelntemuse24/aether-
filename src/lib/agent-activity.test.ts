@@ -6,13 +6,18 @@ import {
   closeActivityClock,
   collectActivitySteps,
   collectWebSearchHits,
+  compactLiveSteps,
   composerShouldShowStop,
   deriveAgentActivity,
   formatActivityElapsed,
+  isWorkingClockLine,
+  liveWorkOneLiner,
+  looksLikeThinkingTheater,
   recalledActivityElapsed,
   resetActivityClock,
   shouldShowComposerActivity,
   sourceChipLabel,
+  sourceTrayPills,
   syncActivityClock,
 } from "./agent-activity";
 
@@ -186,6 +191,51 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(view.liveLine, "Creating Grid");
     assert.equal(view.lineKey, view.steps[1]?.id);
     assert.doesNotMatch(view.liveLine ?? "", /Thinking|Planning/i);
+    assert.deepEqual(
+      compactLiveSteps(view).map((step) => step.label),
+      ["Creating Grid"],
+    );
+    assert.equal(liveWorkOneLiner(view), "Creating Grid");
+  });
+
+  it("never paints a second Working line or stacked live theater", () => {
+    const elapsed = deriveAgentActivity({
+      messages: [{ role: "assistant", parts: [] }],
+      isRunning: true,
+      elapsedSeconds: 4,
+    });
+    assert.equal(isWorkingClockLine(elapsed.liveLine), true);
+    assert.equal(liveWorkOneLiner(elapsed), null);
+    assert.equal(compactLiveSteps(elapsed).length, 0);
+
+    const stacked = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-call",
+              toolName: "web_search",
+              args: { query: "ireland unemployment" },
+              result: { ok: true },
+              status: { type: "complete" },
+            },
+            {
+              type: "tool-call",
+              toolName: "fetch_url",
+              args: { url: "https://cso.ie" },
+              status: { type: "running" },
+            },
+          ],
+        },
+      ],
+      isRunning: true,
+      elapsedSeconds: 9,
+    });
+    assert.equal(stacked.steps.length, 2);
+    assert.equal(compactLiveSteps(stacked).length, 1);
+    assert.equal(liveWorkOneLiner(stacked), "Reading cso.ie");
+    assert.equal(looksLikeThinkingTheater(JSON.stringify(stacked)), false);
   });
 
   it("collapses a single real step to that work plus elapsed seconds", () => {
@@ -340,6 +390,7 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(view.visible, true);
     assert.equal(view.elapsedLabel, "Continuing 2/5");
     assert.equal(view.liveLine, "Continuing 2/5");
+    assert.equal(liveWorkOneLiner(view), "Continuing 2/5");
   });
 
   it("does not show Paused while the worker is still running", () => {
@@ -653,6 +704,18 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(sourceChipLabel({ title: undefined }), "");
   });
 
+  it("keeps the source tray to three host pills", () => {
+    const pills = sourceTrayPills([
+      { url: "https://cso.ie/a" },
+      { url: "https://www.cso.ie/b" },
+      { url: "https://oecd.org/c" },
+      { url: "https://example.com/d" },
+      { title: "   " },
+    ]);
+    assert.equal(pills.length, 3);
+    assert.equal(sourceChipLabel(pills[0]!), "cso.ie");
+  });
+
   it("collects DSML tool_search from a text part", () => {
     const steps = collectActivitySteps(
       [
@@ -744,6 +807,9 @@ describe("thread / composer copy stays honest", () => {
     assert.match(css, /aether-activity__spinner/);
     assert.match(css, /aether-composer-dock/);
     assert.match(css, /aether-activity__chip/);
+    assert.match(css, /flex-wrap:\s*nowrap/);
+    assert.match(css, /aether-source-tray__hosts/);
+    assert.doesNotMatch(css, /translateY\(3px\)/);
     assert.match(toolUi, /aether-tool-trace/);
     assert.doesNotMatch(toolUi, /const ICONS/);
     assert.doesNotMatch(toolUi, /display\.runningLabel/);
@@ -752,13 +818,19 @@ describe("thread / composer copy stays honest", () => {
     assert.doesNotMatch(toolUi, /ToolApprovalToggle/);
     assert.match(strip, /aether-inline-source/);
     assert.match(strip, /aether-source-tray__pill/);
-    assert.match(strip, /aether-activity__chip/);
+    assert.match(strip, /aether-activity__steps/);
+    assert.match(strip, /compactLiveSteps/);
+    assert.match(strip, /liveWorkOneLiner/);
     assert.match(strip, /MessageSourceCards/);
+    assert.match(strip, /data-activity-slot="pending"/);
+    assert.match(strip, /data-activity-slot="message"/);
     assert.match(thread, /MessageSourceCards/);
+    assert.match(thread, /AgentStatusStrip/);
+    assert.doesNotMatch(thread, /<AgentStatusStrip \/>\s*\n\s*\{pending &&/);
+    assert.match(thread, /aether-composer-dock/);
     assert.doesNotMatch(thread, /ToolApprovalToggle/);
     assert.doesNotMatch(strip, /Mulling|Untangling|Churning/);
     assert.match(strip, /Working for/);
-    assert.match(strip, /aether-activity__steps/);
     assert.match(strip, /aether-activity__spinner/);
     assert.match(strip, /activityClockShouldRun/);
     assert.match(strip, /shouldShowComposerActivity/);
