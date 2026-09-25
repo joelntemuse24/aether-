@@ -15,6 +15,7 @@ import {
 import {
   AETHER_EXPERT_MODEL_FQN,
   AETHER_OPENROUTER_EXPERT_FQN,
+  modelProfile,
   preferAetherExpertModel,
 } from "./providers";
 import type { TrueForgeToolContext } from "./tool-context";
@@ -88,9 +89,13 @@ export function buildTrueForgeAgentSpec(input: {
   mcp: { direct: string; includeAccountTools: boolean } | null;
   sandboxEnabled: boolean;
 }) {
+  const reasoningEffort = modelProfile(input.modelName).reasoningEffort;
   return {
     spec: {
-      model: { name: input.modelName, params: { reasoningEffort: "none" as const } },
+      model: {
+        name: input.modelName,
+        ...(reasoningEffort ? { params: { reasoningEffort } } : {}),
+      },
       instructions: input.instructions,
       config: { sandbox: { enabled: input.sandboxEnabled } },
       ...(input.mcp

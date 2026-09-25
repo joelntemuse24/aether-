@@ -35,7 +35,68 @@ export const AETHER_OPENROUTER_EXPERT_FQN = "openrouter/gpt-5-6-luna";
 export const DEFAULT_BUZZ_BASE_URL = "https://api.buzzai.cc/v1";
 export const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
-type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
+export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
+
+export type ModelProfile = {
+  contextLength: number;
+  maxOutputTokens: number;
+  reasoningEfforts: ReasoningEffort[];
+  /** Sent on the session. Absent means the provider should use its own default. */
+  reasoningEffort?: ReasoningEffort;
+};
+
+const GPT56_EFFORTS: ReasoningEffort[] = ["none", "low", "medium", "high", "xhigh", "max"];
+const GPT6_EFFORTS: ReasoningEffort[] = ["low", "medium", "high", "xhigh", "max"];
+
+const UNKNOWN_PROFILE: ModelProfile = {
+  contextLength: 200_000,
+  maxOutputTokens: 64_000,
+  reasoningEfforts: [],
+};
+
+function bareModelId(id: string): string {
+  return (id.split("/").pop() ?? id).trim().toLowerCase();
+}
+
+/** Family defaults. Unknown ids stay conservative so a bad effort cannot 400 the turn. */
+export function modelProfile(id: string): ModelProfile {
+  const bare = bareModelId(id);
+  if (bare.includes("claude")) {
+    const haiku = bare.includes("haiku");
+    const opus = bare.includes("opus");
+    const fable = bare.includes("fable");
+    return {
+      contextLength: 200_000,
+      maxOutputTokens: haiku || (!opus && !fable) ? 64_000 : 128_000,
+      reasoningEfforts: [],
+    };
+  }
+  if (bare.includes("gpt-6") || bare.includes("gpt.6")) {
+    return {
+      contextLength: 1_050_000,
+      maxOutputTokens: 128_000,
+      reasoningEfforts: GPT6_EFFORTS,
+      reasoningEffort: "low",
+    };
+  }
+  if (bare.includes("gpt-5") || bare.includes("gpt.5")) {
+    return {
+      contextLength: 1_050_000,
+      maxOutputTokens: 128_000,
+      reasoningEfforts: GPT56_EFFORTS,
+      reasoningEffort: "none",
+    };
+  }
+  if (bare.startsWith("gpt")) {
+    return {
+      contextLength: 1_050_000,
+      maxOutputTokens: 128_000,
+      reasoningEfforts: GPT6_EFFORTS,
+      reasoningEffort: "low",
+    };
+  }
+  return UNKNOWN_PROFILE;
+}
 
 export type AetherConfiguredModel = {
   modelId: string;
@@ -64,21 +125,6 @@ export type AetherProviderManifest =
     };
 
 export const BUZZ_ANTHROPIC_BASE_URL = "https://api.buzzai.cc/v1";
-
-const LUNA_EFFORTS: ReasoningEffort[] = [
-  "none",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-];
-
-const LUNA_PROPERTIES: AetherConfiguredModel["properties"] = {
-  contextLength: 1_050_000,
-  maxOutputTokens: 128_000,
-  reasoningEfforts: LUNA_EFFORTS,
-};
 
 function envPlain(env: Record<string, string | undefined>, name: string): string {
   return (env[name] ?? "").trim();
@@ -114,7 +160,16 @@ export function normalizeBuzzBaseUrl(raw: string | undefined): string {
 }
 
 function buzzModel(modelId: string, name: string): AetherConfiguredModel {
-  return { modelId, name, properties: LUNA_PROPERTIES };
+  const profile = modelProfile(modelId);
+  return {
+    modelId,
+    name,
+    properties: {
+      contextLength: profile.contextLength,
+      maxOutputTokens: profile.maxOutputTokens,
+      reasoningEfforts: profile.reasoningEfforts,
+    },
+  };
 }
 
 /**

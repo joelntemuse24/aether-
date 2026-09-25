@@ -59,7 +59,8 @@ describe("TrueForge MCP tools", () => {
     const compact = trueforgeInstructions(`${TOOLS_SYSTEM_PROMPT}\n\nMemory: likes tea`);
     assert.equal(compact.includes("execute_python"), false);
     assert.match(compact, /web_search/);
-    assert.match(compact, /Current time: .*UTC/);
+    assert.match(compact, /Current time \(UTC\)/);
+    assert.match(compact, /Europe\/Dublin/);
     assert.equal(compact.includes("Use current_time for the clock"), false);
     assert.match(compact, /Memory: likes tea/);
   });
@@ -95,6 +96,7 @@ describe("TrueForge MCP tools", () => {
       mcp: { direct: "aether-chat", includeAccountTools: false },
       sandboxEnabled: true,
     });
+    assert.equal(on.spec.model.params?.reasoningEffort, "none");
     assert.equal(on.spec.config.sandbox.enabled, true);
     assert.equal("skills" in on.spec, false);
     assert.equal(on.spec.mcpServers?.length, 1);
@@ -106,6 +108,20 @@ describe("TrueForge MCP tools", () => {
     });
     assert.equal(off.spec.config.sandbox.enabled, false);
     assert.equal(off.spec.mcpServers, undefined);
+    const claude = buildTrueForgeAgentSpec({
+      modelName: "anthropic/claude-haiku-4-5",
+      instructions: "Answer.",
+      mcp: null,
+      sandboxEnabled: true,
+    });
+    assert.equal(claude.spec.model.params, undefined);
+    const astra = buildTrueForgeAgentSpec({
+      modelName: "buzz/gpt-6-astra",
+      instructions: "Answer.",
+      mcp: null,
+      sandboxEnabled: true,
+    });
+    assert.equal(astra.spec.model.params?.reasoningEffort, "low");
   });
 
   it("upserts one preloaded server and skips aetherx", async () => {

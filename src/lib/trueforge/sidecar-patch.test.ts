@@ -69,4 +69,15 @@ describe("TrueForge sidecar patch", () => {
     assert.deepEqual(applyTrueForgeSidecarPatches(root), []);
     assert.equal(fs.readFileSync(path.join(root, sandbox), "utf8"), original);
   });
+
+  it("removes the builtin clock tool and leaves the file alone on a second run", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tf-clock-"));
+    const relative = "node_modules/@truefoundry/trueforge-core/dist/agent-session/builtinsFromSpec.mjs";
+    const file = path.join(root, relative);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "const capabilities = [currentDateTime({ tracing })];\n");
+    assert.deepEqual(applyTrueForgeSidecarPatches(root), [relative]);
+    assert.equal(fs.readFileSync(file, "utf8").includes("currentDateTime({ tracing })"), false);
+    assert.deepEqual(applyTrueForgeSidecarPatches(root), []);
+  });
 });

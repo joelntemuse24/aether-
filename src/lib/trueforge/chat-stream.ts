@@ -108,7 +108,42 @@ async function runTurn(input: {
   }
 }
 
-const FIRST_BYTE_MS = 20_000;
+/** GPT first calls often take 12–25s. 45s avoids restarting a turn that is still working. */
+export const FIRST_BYTE_MS = 45_000;
+
+const ACTIVITY_CHUNK_TYPES = new Set([
+  "text-delta",
+  "reasoning-delta",
+  "tool-input-available",
+  "tool-output-available",
+]);
+
+export function isTurnActivityChunk(chunk: UiChunk): boolean {
+  return ACTIVITY_CHUNK_TYPES.has(String(chunk.type));
+}
+
+/** Short copy for the existing error chunk. Keeps the model-unavailable sentence. */
+export function hostedTurnErrorCopy(message: string, modelId: string): string {
+  if (isBuzzModelUnavailableError(message)) return buzzModelUnavailableCopy(modelId);
+  if (/timed out|time limit|\btimeout\b|aborted/i.test(message)) {
+    return "The provider timed out. Use Retry to try this turn again.";
+  }
+  if (/\b400\b|rejected|invalid request|not supported/i.test(message)) {
+    return "The provider rejected the request. Use Retry or pick another model.";
+  }
+  if (/overload|unavailable|\b429\b|\b52[05]\b|\b502\b|\b503\b|\b504\b|\b5\d\d\b/i.test(message)) {
+    return "The provider had an error or is overloaded. Use Retry to try this turn again.";
+  }
+  return "The provider had an error. Use Retry to try this turn again.";
+}
+
+async function cancelSidecarTurn(sessionId: string): Promise<void> {
+  try {
+    await trueforgeClient().sessions.cancel(sessionId);
+  } catch {
+    // The turn may already be finished.
+  }
+}
 
 export async function streamTrueForgeHostedChat(input: {
   conversationId: string | null;
@@ -148,11 +183,7 @@ export async function streamTrueForgeHostedChat(input: {
         const timer = setTimeout(() => controller.abort(), FIRST_BYTE_MS);
         let sawByte = false;
         const guardedWrite = (chunk: UiChunk) => {
-          if (
-            chunk.type === "text-delta" ||
-            chunk.type === "tool-input-available" ||
-            chunk.type === "reasoning-delta"
-          ) {
+          if (isTurnActivityChunk(chunk)) {
             sawByte = true;
             clearTimeout(timer);
           }
@@ -182,12 +213,10 @@ export async function streamTrueForgeHostedChat(input: {
         ) {
           break;
         }
+        await cancelSidecarTurn(session.id);
       }
       if (outcome.failedBeforeOutput && !input.abortSignal?.aborted) {
-        const errorText = isBuzzModelUnavailableError(outcome.errorText)
-          ? buzzModelUnavailableCopy(modelId)
-          : "The model didn't respond. Use Retry to try this turn again.";
-        write({ type: "error", errorText });
+        write({ type: "error", errorText: hostedTurnErrorCopy(outcome.errorText, modelId) });
       }
       writer.write({
         type: "finish",

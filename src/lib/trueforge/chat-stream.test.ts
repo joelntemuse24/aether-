@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { driveTrueForgeTurn, shouldRetryBuzzTurn } from "./chat-stream";
+import {
+  FIRST_BYTE_MS,
+  driveTrueForgeTurn,
+  hostedTurnErrorCopy,
+  isTurnActivityChunk,
+  shouldRetryBuzzTurn,
+} from "./chat-stream";
 import type { UiChunk } from "./ui-chunks";
 
 describe("TrueForge Buzz retry", () => {
@@ -32,6 +38,18 @@ describe("TrueForge Buzz retry", () => {
       }),
       false,
     );
+  });
+});
+
+describe("hosted turn errors", () => {
+  it("names the failure instead of a generic silence", () => {
+    assert.equal(FIRST_BYTE_MS, 45_000);
+    assert.equal(isTurnActivityChunk({ type: "tool-output-available" }), true);
+    assert.equal(isTurnActivityChunk({ type: "text-start" }), false);
+    assert.match(hostedTurnErrorCopy("model_not_found", "gpt-6-astra"), /isn't available on this key/);
+    assert.match(hostedTurnErrorCopy("'none' is not supported", "gpt-6-astra"), /rejected the request/);
+    assert.match(hostedTurnErrorCopy("Cloudflare 525", "gpt-5.6-luna"), /overloaded/);
+    assert.match(hostedTurnErrorCopy("The operation was aborted", "gpt-5.6-luna"), /timed out/);
   });
 });
 
