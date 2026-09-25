@@ -15,20 +15,23 @@ describe("aether TrueForge providers", () => {
     assert.equal(normalizeBuzzBaseUrl("https://api.buzzai.cc/v1/"), DEFAULT_BUZZ_BASE_URL);
   });
 
-  it("seeds Buzz Luna first and OpenRouter second when both keys are set", () => {
-    const manifests = aetherProviderManifests({
-      AETHER_HOSTED_BUZZ_API_KEY: "buzz-secret",
-      OPENROUTER_API_KEY: "or-secret",
-    });
-    assert.deepEqual(
-      manifests.map((manifest) => manifest.name),
-      ["buzz", "openrouter"],
+  it("seeds GPT on the OpenAI-compatible host and Claude on the Anthropic host", () => {
+    const manifests = aetherProviderManifests(
+      {
+        AETHER_HOSTED_BUZZ_API_KEY: "buzz-secret",
+        OPENROUTER_API_KEY: "or-secret",
+      },
+      ["gpt-5.6-luna", "claude-sonnet-5", "gpt-image-1"],
     );
+    assert.equal(manifests[0]?.type, "custom");
+    assert.equal(manifests[0]?.type === "custom" ? manifests[0].name : "", "buzz");
     assert.equal(manifests[0]?.models[0]?.modelId, "gpt-5.6-luna");
+    assert.equal(manifests[0]?.models[0]?.name, "gpt-5-6-luna");
     assert.equal(manifests[0]?.baseUrl, DEFAULT_BUZZ_BASE_URL);
-    assert.equal(manifests[1]?.models[0]?.modelId, "openai/gpt-5.6-luna");
-    assert.equal(manifests[1]?.baseUrl, "https://openrouter.ai/api/v1");
-    assert.equal(manifests[0]?.auth.apiKey, "buzz-secret");
+    assert.equal(manifests[1]?.type, "anthropic");
+    assert.equal(manifests[1]?.baseUrl, "https://api.buzzai.cc/v1");
+    assert.equal(manifests[1]?.models[0]?.modelId, "claude-sonnet-5");
+    assert.equal(manifests.some((manifest) => manifest.type === "custom" && manifest.name === "openrouter"), false);
   });
 
   it("accepts the legacy Claude env aliases for the Buzz key", () => {
@@ -36,9 +39,9 @@ describe("aether TrueForge providers", () => {
       AETHER_HOSTED_CLAUDE_API_KEY: "legacy",
       AETHER_HOSTED_CLAUDE_BASE_URL: "https://api.buzzai.cc",
     });
-    assert.equal(manifests.length, 1);
-    assert.equal(manifests[0]?.name, "buzz");
+    assert.equal(manifests[0]?.type === "custom" ? manifests[0].name : "", "buzz");
     assert.equal(manifests[0]?.baseUrl, DEFAULT_BUZZ_BASE_URL);
+    assert.equal(manifests.some((manifest) => manifest.type === "anthropic"), true);
   });
 
   it("keeps a custom Buzz base URL", () => {

@@ -1,31 +1,34 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { driveTrueForgeTurn, shouldFailoverTrueForgeTurn } from "./chat-stream";
+import { driveTrueForgeTurn, shouldRetryBuzzTurn } from "./chat-stream";
 import type { UiChunk } from "./ui-chunks";
 
-describe("TrueForge model failover", () => {
-  it("retries OpenRouter only when the primary failed before any output", () => {
+describe("TrueForge Buzz retry", () => {
+  it("retries the same model once on a transient failure before any output", () => {
     assert.equal(
-      shouldFailoverTrueForgeTurn({
+      shouldRetryBuzzTurn({
         failedBeforeOutput: true,
-        fallback: "openrouter/gpt-5-6-luna",
-        usedFallback: false,
+        errorText: "Cloudflare 525",
+        userAborted: false,
+        attempt: 0,
       }),
       true,
     );
     assert.equal(
-      shouldFailoverTrueForgeTurn({
-        failedBeforeOutput: false,
-        fallback: "openrouter/gpt-5-6-luna",
-        usedFallback: false,
+      shouldRetryBuzzTurn({
+        failedBeforeOutput: true,
+        errorText: "Cloudflare 525",
+        userAborted: false,
+        attempt: 1,
       }),
       false,
     );
     assert.equal(
-      shouldFailoverTrueForgeTurn({
+      shouldRetryBuzzTurn({
         failedBeforeOutput: true,
-        fallback: null,
-        usedFallback: false,
+        errorText: "model_not_found: not enabled for group",
+        userAborted: false,
+        attempt: 0,
       }),
       false,
     );

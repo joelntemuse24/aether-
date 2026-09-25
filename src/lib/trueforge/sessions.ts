@@ -109,7 +109,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
   const plannedKey = token ? `${plannedName}:${token}` : "";
   const existing = await findSession(input.conversationId);
   if (
-    existing?.model &&
+    existing?.model === input.modelName &&
     existing.instructions === input.instructions &&
     existing.mcpKey === plannedKey
   ) {
@@ -118,7 +118,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
   const mcp = plannedName ? await attachTools(input.conversationId, input.toolContext) : null;
   const mcpKey = mcp ? `${mcp.name}:${mcp.token}` : "";
   if (existing) {
-    const model = existing.model || input.modelName;
+    const model = input.modelName;
     existing.model = model;
     existing.instructions = input.instructions;
     existing.mcpKey = mcpKey;
