@@ -26,6 +26,14 @@ export function aetherMcpServerNames(conversationId: string): { direct: string; 
   return { direct: `aether-${suffix}`, deferred: `aetherx-${suffix}` };
 }
 
+/** Memory, Drive, GitHub, and project search are the only tools beyond the preloaded web set. */
+export function needsDeferredAetherTools(
+  context: Pick<TrueForgeToolContext, "hasMemory" | "hasDrive" | "hasGitHub" | "projectId"> | null | undefined,
+): boolean {
+  if (!context) return false;
+  return !!(context.hasMemory || context.hasDrive || context.hasGitHub || context.projectId);
+}
+
 function contextKey(input: Omit<TrueForgeToolContext, "exp">): string {
   return JSON.stringify(input);
 }
@@ -74,30 +82,25 @@ export async function ensureAetherMcpServer(input: {
   client: TrueForge;
   conversationId: string;
   context: Omit<TrueForgeToolContext, "exp">;
-}): Promise<{ direct: string; deferred: string; token: string } | null> {
+}): Promise<{ direct: string; includeAccountTools: boolean; token: string } | null> {
   const secret = trueforgeToken();
   const origin = aetherPublicOrigin();
   if (!secret || !origin) return null;
   const names = aetherMcpServerNames(input.conversationId);
+  const includeAccountTools = needsDeferredAetherTools(input.context);
   const token = cachedToolContextToken(input.conversationId, input.context, secret);
   try {
     await upsertMcp({
       client: input.client,
       name: names.direct,
-      description: "Aether web search, fetch, browse, and clock.",
+      description: includeAccountTools
+        ? "Aether web, clock, memory, artifacts, Drive, and GitHub."
+        : "Aether web search, fetch, browse, and clock.",
       origin,
       secret,
       token,
     });
-    await upsertMcp({
-      client: input.client,
-      name: names.deferred,
-      description: "Aether memory, artifacts, Drive, and GitHub.",
-      origin,
-      secret,
-      token,
-    });
-    return { ...names, token };
+    return { direct: names.direct, includeAccountTools, token };
   } catch (error) {
     console.warn(
       "[trueforge] MCP register failed",
@@ -107,18 +110,18 @@ export async function ensureAetherMcpServer(input: {
   }
 }
 
-/** Direct tools are real function calls. The rest stay behind list_tools. */
-export function aetherMcpServers(names: { direct: string; deferred: string }) {
+/**
+ * One preloaded server. A second server with preload false makes TrueForge tell
+ * the model to discover every tool, including web_search.
+ */
+export function aetherMcpServers(names: { direct: string }, includeAccountTools = false) {
   return [
     {
       name: names.direct,
       preload: true,
-      enableTools: [...AETHER_MCP_DIRECT],
-    },
-    {
-      name: names.deferred,
-      preload: false,
-      enableTools: [...AETHER_MCP_DEFERRED],
+      enableTools: includeAccountTools
+        ? [...AETHER_MCP_DIRECT, ...AETHER_MCP_DEFERRED]
+        : [...AETHER_MCP_DIRECT],
     },
   ];
 }

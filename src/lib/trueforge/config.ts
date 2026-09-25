@@ -59,3 +59,41 @@ export async function trueforgeSidecarReachable(timeoutMs?: number): Promise<boo
   reachabilityCache = { key, ok, at: Date.now() };
   return ok;
 }
+
+let sandboxCache: { key: string; enabled: boolean; at: number } | null = null;
+
+/** True only when capabilities say a sandbox provider (or local bubblewrap) is ready. */
+export function sandboxEnabledFromCapabilities(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const sandbox = (body as { data?: { sandbox?: { enabled?: unknown } } }).data?.sandbox;
+  return sandbox?.enabled === true;
+}
+
+/**
+ * Sidecars without bubblewrap or a sandbox provider 422 session create when
+ * sandbox.enabled is true. A failed probe leaves the sandbox off.
+ */
+export async function trueforgeSandboxEnabled(timeoutMs?: number): Promise<boolean> {
+  if (!trueforgeSidecarEnabled()) return false;
+  const remote = trueforgeRemoteUrl();
+  if (remote && !trueforgeToken()) return false;
+  const key = trueforgeOrigin();
+  const now = Date.now();
+  if (sandboxCache && sandboxCache.key === key) {
+    const ttl = sandboxCache.enabled ? 60_000 : 15_000;
+    if (now - sandboxCache.at < ttl) return sandboxCache.enabled;
+  }
+  const timeout = timeoutMs ?? (remote ? 2_000 : 400);
+  let enabled = false;
+  try {
+    const response = await fetch(`${trueforgeOrigin()}/api/v1/capabilities`, {
+      headers: trueforgeAuthHeaders(),
+      signal: AbortSignal.timeout(timeout),
+    });
+    if (response.ok) enabled = sandboxEnabledFromCapabilities(await response.json());
+  } catch {
+    enabled = false;
+  }
+  sandboxCache = { key, enabled, at: Date.now() };
+  return enabled;
+}
