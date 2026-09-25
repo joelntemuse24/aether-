@@ -30,6 +30,8 @@ describe("TrueForge sidecar patch", () => {
     }
     for (const relative of PACKAGE_FILES.filter((file) => file.includes("Sandbox"))) {
       const text = fs.readFileSync(path.join(root, relative), "utf8");
+      assert.doesNotMatch(text, /serverMap/);
+      assert.match(text, /getTools\(\) \{\n    return this\.tools;\n  \}/);
       assert.match(text, /skills\.includes\("SKILL.md"\)/);
       assert.match(text, /exec can reach these MCP servers/);
       assert.match(text, /buildSchemaSection\(builder\) \{\n    return;/);
@@ -40,5 +42,31 @@ describe("TrueForge sidecar patch", () => {
       assert.ok(text.slice(mcp, essay).includes("return;"));
     }
     assert.deepEqual(applyTrueForgeSidecarPatches(root), []);
+  });
+
+  it("leaves Sandbox getTools untouched and removes a bad serverMap insert", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tf-patch-fixture-"));
+    const original = "  getTools() {\n    return this.tools;\n  }\n";
+    const broken = `  getTools() {
+    if (![...this.serverMap.values()].some((server) => !server.preload)) return [];
+    return this.tools;
+  }\n`;
+    const deferred = "node_modules/@truefoundry/trueforge-core/dist/core/runtime/DeferredTool.js";
+    const sandbox = "node_modules/@truefoundry/trueforge-core/dist/core/sandbox/Sandbox.js";
+    for (const [relative, body] of [
+      [deferred, original],
+      [sandbox, broken],
+    ] as const) {
+      const file = path.join(root, relative);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, body);
+    }
+    applyTrueForgeSidecarPatches(root);
+    const deferredText = fs.readFileSync(path.join(root, deferred), "utf8");
+    const sandboxText = fs.readFileSync(path.join(root, sandbox), "utf8");
+    assert.match(deferredText, /serverMap/);
+    assert.equal(sandboxText, original);
+    assert.deepEqual(applyTrueForgeSidecarPatches(root), []);
+    assert.equal(fs.readFileSync(path.join(root, sandbox), "utf8"), original);
   });
 });

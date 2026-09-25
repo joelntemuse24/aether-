@@ -10,15 +10,23 @@ describe("TrueForge sandbox cleanup", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "tf-sandboxes-"));
     const stale = path.join(root, "old-session");
     const fresh = path.join(root, "live-session");
-    fs.mkdirSync(path.join(stale, "nested"), { recursive: true });
-    fs.writeFileSync(path.join(stale, "nested", "file.txt"), "x");
+    const nested = path.join(stale, "nested");
+    const nestedFile = path.join(nested, "file.txt");
+    fs.mkdirSync(nested, { recursive: true });
+    fs.writeFileSync(nestedFile, "x");
     fs.mkdirSync(fresh);
+    const busy = path.join(root, "busy-session");
+    const busyDir = path.join(busy, "work");
+    const busyFile = path.join(busyDir, "out.txt");
+    fs.mkdirSync(busyDir, { recursive: true });
+    fs.writeFileSync(busyFile, "y");
     const old = new Date(Date.now() - 8 * 60 * 60 * 1000);
-    fs.utimesSync(stale, old, old);
+    for (const target of [stale, nested, nestedFile, busy, busyDir]) fs.utimesSync(target, old, old);
     const removed = await pruneOldSandboxes(root, 6 * 60 * 60 * 1000);
     assert.deepEqual(removed, ["old-session"]);
     assert.equal(fs.existsSync(stale), false);
     assert.equal(fs.existsSync(fresh), true);
+    assert.equal(fs.existsSync(busyFile), true);
     assert.deepEqual(await pruneOldSandboxes(path.join(root, "missing")), []);
   });
 

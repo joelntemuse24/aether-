@@ -56,7 +56,7 @@ Approvals use the existing confirm card. Approving or declining resumes the paus
 
 ## Tools
 
-Web search, page fetch, and browse are preloaded on one MCP server, so the model calls them by name. The prompt includes the current UTC time. TrueForge's `get_current_datetime` is the only clock tool; Aether's `current_time` is not attached. Memory, artifacts, Drive, and GitHub join that same preloaded server only when the turn has memory, Drive, GitHub, or a project. A second server with deferred loading is not registered: TrueForge then tells the model to discover every tool, and some models do that before `web_search`. All of them run on Vercel through `POST /api/trueforge/mcp`. Sessions set `config.sandbox.enabled` only when `GET /api/v1/capabilities` reports a sandbox. The sidecar shortens TrueForge's sandbox prompt (no skills text when none are mounted) and deletes local sandbox directories older than six hours. Skills stay unset; TrueForge has no built-in xlsx, docx, or pdf skills, and an unknown skill name rejects the session. `BRAVE_SEARCH_API_KEY` and `FIRECRAWL_API_KEY` stay in Vercel env. Writes (`memory_write`, `create_artifact`) return the existing confirm card. Set `AETHER_APP_URL` to the public origin the VM can reach. Locally that is `http://127.0.0.1:3000`, and the sidecar allowlists `127.0.0.1` and `localhost`. Drive and GitHub tokens travel in an AES-GCM header keyed from `AETHER_TRUEFORGE_TOKEN`. The sidecar stores that ciphertext, not the tokens.
+Web search, page fetch, and browse are preloaded on one MCP server, so the model calls them by name. The prompt includes the current UTC time. TrueForge's `get_current_datetime` is the only clock tool; Aether's `current_time` is not attached. Memory, artifacts, Drive, and GitHub join that same preloaded server only when the turn has memory, Drive, GitHub, or a project. A second server with deferred loading is not registered: TrueForge then tells the model to discover every tool, and some models do that before `web_search`. All of them run on Vercel through `POST /api/trueforge/mcp`. Sessions set `config.sandbox.enabled` only when `GET /api/v1/capabilities` reports a sandbox. The sidecar shortens TrueForge's sandbox prompt (no skills text when none are mounted) and deletes local sandbox directories whose newest file is older than six hours. Skills stay unset; TrueForge has no built-in xlsx, docx, or pdf skills, and an unknown skill name rejects the session. `BRAVE_SEARCH_API_KEY` and `FIRECRAWL_API_KEY` stay in Vercel env. Writes (`memory_write`, `create_artifact`) return the existing confirm card. Set `AETHER_APP_URL` to the public origin the VM can reach. Locally that is `http://127.0.0.1:3000`, and the sidecar allowlists `127.0.0.1` and `localhost`. Drive and GitHub tokens travel in an AES-GCM header keyed from `AETHER_TRUEFORGE_TOKEN`. The sidecar stores that ciphertext, not the tokens.
 
 ## VM
 
@@ -83,6 +83,8 @@ docker compose up -d --build
 ```
 
 Without Docker, from the repo root: `npm install` then `npm run trueforge`.
+
+A launcher outside this repo, such as `/opt/aether/sidecar-only.ts`, should call `prepareSidecar()` from `src/lib/trueforge/sidecar-bootstrap.ts` before it starts TrueForge. That applies the package patch and starts sandbox pruning. `npm run trueforge` and `npm run dev` already call it.
 
 Open port `8790` only to the HTTPS proxy, not to the public internet. `GET /health` is unauthenticated and reports whether TrueForge is up. Every other request needs `Authorization: Bearer <AETHER_TRUEFORGE_TOKEN>`.
 

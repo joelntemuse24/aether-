@@ -12,9 +12,8 @@ import path from "node:path";
 import { bearerMatches } from "./auth";
 import { loadLocalEnvFiles } from "./load-env";
 import { withLocalMcpHosts } from "./outbound-hosts";
-import { pruneOldSandboxes, trueforgeSandboxDir } from "./sandbox-prune";
 import { seedAetherModelProviders } from "./seed";
-import { applyTrueForgeSidecarPatches } from "./sidecar-patch";
+import { prepareSidecar } from "./sidecar-bootstrap";
 
 const PUBLIC_PORT = Number(process.env.TRUEFORGE_PORT || 8790);
 const UPSTREAM_PORT = Number(process.env.TRUEFORGE_UPSTREAM_PORT || 8791);
@@ -115,17 +114,7 @@ async function main() {
   if (!token) {
     throw new Error("AETHER_TRUEFORGE_TOKEN is required to expose the sidecar.");
   }
-  const patched = applyTrueForgeSidecarPatches();
-  if (patched.length) console.info("[aether] Patched TrueForge", patched.join(", "));
-  const sandboxes = trueforgeSandboxDir();
-  const prune = () => {
-    void pruneOldSandboxes(sandboxes).then((removed) => {
-      if (removed.length) console.info("[aether] Pruned sandboxes", removed.length);
-    });
-  };
-  prune();
-  const pruneTimer = setInterval(prune, 60 * 60 * 1000);
-  pruneTimer.unref();
+  prepareSidecar();
   const child = startUpstream();
   await waitForUpstream(child);
   const seeded = await seedAetherModelProviders(UPSTREAM);

@@ -14,9 +14,8 @@ import {
 } from "./config";
 import { loadLocalEnvFiles } from "./load-env";
 import { withLocalMcpHosts } from "./outbound-hosts";
-import { pruneOldSandboxes, trueforgeSandboxDir } from "./sandbox-prune";
 import { seedAetherModelProviders } from "./seed";
-import { applyTrueForgeSidecarPatches } from "./sidecar-patch";
+import { prepareSidecar } from "./sidecar-bootstrap";
 
 function cliPath(): string {
   return path.join(process.cwd(), "node_modules/@truefoundry/trueforge/dist/cli.js");
@@ -52,12 +51,7 @@ async function ensureSidecar(): Promise<ChildProcess | null> {
     console.info("[aether] TrueForge already listening", origin);
     return null;
   }
-  applyTrueForgeSidecarPatches();
-  const pruneTimer = setInterval(() => {
-    void pruneOldSandboxes(trueforgeSandboxDir());
-  }, 60 * 60 * 1000);
-  pruneTimer.unref();
-  void pruneOldSandboxes(trueforgeSandboxDir());
+  prepareSidecar();
   const cli = cliPath();
   if (!fs.existsSync(cli)) {
     throw new Error(`TrueForge CLI missing at ${cli}.`);
