@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { trueforgeSidecarEnabled, trueforgeSidecarReachable } from "./config";
+import { trueforgeSandboxEnabled, trueforgeSidecarEnabled, trueforgeSidecarReachable } from "./config";
 
 describe("TrueForge sidecar gate", () => {
   it("stays off when AETHER_TRUEFORGE=0", async () => {
@@ -43,6 +43,7 @@ describe("TrueForge sidecar gate", () => {
     delete process.env.AETHER_TRUEFORGE;
     try {
       assert.equal(await trueforgeSidecarReachable(200), false);
+      assert.equal(await trueforgeSandboxEnabled(200), false);
     } finally {
       if (previousPort === undefined) delete process.env.TRUEFORGE_PORT;
       else process.env.TRUEFORGE_PORT = previousPort;

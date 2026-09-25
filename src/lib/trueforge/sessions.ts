@@ -1,10 +1,16 @@
 import { TrueForge } from "@truefoundry/trueforge-sdk";
-import { trueforgeAuthHeaders, trueforgeOrigin, trueforgeToken } from "./config";
+import {
+  trueforgeAuthHeaders,
+  trueforgeOrigin,
+  trueforgeSandboxEnabled,
+  trueforgeToken,
+} from "./config";
 import {
   aetherMcpServerNames,
   aetherMcpServers,
   cachedToolContextToken,
   ensureAetherMcpServer,
+  needsDeferredAetherTools,
 } from "./mcp-register";
 import {
   AETHER_EXPERT_MODEL_FQN,
@@ -76,16 +82,20 @@ async function findSession(conversationId: string): Promise<CachedSession | null
   return null;
 }
 
-function agentSpec(
-  modelName: string,
-  instructions: string,
-  mcp: { direct: string; deferred: string } | null,
-) {
+export function buildTrueForgeAgentSpec(input: {
+  modelName: string;
+  instructions: string;
+  mcp: { direct: string; includeAccountTools: boolean } | null;
+  sandboxEnabled: boolean;
+}) {
   return {
     spec: {
-      model: { name: modelName, params: { reasoningEffort: "none" } },
-      instructions,
-      ...(mcp ? { mcpServers: aetherMcpServers(mcp) } : {}),
+      model: { name: input.modelName, params: { reasoningEffort: "none" as const } },
+      instructions: input.instructions,
+      config: { sandbox: { enabled: input.sandboxEnabled } },
+      ...(input.mcp
+        ? { mcpServers: aetherMcpServers({ direct: input.mcp.direct }, input.mcp.includeAccountTools) }
+        : {}),
     },
   };
 }
@@ -93,7 +103,7 @@ function agentSpec(
 async function attachTools(
   conversationId: string,
   toolContext: Omit<TrueForgeToolContext, "exp"> | null | undefined,
-): Promise<{ direct: string; deferred: string; token: string } | null> {
+): Promise<{ direct: string; includeAccountTools: boolean; token: string } | null> {
   if (!toolContext) return null;
   return ensureAetherMcpServer({
     client: client(),
@@ -110,7 +120,11 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
       ? cachedToolContextToken(input.conversationId, input.toolContext, secret)
       : "";
   const plannedNames = token ? aetherMcpServerNames(input.conversationId) : null;
-  const plannedKey = plannedNames ? `${plannedNames.direct}:${plannedNames.deferred}:${token}` : "";
+  const includeAccountTools = needsDeferredAetherTools(input.toolContext);
+  const sandboxEnabled = await trueforgeSandboxEnabled();
+  const plannedKey = `${
+    plannedNames ? `${plannedNames.direct}:${includeAccountTools ? "all" : "web"}:${token}` : ""
+  }:${sandboxEnabled ? "1" : "0"}`;
   const existing = await findSession(input.conversationId);
   if (
     existing?.model === input.modelName &&
@@ -120,19 +134,31 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
     return existing;
   }
   const mcp = plannedNames ? await attachTools(input.conversationId, input.toolContext) : null;
-  const mcpKey = mcp ? `${mcp.direct}:${mcp.deferred}:${mcp.token}` : "";
+  const mcpKey = `${
+    mcp ? `${mcp.direct}:${mcp.includeAccountTools ? "all" : "web"}:${mcp.token}` : ""
+  }:${sandboxEnabled ? "1" : "0"}`;
   if (existing) {
     const model = input.modelName;
     existing.model = model;
     existing.instructions = input.instructions;
     existing.mcpKey = mcpKey;
     await client().sessions.update(existing.id, {
-      agent: agentSpec(model, input.instructions, mcp),
+      agent: buildTrueForgeAgentSpec({
+        modelName: model,
+        instructions: input.instructions,
+        mcp,
+        sandboxEnabled,
+      }),
     });
     return existing;
   }
   const created = await client().sessions.create({
-    agent: agentSpec(input.modelName, input.instructions, mcp),
+    agent: buildTrueForgeAgentSpec({
+      modelName: input.modelName,
+      instructions: input.instructions,
+      mcp,
+      sandboxEnabled,
+    }),
     metadata: { aetherConversationId: input.conversationId },
   });
   const row: CachedSession = {
@@ -154,7 +180,12 @@ export async function switchTrueForgeSessionModel(input: {
   mcpName?: string | null;
 }): Promise<void> {
   await client().sessions.update(input.sessionId, {
-    agent: agentSpec(input.modelName, input.instructions, null),
+    agent: buildTrueForgeAgentSpec({
+      modelName: input.modelName,
+      instructions: input.instructions,
+      mcp: null,
+      sandboxEnabled: await trueforgeSandboxEnabled(),
+    }),
   });
   const cached = sessions.get(input.conversationId);
   if (cached) {
