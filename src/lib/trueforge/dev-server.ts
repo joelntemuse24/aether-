@@ -13,6 +13,7 @@ import {
   trueforgeSidecarEnabled,
 } from "./config";
 import { loadLocalEnvFiles } from "./load-env";
+import { withLocalMcpHosts } from "./outbound-hosts";
 import { seedAetherModelProviders } from "./seed";
 
 function cliPath(): string {
@@ -60,6 +61,7 @@ async function ensureSidecar(): Promise<ChildProcess | null> {
       HOST: "127.0.0.1",
       PORT: String(TRUEFORGE_PORT),
       APP_DATA_DIR_SUFFIX: process.env.APP_DATA_DIR_SUFFIX || "aether",
+      OUTBOUND_URL_ALLOWED_HOSTS: withLocalMcpHosts(process.env.OUTBOUND_URL_ALLOWED_HOSTS),
     },
     stdio: ["ignore", "inherit", "inherit"],
   });

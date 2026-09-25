@@ -69,6 +69,45 @@ export function flushPendingTools(state: TrueForgeUiState, chunks: UiChunk[]) {
   }
 }
 
+function confirmationPayload(output: unknown): Record<string, unknown> | null {
+  const row = unwrapToolOutput(output);
+  if (!row || typeof row !== "object") return null;
+  const data = row as { needs_confirmation?: unknown; confirmation_id?: unknown; title?: unknown; preview?: unknown };
+  if (data.needs_confirmation !== true || typeof data.confirmation_id !== "string" || !data.confirmation_id) {
+    return null;
+  }
+  return {
+    needs_confirmation: true,
+    confirmation_id: data.confirmation_id,
+    title: typeof data.title === "string" ? data.title : "Allow this step?",
+    preview: typeof data.preview === "string" ? data.preview : "",
+  };
+}
+
+function unwrapToolOutput(output: unknown): unknown {
+  if (typeof output === "string") {
+    try {
+      return unwrapToolOutput(JSON.parse(output));
+    } catch {
+      return output;
+    }
+  }
+  if (!output || typeof output !== "object" || !("content" in output)) return output;
+  const content = (output as { content?: unknown }).content;
+  if (!Array.isArray(content)) return output;
+  const text = content
+    .map((part) =>
+      part && typeof part === "object" && "text" in part ? String((part as { text?: unknown }).text ?? "") : "",
+    )
+    .join("");
+  if (!text) return output;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
 function toolPreview(state: TrueForgeUiState, toolCallId: string): string {
   for (const tool of state.tools.values()) {
     if (tool.id !== toolCallId) continue;
@@ -174,6 +213,24 @@ export function chunksForTrueForgeEvent(
       toolCallId,
       output,
     });
+    const confirm = confirmationPayload(output);
+    if (confirm) {
+      chunks.push({
+        type: "tool-input-available",
+        toolCallId: `confirm-${toolCallId}`,
+        toolName: "request_confirmation",
+        input: {
+          title: confirm.title,
+          preview: confirm.preview,
+          action: "approve",
+        },
+      });
+      chunks.push({
+        type: "tool-output-available",
+        toolCallId: `confirm-${toolCallId}`,
+        output: confirm,
+      });
+    }
     return chunks;
   }
 

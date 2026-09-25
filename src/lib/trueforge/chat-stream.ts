@@ -1,7 +1,14 @@
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import type { IncomingAttachment } from "@/lib/chat-turn";
 import { encodeTrueForgeApproval } from "./approvals";
-import { trueforgeClient, trueforgeModelChoice, trueforgeSessionId, switchTrueForgeSessionModel } from "./sessions";
+import { trueforgeInstructions } from "./instructions";
+import {
+  trueforgeClient,
+  trueforgeModelChoice,
+  trueforgeSessionId,
+  switchTrueForgeSessionModel,
+} from "./sessions";
+import type { TrueForgeToolContext } from "./tool-context";
 import {
   chunksForTrueForgeEvent,
   closeTrueForgeUi,
@@ -18,21 +25,68 @@ export function shouldFailoverTrueForgeTurn(input: {
   return input.failedBeforeOutput && !!input.fallback && !input.usedFallback;
 }
 
-type CollectedTurn = {
-  chunks: UiChunk[];
-  failedBeforeOutput: boolean;
-};
+type TurnEvent = { type?: string; [key: string]: unknown };
 
-async function collectTurn(input: {
+const CONTENT_TYPES = new Set(["text-delta", "tool-input-available", "reasoning-delta"]);
+
+export async function driveTrueForgeTurn(input: {
+  events: AsyncIterable<TurnEvent>;
+  write: (chunk: UiChunk) => void;
+  sessionId: string;
+}): Promise<{ failedBeforeOutput: boolean; wroteError: boolean }> {
+  const state = createTrueForgeUiState();
+  let sawContent = false;
+  let failed = false;
+  const emit = (chunk: UiChunk) => {
+    if (CONTENT_TYPES.has(String(chunk.type))) sawContent = true;
+    if (chunk.type === "error") {
+      failed = true;
+      if (!sawContent) return;
+    }
+    input.write(chunk);
+  };
+  try {
+    for await (const event of input.events) {
+      let payload = event;
+      if (event.type === "tool.approval_required" && Array.isArray(event.toolCalls)) {
+        payload = {
+          ...event,
+          sessionId: input.sessionId,
+          toolCalls: event.toolCalls.map((call) => {
+            if (!call || typeof call !== "object") return call;
+            const row = call as { id?: string };
+            return {
+              ...row,
+              confirmationId: encodeTrueForgeApproval({
+                sessionId: input.sessionId,
+                threadId: String(event.threadId ?? ""),
+                toolCallId: String(row.id ?? ""),
+              }),
+            };
+          }),
+        };
+      }
+      for (const chunk of chunksForTrueForgeEvent(payload, state)) emit(chunk);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The harness turn failed.";
+    if (!sawContent) return { failedBeforeOutput: true, wroteError: false };
+    input.write({ type: "error", errorText: message });
+    for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
+    return { failedBeforeOutput: false, wroteError: true };
+  }
+  if (failed && !sawContent) return { failedBeforeOutput: true, wroteError: false };
+  for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
+  return { failedBeforeOutput: false, wroteError: failed };
+}
+
+async function runTurn(input: {
   sessionId: string;
   content: ReturnType<typeof buildTrueForgeUserContent>;
   abortSignal?: AbortSignal;
   previousTurnId?: "auto" | "none";
-}): Promise<CollectedTurn> {
-  const state = createTrueForgeUiState();
-  const chunks: UiChunk[] = [];
-  let sawContent = false;
-  let failed = false;
+  write: (chunk: UiChunk) => void;
+}): Promise<{ failedBeforeOutput: boolean; wroteError: boolean }> {
   try {
     const turn = await trueforgeClient().sessions.createTurnStream(
       input.sessionId,
@@ -42,45 +96,14 @@ async function collectTurn(input: {
       },
       { abortSignal: input.abortSignal },
     );
-    for await (const event of turn) {
-      let payload: { type?: string; [key: string]: unknown } = event as unknown as {
-        type?: string;
-        [key: string]: unknown;
-      };
-      if (event.type === "tool.approval_required") {
-        payload = {
-          ...payload,
-          sessionId: input.sessionId,
-          toolCalls: event.toolCalls.map((call) => ({
-            ...call,
-            confirmationId: encodeTrueForgeApproval({
-              sessionId: input.sessionId,
-              threadId: event.threadId,
-              toolCallId: call.id,
-            }),
-          })),
-        };
-      }
-      for (const chunk of chunksForTrueForgeEvent(payload, state)) {
-        if (
-          chunk.type === "text-delta" ||
-          chunk.type === "tool-input-available" ||
-          chunk.type === "reasoning-delta"
-        ) {
-          sawContent = true;
-        }
-        if (chunk.type === "error") failed = true;
-        chunks.push(chunk);
-      }
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "The harness turn failed.";
-    chunks.push({ type: "error", errorText: message });
-    chunks.push(...closeTrueForgeUi(state));
-    return { chunks, failedBeforeOutput: !sawContent };
+    return driveTrueForgeTurn({
+      events: turn as AsyncIterable<TurnEvent>,
+      write: input.write,
+      sessionId: input.sessionId,
+    });
+  } catch {
+    return { failedBeforeOutput: true, wroteError: false };
   }
-  chunks.push(...closeTrueForgeUi(state));
-  return { chunks, failedBeforeOutput: failed && !sawContent };
 }
 
 export async function streamTrueForgeHostedChat(input: {
@@ -89,26 +112,33 @@ export async function streamTrueForgeHostedChat(input: {
   system: string;
   attachments?: IncomingAttachment[];
   abortSignal?: AbortSignal;
+  toolContext?: Omit<TrueForgeToolContext, "exp"> | null;
 }): Promise<Response> {
   const conversationId = input.conversationId || `guest-${crypto.randomUUID()}`;
+  const instructions = trueforgeInstructions(input.system);
   const content = buildTrueForgeUserContent(input.userText || "", input.attachments ?? []);
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
+      const write = (chunk: UiChunk) => {
+        writer.write(chunk as Parameters<typeof writer.write>[0]);
+      };
       writer.write({ type: "start" });
       const choice = await trueforgeModelChoice();
       const session = await trueforgeSessionId({
         conversationId,
         modelName: choice.primary,
-        instructions: input.system,
+        instructions,
+        toolContext: input.toolContext,
       });
-      let collected = await collectTurn({
+      let outcome = await runTurn({
         sessionId: session.id,
         content,
         abortSignal: input.abortSignal,
+        write,
       });
       if (
         shouldFailoverTrueForgeTurn({
-          failedBeforeOutput: collected.failedBeforeOutput,
+          failedBeforeOutput: outcome.failedBeforeOutput,
           fallback: choice.fallback,
           usedFallback: session.model === choice.fallback,
         }) &&
@@ -118,22 +148,23 @@ export async function streamTrueForgeHostedChat(input: {
           conversationId,
           sessionId: session.id,
           modelName: choice.fallback,
-          instructions: input.system,
+          instructions,
+          mcpName: session.mcpKey ? session.mcpKey.split(":")[0] : null,
         });
-        collected = await collectTurn({
+        outcome = await runTurn({
           sessionId: session.id,
           content,
           abortSignal: input.abortSignal,
           previousTurnId: "none",
+          write,
         });
       }
-      const failed = collected.chunks.some((chunk) => chunk.type === "error");
-      for (const chunk of collected.chunks) {
-        writer.write(chunk as Parameters<typeof writer.write>[0]);
+      if (outcome.failedBeforeOutput) {
+        write({ type: "error", errorText: "The model did not respond." });
       }
       writer.write({
         type: "finish",
-        finishReason: failed ? "error" : "stop",
+        finishReason: outcome.wroteError || outcome.failedBeforeOutput ? "error" : "stop",
       });
     },
     onError: (error) =>

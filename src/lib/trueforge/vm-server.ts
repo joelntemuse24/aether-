@@ -11,6 +11,7 @@ import http from "node:http";
 import path from "node:path";
 import { bearerMatches } from "./auth";
 import { loadLocalEnvFiles } from "./load-env";
+import { withLocalMcpHosts } from "./outbound-hosts";
 import { seedAetherModelProviders } from "./seed";
 
 const PUBLIC_PORT = Number(process.env.TRUEFORGE_PORT || 8790);
@@ -54,6 +55,7 @@ function startUpstream(): ChildProcess {
       HOST: "127.0.0.1",
       PORT: String(UPSTREAM_PORT),
       APP_DATA_DIR_SUFFIX: process.env.APP_DATA_DIR_SUFFIX || "aether",
+      OUTBOUND_URL_ALLOWED_HOSTS: withLocalMcpHosts(process.env.OUTBOUND_URL_ALLOWED_HOSTS),
     },
     stdio: ["ignore", "inherit", "inherit"],
   });

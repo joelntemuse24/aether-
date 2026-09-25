@@ -42,7 +42,7 @@ export async function trueforgeSidecarReachable(timeoutMs?: number): Promise<boo
   const key = `${trueforgeOrigin()}|${remote ? "remote" : "local"}`;
   const now = Date.now();
   if (reachabilityCache && reachabilityCache.key === key) {
-    const ttl = reachabilityCache.ok ? 5_000 : 30_000;
+    const ttl = reachabilityCache.ok ? 60_000 : 15_000;
     if (now - reachabilityCache.at < ttl) return reachabilityCache.ok;
   }
   const timeout = timeoutMs ?? (remote ? 2_000 : 400);
