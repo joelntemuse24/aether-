@@ -18,7 +18,8 @@ describe("TrueForge MCP tools", () => {
     const specs = aetherMcpServers({ direct: "aether-chat" });
     assert.equal(specs.length, 1);
     assert.equal(specs[0]?.preload, true);
-    assert.deepEqual(specs[0]?.enableTools, ["web_search", "fetch_url", "browse_page", "current_time"]);
+    assert.deepEqual(specs[0]?.enableTools, ["web_search", "fetch_url", "browse_page"]);
+    assert.equal(specs[0]?.enableTools.includes("current_time"), false);
     assert.equal(JSON.stringify(specs).includes("aetherx"), false);
     const clock = await handleTrueForgeMcpRpc(
       {
@@ -58,6 +59,8 @@ describe("TrueForge MCP tools", () => {
     const compact = trueforgeInstructions(`${TOOLS_SYSTEM_PROMPT}\n\nMemory: likes tea`);
     assert.equal(compact.includes("execute_python"), false);
     assert.match(compact, /web_search/);
+    assert.match(compact, /Current time: .*UTC/);
+    assert.equal(compact.includes("Use current_time for the clock"), false);
     assert.match(compact, /Memory: likes tea/);
   });
 
@@ -79,6 +82,7 @@ describe("TrueForge MCP tools", () => {
       assert.equal(signedIn[0]?.enableTools.includes(name), true);
     }
     assert.equal(signedIn[0]?.enableTools.includes("web_search"), true);
+    assert.equal(signedIn[0]?.enableTools.includes("current_time"), false);
   });
 
   it("enables the sandbox only when capabilities say it is ready and leaves skills unset", () => {

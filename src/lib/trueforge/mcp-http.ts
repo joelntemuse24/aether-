@@ -146,18 +146,20 @@ const TOOLS: { name: string; description: string; inputSchema: Json }[] = [
 
 export const AETHER_MCP_TOOL_NAMES = TOOLS.map((tool) => tool.name);
 
-/** Schemas for these four are loaded up front. The model calls them directly. */
+/**
+ * Loaded up front. TrueForge already exposes get_current_datetime (UTC), so
+ * Aether's current_time is not attached.
+ */
 export const AETHER_MCP_DIRECT: string[] = [
   TOOL_NAMES.webSearch,
   TOOL_NAMES.fetchUrl,
   TOOL_NAMES.browsePage,
-  TOOL_NAMES.currentTime,
 ];
 
 export const AETHER_MCP_PRELOAD = AETHER_MCP_DIRECT;
 
 export const AETHER_MCP_DEFERRED = AETHER_MCP_TOOL_NAMES.filter(
-  (name) => !AETHER_MCP_DIRECT.includes(name),
+  (name) => !AETHER_MCP_DIRECT.includes(name) && name !== TOOL_NAMES.currentTime,
 );
 
 function textResult(value: unknown, isError = false) {
