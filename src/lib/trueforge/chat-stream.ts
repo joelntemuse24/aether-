@@ -1,13 +1,9 @@
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import type { IncomingAttachment } from "@/lib/chat-turn";
+import { buzzModelFqn, buzzModelUnavailableCopy, isBuzzModelUnavailableError } from "@/lib/buzz/models";
 import { encodeTrueForgeApproval } from "./approvals";
 import { trueforgeInstructions } from "./instructions";
-import {
-  trueforgeClient,
-  trueforgeModelChoice,
-  trueforgeSessionId,
-  switchTrueForgeSessionModel,
-} from "./sessions";
+import { trueforgeClient, trueforgeSessionId } from "./sessions";
 import type { TrueForgeToolContext } from "./tool-context";
 import {
   chunksForTrueForgeEvent,
@@ -17,12 +13,15 @@ import {
 } from "./ui-chunks";
 import { buildTrueForgeUserContent } from "./user-content";
 
-export function shouldFailoverTrueForgeTurn(input: {
+export function shouldRetryBuzzTurn(input: {
   failedBeforeOutput: boolean;
-  fallback: string | null;
-  usedFallback: boolean;
+  errorText: string;
+  userAborted: boolean;
+  attempt: number;
 }): boolean {
-  return input.failedBeforeOutput && !!input.fallback && !input.usedFallback;
+  if (input.userAborted || !input.failedBeforeOutput || input.attempt > 0) return false;
+  if (/model_not_found|not enabled for group/i.test(input.errorText)) return false;
+  return /525|cloudflare|\b5\d\d\b|network|fetch failed|econn|socket|aborted/i.test(input.errorText);
 }
 
 type TurnEvent = { type?: string; [key: string]: unknown };
@@ -33,14 +32,16 @@ export async function driveTrueForgeTurn(input: {
   events: AsyncIterable<TurnEvent>;
   write: (chunk: UiChunk) => void;
   sessionId: string;
-}): Promise<{ failedBeforeOutput: boolean; wroteError: boolean }> {
+}): Promise<{ failedBeforeOutput: boolean; wroteError: boolean; errorText: string }> {
   const state = createTrueForgeUiState();
   let sawContent = false;
   let failed = false;
+  let errorText = "";
   const emit = (chunk: UiChunk) => {
     if (CONTENT_TYPES.has(String(chunk.type))) sawContent = true;
     if (chunk.type === "error") {
       failed = true;
+      errorText = String(chunk.errorText ?? errorText);
       if (!sawContent) return;
     }
     input.write(chunk);
@@ -70,14 +71,14 @@ export async function driveTrueForgeTurn(input: {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "The harness turn failed.";
-    if (!sawContent) return { failedBeforeOutput: true, wroteError: false };
+    if (!sawContent) return { failedBeforeOutput: true, wroteError: false, errorText: message };
     input.write({ type: "error", errorText: message });
     for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
-    return { failedBeforeOutput: false, wroteError: true };
+    return { failedBeforeOutput: false, wroteError: true, errorText: message };
   }
-  if (failed && !sawContent) return { failedBeforeOutput: true, wroteError: false };
+  if (failed && !sawContent) return { failedBeforeOutput: true, wroteError: false, errorText };
   for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
-  return { failedBeforeOutput: false, wroteError: failed };
+  return { failedBeforeOutput: false, wroteError: failed, errorText };
 }
 
 async function runTurn(input: {
@@ -86,7 +87,7 @@ async function runTurn(input: {
   abortSignal?: AbortSignal;
   previousTurnId?: "auto" | "none";
   write: (chunk: UiChunk) => void;
-}): Promise<{ failedBeforeOutput: boolean; wroteError: boolean }> {
+}): Promise<{ failedBeforeOutput: boolean; wroteError: boolean; errorText: string }> {
   try {
     const turn = await trueforgeClient().sessions.createTurnStream(
       input.sessionId,
@@ -101,10 +102,13 @@ async function runTurn(input: {
       write: input.write,
       sessionId: input.sessionId,
     });
-  } catch {
-    return { failedBeforeOutput: true, wroteError: false };
+  } catch (error) {
+    const errorText = error instanceof Error ? error.message : "The model didn't respond.";
+    return { failedBeforeOutput: true, wroteError: false, errorText };
   }
 }
+
+const FIRST_BYTE_MS = 20_000;
 
 export async function streamTrueForgeHostedChat(input: {
   conversationId: string | null;
@@ -113,54 +117,77 @@ export async function streamTrueForgeHostedChat(input: {
   attachments?: IncomingAttachment[];
   abortSignal?: AbortSignal;
   toolContext?: Omit<TrueForgeToolContext, "exp"> | null;
+  modelId?: string | null;
 }): Promise<Response> {
   const conversationId = input.conversationId || `guest-${crypto.randomUUID()}`;
   const instructions = trueforgeInstructions(input.system);
   const content = buildTrueForgeUserContent(input.userText || "", input.attachments ?? []);
+  const modelId = input.modelId || "gpt-5.6-luna";
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
       const write = (chunk: UiChunk) => {
         writer.write(chunk as Parameters<typeof writer.write>[0]);
       };
       writer.write({ type: "start" });
-      const choice = await trueforgeModelChoice();
       const session = await trueforgeSessionId({
         conversationId,
-        modelName: choice.primary,
+        modelName: buzzModelFqn(modelId),
         instructions,
         toolContext: input.toolContext,
       });
-      let outcome = await runTurn({
-        sessionId: session.id,
-        content,
-        abortSignal: input.abortSignal,
-        write,
-      });
-      if (
-        shouldFailoverTrueForgeTurn({
-          failedBeforeOutput: outcome.failedBeforeOutput,
-          fallback: choice.fallback,
-          usedFallback: session.model === choice.fallback,
-        }) &&
-        choice.fallback
-      ) {
-        await switchTrueForgeSessionModel({
-          conversationId,
-          sessionId: session.id,
-          modelName: choice.fallback,
-          instructions,
-          mcpName: session.mcpKey ? session.mcpKey.split(":")[0] : null,
-        });
-        outcome = await runTurn({
-          sessionId: session.id,
-          content,
-          abortSignal: input.abortSignal,
-          previousTurnId: "none",
-          write,
-        });
+      let outcome = {
+        failedBeforeOutput: true,
+        wroteError: false,
+        errorText: "",
+      };
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (input.abortSignal?.aborted) break;
+        const controller = new AbortController();
+        const onUserAbort = () => controller.abort();
+        input.abortSignal?.addEventListener("abort", onUserAbort);
+        const timer = setTimeout(() => controller.abort(), FIRST_BYTE_MS);
+        let sawByte = false;
+        const guardedWrite = (chunk: UiChunk) => {
+          if (
+            chunk.type === "text-delta" ||
+            chunk.type === "tool-input-available" ||
+            chunk.type === "reasoning-delta"
+          ) {
+            sawByte = true;
+            clearTimeout(timer);
+          }
+          write(chunk);
+        };
+        try {
+          outcome = await runTurn({
+            sessionId: session.id,
+            content,
+            abortSignal: controller.signal,
+            previousTurnId: attempt === 0 ? "auto" : "none",
+            write: guardedWrite,
+          });
+        } finally {
+          clearTimeout(timer);
+          input.abortSignal?.removeEventListener("abort", onUserAbort);
+        }
+        if (sawByte || !outcome.failedBeforeOutput) break;
+        if (input.abortSignal?.aborted) break;
+        if (
+          !shouldRetryBuzzTurn({
+            failedBeforeOutput: true,
+            errorText: outcome.errorText || "aborted",
+            userAborted: false,
+            attempt,
+          })
+        ) {
+          break;
+        }
       }
-      if (outcome.failedBeforeOutput) {
-        write({ type: "error", errorText: "The model did not respond." });
+      if (outcome.failedBeforeOutput && !input.abortSignal?.aborted) {
+        const errorText = isBuzzModelUnavailableError(outcome.errorText)
+          ? buzzModelUnavailableCopy(modelId)
+          : "The model didn't respond. Use Retry to try this turn again.";
+        write({ type: "error", errorText });
       }
       writer.write({
         type: "finish",

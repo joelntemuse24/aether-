@@ -11,7 +11,7 @@ The chat the user sees is the existing Aether shell: cream canvas, Inter chrome,
 | `AETHER_HOSTED_BUZZ_API_KEY` | Buzz token. Seeds GPT-5.6 Luna (`buzz/gpt-5-6-luna`) as the Expert default. |
 | `AETHER_HOSTED_BUZZ_BASE_URL` | Buzz base. `https://api.buzzai.cc` is normalized to `https://api.buzzai.cc/v1`. |
 | `AETHER_HOSTED_CLAUDE_API_KEY` / `AETHER_HOSTED_CLAUDE_BASE_URL` | Legacy aliases for the Buzz key and base URL. |
-| `OPENROUTER_API_KEY` | Optional fallback catalog (`openrouter/gpt-5-6-luna`, sol, terra). |
+| `OPENROUTER_API_KEY` | Not used by TrueForge chat. Other features may still read it. |
 | `OPENROUTER_BASE_URL` | Defaults to `https://openrouter.ai/api/v1`. |
 | `AETHER_TRUEFORGE_URL` | Remote sidecar origin, for example `https://forge.example.com`. Unset uses loopback. |
 | `AETHER_TRUEFORGE_TOKEN` | Shared secret. Required with the URL. Sent as `Authorization: Bearer`. |
@@ -33,7 +33,7 @@ npm run dev
 
 Open http://localhost:3000. The dev process waits until the sidecar answers `/api/v1/capabilities`, seeds providers, then starts Next. A seed failure stops boot. SQLite lives under the OS app-data dir for `trueforge` with suffix `aether`.
 
-Hosted turns send session instructions and file attachments as data-URI parts. Text, reasoning, and tool deltas stream as they arrive. If Buzz fails before any of that output, the same turn is retried on `openrouter/gpt-5-6-luna` when that model is seeded. A failure after output has started finishes that turn instead of sending the text twice. Reasoning effort is `none`. A restarted Next process reuses the sidecar session and skips the session update when the instructions and tool context are unchanged. Model and capability lookups are cached.
+Hosted turns send session instructions and file attachments as data-URI parts. The composer model chip sends the chosen Buzz model as `x-model`. GPT ids use the Buzz OpenAI-compatible provider (`buzz/…`). Claude ids use Buzz's Anthropic-compatible provider (`anthropic/…`, base `https://api.buzzai.cc/v1`). Unknown ids fall back to `gpt-5.6-luna`. Text, reasoning, and tool deltas stream as they arrive. A turn waits about 20 seconds for the first byte, then retries the same model once on a transient error (5xx, Cloudflare 525, network). If it still fails, the thread shows an error and Retry. A model that Buzz says is not enabled for the key is marked unavailable in the picker for the session. There is no OpenRouter failover on this path. Reasoning effort is `none`. A restarted Next process reuses the sidecar session and skips the session update when the model, instructions, and tool context are unchanged.
 
 Approvals use the existing confirm card. Approving or declining resumes the paused harness turn and appends the assistant text to the thread. Auto-continue does not send a new user message while that card is open.
 
@@ -56,7 +56,7 @@ Approvals use the existing confirm card. Approving or declining resumes the paus
 
 ## Tools
 
-Web search, page fetch, browse, and the clock run on Vercel through `POST /api/trueforge/mcp`. The sidecar calls that route; `BRAVE_SEARCH_API_KEY` and `FIRECRAWL_API_KEY` stay in Vercel env. Memory search, project knowledge, Drive reads, and GitHub reads use the same callback. Writes (`memory_write`, `create_artifact`) return the existing confirm card. Set `AETHER_APP_URL` to the public origin the VM can reach. Locally that is `http://127.0.0.1:3000`, and the sidecar allowlists `127.0.0.1` and `localhost`. `AETHER_TRUEFORGE_TOKEN` signs the per-chat tool context.
+Web search, page fetch, browse, and the clock are preloaded on the session, so the model calls them directly. Memory, artifacts, Drive, and GitHub stay on a second server and are discovered only when needed. All of them run on Vercel through `POST /api/trueforge/mcp`. `BRAVE_SEARCH_API_KEY` and `FIRECRAWL_API_KEY` stay in Vercel env. Writes (`memory_write`, `create_artifact`) return the existing confirm card. Set `AETHER_APP_URL` to the public origin the VM can reach. Locally that is `http://127.0.0.1:3000`, and the sidecar allowlists `127.0.0.1` and `localhost`. Drive and GitHub tokens travel in an AES-GCM header keyed from `AETHER_TRUEFORGE_TOKEN`. The sidecar stores that ciphertext, not the tokens.
 
 ## VM
 
@@ -95,4 +95,4 @@ On Vercel:
 | `AETHER_TRUEFORGE_URL` | `https://` origin of the VM. No path. |
 | `AETHER_TRUEFORGE_TOKEN` | The same secret as the VM. |
 
-Leave the Buzz and OpenRouter keys on the VM. If the URL is unset, the token is missing, or the VM does not answer `/api/v1/capabilities`, hosted chat uses the in-process loop.
+Leave the Buzz key on the VM. OpenRouter is not used for these turns. If the URL is unset, the token is missing, or the VM does not answer `/api/v1/capabilities`, hosted chat uses the in-process loop.

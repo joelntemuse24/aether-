@@ -1,6 +1,7 @@
 import type { ProviderId } from "./models";
 import { providerSupportsTools } from "./models";
 import { DEFAULT_HOSTED_MODEL } from "./hosted/catalog";
+import { BUZZ_MODEL_STORAGE_KEY, DEFAULT_BUZZ_MODEL } from "./buzz/models";
 import { resolveCloudTierModel } from "./hosted/speed-tiers";
 import type { VoiceId } from "./voice";
 import {
@@ -156,7 +157,10 @@ export function buildChatHeaders(settings: AppSettings): Record<string, string> 
   if (mode === "hosted") {
     return {
       "x-access-mode": "hosted",
-      "x-model": resolveModel(settings),
+      "x-model":
+        typeof window === "undefined"
+          ? resolveModel(settings)
+          : localStorage.getItem(BUZZ_MODEL_STORAGE_KEY) || DEFAULT_BUZZ_MODEL,
       "x-speed-tier": "expert",
       "x-tools": settings.enableTools ? "1" : "0",
       "x-tool-approval-mode": parseToolApprovalMode(settings.toolApprovalMode),

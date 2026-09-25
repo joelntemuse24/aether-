@@ -146,12 +146,19 @@ const TOOLS: { name: string; description: string; inputSchema: Json }[] = [
 
 export const AETHER_MCP_TOOL_NAMES = TOOLS.map((tool) => tool.name);
 
-export const AETHER_MCP_PRELOAD = [
+/** Schemas for these four are loaded up front. The model calls them directly. */
+export const AETHER_MCP_DIRECT: string[] = [
   TOOL_NAMES.webSearch,
   TOOL_NAMES.fetchUrl,
   TOOL_NAMES.browsePage,
   TOOL_NAMES.currentTime,
 ];
+
+export const AETHER_MCP_PRELOAD = AETHER_MCP_DIRECT;
+
+export const AETHER_MCP_DEFERRED = AETHER_MCP_TOOL_NAMES.filter(
+  (name) => !AETHER_MCP_DIRECT.includes(name),
+);
 
 function textResult(value: unknown, isError = false) {
   return {

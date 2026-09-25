@@ -1,7 +1,30 @@
 /**
  * Hosted Expert providers for the TrueForge sidecar.
  * Keys stay in server env. This is not a customer BYOK path.
+ * GPT models use Buzz's OpenAI-compatible /v1. Claude models use Buzz's Anthropic API.
  */
+
+const KNOWN_CHAT_MODEL_IDS = [
+  "claude-sonnet-5",
+  "gpt-5.6-luna",
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-6-astra",
+  "gpt-6-sol",
+];
+
+function chatModelIds(ids: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of ids) {
+    if (id.startsWith("gpt-image-")) continue;
+    if (!id.startsWith("gpt-") && !id.startsWith("claude-")) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
 
 export const AETHER_BUZZ_PROVIDER = "buzz";
 export const AETHER_OPENROUTER_PROVIDER = "openrouter";
@@ -25,13 +48,22 @@ export type AetherConfiguredModel = {
 };
 
 /** Body for `PUT /api/v1/settings/model-providers` (custom OpenAI-compatible). */
-export type AetherProviderManifest = {
-  type: "custom";
-  name: string;
-  baseUrl: string;
-  auth: { apiKey: string };
-  models: AetherConfiguredModel[];
-};
+export type AetherProviderManifest =
+  | {
+      type: "custom";
+      name: string;
+      baseUrl: string;
+      auth: { apiKey: string };
+      models: AetherConfiguredModel[];
+    }
+  | {
+      type: "anthropic";
+      baseUrl: string;
+      auth: { apiKey: string };
+      models: AetherConfiguredModel[];
+    };
+
+export const BUZZ_ANTHROPIC_BASE_URL = "https://api.buzzai.cc/v1";
 
 const LUNA_EFFORTS: ReasoningEffort[] = [
   "none",
@@ -86,52 +118,42 @@ function buzzModel(modelId: string, name: string): AetherConfiguredModel {
 }
 
 /**
- * Providers to upsert when the matching server key is set.
- * Buzz is listed first so a fresh database exposes Luna before OpenRouter.
+ * Buzz chat models for the sidecar. GPT uses the OpenAI-compatible host.
+ * Claude uses the Anthropic-compatible host. OpenRouter is not seeded here.
  */
 export function aetherProviderManifests(
   env: Record<string, string | undefined> = process.env,
+  modelIds: readonly string[] = KNOWN_CHAT_MODEL_IDS,
 ): AetherProviderManifest[] {
-  const manifests: AetherProviderManifest[] = [];
-
   const buzzKey =
     envSecret(env, "AETHER_HOSTED_BUZZ_API_KEY") ||
     envSecret(env, "AETHER_HOSTED_CLAUDE_API_KEY");
-  if (buzzKey) {
-    const base = normalizeBuzzBaseUrl(
-      envPlain(env, "AETHER_HOSTED_BUZZ_BASE_URL") ||
-        envPlain(env, "AETHER_HOSTED_CLAUDE_BASE_URL"),
-    );
+  if (!buzzKey) return [];
+  const ids = chatModelIds(modelIds);
+  const gpt = ids.filter((id) => id.startsWith("gpt-"));
+  const claude = ids.filter((id) => id.startsWith("claude-"));
+  const base = normalizeBuzzBaseUrl(
+    envPlain(env, "AETHER_HOSTED_BUZZ_BASE_URL") ||
+      envPlain(env, "AETHER_HOSTED_CLAUDE_BASE_URL"),
+  );
+  const manifests: AetherProviderManifest[] = [];
+  if (gpt.length) {
     manifests.push({
       type: "custom",
       name: AETHER_BUZZ_PROVIDER,
       baseUrl: base,
       auth: { apiKey: buzzKey },
-      models: [
-        buzzModel("gpt-5.6-luna", "gpt-5-6-luna"),
-        buzzModel("gpt-5.6-sol", "gpt-5-6-sol"),
-      ],
+      models: gpt.map((id) => buzzModel(id, id.replace(/\./g, "-"))),
     });
   }
-
-  const openRouterKey = envSecret(env, "OPENROUTER_API_KEY");
-  if (openRouterKey) {
-    const base =
-      envPlain(env, "OPENROUTER_BASE_URL").replace(/\/$/, "") ||
-      DEFAULT_OPENROUTER_BASE_URL;
+  if (claude.length) {
     manifests.push({
-      type: "custom",
-      name: AETHER_OPENROUTER_PROVIDER,
-      baseUrl: base,
-      auth: { apiKey: openRouterKey },
-      models: [
-        buzzModel("openai/gpt-5.6-luna", "gpt-5-6-luna"),
-        buzzModel("openai/gpt-5.6-sol", "gpt-5-6-sol"),
-        buzzModel("openai/gpt-5.6-terra", "gpt-5-6-terra"),
-      ],
+      type: "anthropic",
+      baseUrl: BUZZ_ANTHROPIC_BASE_URL,
+      auth: { apiKey: buzzKey },
+      models: claude.map((id) => buzzModel(id, id.replace(/\./g, "-"))),
     });
   }
-
   return manifests;
 }
 

@@ -26,6 +26,7 @@ import {
   insertAppMention,
   mentionQueryAtCaret,
 } from "@/lib/composer/app-mentions";
+import { BuzzModelPicker } from "@/components/assistant-ui/buzz-model-picker";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
@@ -1117,6 +1118,7 @@ const ComposerAction: FC<{
   onMicToggle,
   onHarnessSend,
 }) => {
+  const { settings } = useSettings();
   const micLabel =
     micState === "idle"
       ? "Speak"
@@ -1126,7 +1128,8 @@ const ComposerAction: FC<{
 
   return (
     <div className="flex items-center justify-between gap-2 px-0.5">
-      <div className="flex items-center gap-1">
+      <div className="flex min-w-0 items-center gap-1">
+        {settings.accessMode === "hosted" ? <BuzzModelPicker /> : null}
         <div className="relative" data-attach-menu>
           <TooltipIconButton
             tooltip="Attach"
@@ -1254,6 +1257,13 @@ const MessageError: FC = () => {
   });
   const isTimeout = looksLikeTimeoutCopy(errorText);
 
+  useEffect(() => {
+    if (!errorText.includes("isn't available on this key")) return;
+    window.dispatchEvent(
+      new CustomEvent("aether:buzz-model-unavailable", { detail: { text: errorText } }),
+    );
+  }, [errorText]);
+
   return (
     <MessagePrimitive.Error>
       <ErrorPrimitive.Root
@@ -1300,6 +1310,15 @@ const MessageError: FC = () => {
               Retry regenerates from the last user message, or pick another
               model.
             </p>
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("aether:retry"));
+              }}
+              className="mt-2 rounded-lg px-2 py-1.5 text-[12px] text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
+            >
+              Retry
+            </button>
           </>
         )}
       </ErrorPrimitive.Root>
