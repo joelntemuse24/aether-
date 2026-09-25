@@ -33,7 +33,7 @@ npm run dev
 
 Open http://localhost:3000. The dev process waits until the sidecar answers `/api/v1/capabilities`, seeds providers, then starts Next. A seed failure stops boot. SQLite lives under the OS app-data dir for `trueforge` with suffix `aether`.
 
-Hosted turns send the composed system prompt as session instructions and file attachments as data-URI parts. If Buzz errors before any text or tool output, the same turn is retried on `openrouter/gpt-5-6-luna` when that model is seeded. Session ids are stored on the conversation metadata, so a restarted Next process reuses the sidecar session.
+Hosted turns send session instructions and file attachments as data-URI parts. Text, reasoning, and tool deltas stream as they arrive. If Buzz fails before any of that output, the same turn is retried on `openrouter/gpt-5-6-luna` when that model is seeded. A failure after output has started finishes that turn instead of sending the text twice. Reasoning effort is `none`. A restarted Next process reuses the sidecar session and skips the session update when the instructions and tool context are unchanged. Model and capability lookups are cached.
 
 Approvals use the existing confirm card. Approving or declining resumes the paused harness turn and appends the assistant text to the thread. Auto-continue does not send a new user message while that card is open.
 
@@ -52,8 +52,11 @@ Approvals use the existing confirm card. Approving or declining resumes the paus
 - Hosted Postgres + Redis (this cut is standalone SQLite)
 - Running TrueForge inside a Vercel function. Point `AETHER_TRUEFORGE_URL` at the VM instead. If that URL is unset or the VM does not answer, hosted chat uses the in-process loop.
 - Customer BYOK inside TrueForge (hosted Expert keys only)
-- Aether-owned tools (Drive, GitHub, memory, artifacts) are not registered on the TrueForge session
-- Source chips, the artifact panel, and a structured ask-user card. `tool.response_required` is a sentence in the thread; connect-to-continue is text for `mcp.auth_required`
+- Source chips and a structured ask-user card. `tool.response_required` is a sentence in the thread; connect-to-continue is text for `mcp.auth_required`
+
+## Tools
+
+Web search, page fetch, browse, and the clock run on Vercel through `POST /api/trueforge/mcp`. The sidecar calls that route; `BRAVE_SEARCH_API_KEY` and `FIRECRAWL_API_KEY` stay in Vercel env. Memory search, project knowledge, Drive reads, and GitHub reads use the same callback. Writes (`memory_write`, `create_artifact`) return the existing confirm card. Set `AETHER_APP_URL` to the public origin the VM can reach. Locally that is `http://127.0.0.1:3000`, and the sidecar allowlists `127.0.0.1` and `localhost`. `AETHER_TRUEFORGE_TOKEN` signs the per-chat tool context.
 
 ## VM
 

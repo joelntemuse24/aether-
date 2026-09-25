@@ -1,12 +1,31 @@
 import { TrueForge } from "@truefoundry/trueforge-sdk";
 import { trueforgeAuthHeaders, trueforgeOrigin, trueforgeToken } from "./config";
 import {
+  aetherMcpServerName,
+  aetherMcpSpec,
+  cachedToolContextToken,
+  ensureAetherMcpServer,
+} from "./mcp-register";
+import {
   AETHER_EXPERT_MODEL_FQN,
   AETHER_OPENROUTER_EXPERT_FQN,
   preferAetherExpertModel,
 } from "./providers";
+import type { TrueForgeToolContext } from "./tool-context";
 
-type CachedSession = { id: string; model: string };
+type CachedSession = {
+  id: string;
+  model: string;
+  instructions?: string;
+  mcpKey?: string;
+};
+
+export type TrueForgeSessionInput = {
+  conversationId: string;
+  modelName: string;
+  instructions: string;
+  toolContext?: Omit<TrueForgeToolContext, "exp"> | null;
+};
 
 const sessions = new Map<string, CachedSession>();
 let modelsLoaded = false;
@@ -57,37 +76,67 @@ async function findSession(conversationId: string): Promise<CachedSession | null
   return null;
 }
 
-function agentSpec(modelName: string, instructions: string) {
+function agentSpec(modelName: string, instructions: string, mcpName: string | null) {
   return {
     spec: {
-      model: { name: modelName, params: { reasoningEffort: "low" as const } },
+      model: { name: modelName, params: { reasoningEffort: "none" } },
       instructions,
+      ...(mcpName ? { mcpServers: [aetherMcpSpec(mcpName)] } : {}),
     },
   };
 }
 
-/** One TrueForge session per Aether conversation id. */
-export async function trueforgeSessionId(input: {
-  conversationId: string;
-  modelName: string;
-  instructions: string;
-}): Promise<CachedSession> {
+async function attachTools(
+  conversationId: string,
+  toolContext: Omit<TrueForgeToolContext, "exp"> | null | undefined,
+): Promise<{ name: string; token: string } | null> {
+  if (!toolContext) return null;
+  return ensureAetherMcpServer({
+    client: client(),
+    conversationId,
+    context: toolContext,
+  });
+}
+
+/** One TrueForge session per Aether conversation id. Skips update when nothing changed. */
+export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<CachedSession> {
+  const secret = trueforgeToken();
+  const token =
+    input.toolContext && secret
+      ? cachedToolContextToken(input.conversationId, input.toolContext, secret)
+      : "";
+  const plannedName = token ? aetherMcpServerName(input.conversationId) : "";
+  const plannedKey = token ? `${plannedName}:${token}` : "";
   const existing = await findSession(input.conversationId);
+  if (
+    existing?.model &&
+    existing.instructions === input.instructions &&
+    existing.mcpKey === plannedKey
+  ) {
+    return existing;
+  }
+  const mcp = plannedName ? await attachTools(input.conversationId, input.toolContext) : null;
+  const mcpKey = mcp ? `${mcp.name}:${mcp.token}` : "";
   if (existing) {
     const model = existing.model || input.modelName;
     existing.model = model;
-    if (input.instructions) {
-      await client().sessions.update(existing.id, {
-        agent: agentSpec(model, input.instructions),
-      });
-    }
+    existing.instructions = input.instructions;
+    existing.mcpKey = mcpKey;
+    await client().sessions.update(existing.id, {
+      agent: agentSpec(model, input.instructions, mcp?.name ?? null),
+    });
     return existing;
   }
   const created = await client().sessions.create({
-    agent: agentSpec(input.modelName, input.instructions),
+    agent: agentSpec(input.modelName, input.instructions, mcp?.name ?? null),
     metadata: { aetherConversationId: input.conversationId },
   });
-  const row = { id: created.data.id, model: input.modelName };
+  const row: CachedSession = {
+    id: created.data.id,
+    model: input.modelName,
+    instructions: input.instructions,
+    mcpKey,
+  };
   sessions.set(input.conversationId, row);
   return row;
 }
@@ -98,13 +147,18 @@ export async function switchTrueForgeSessionModel(input: {
   sessionId: string;
   modelName: string;
   instructions: string;
+  mcpName?: string | null;
 }): Promise<void> {
   await client().sessions.update(input.sessionId, {
-    agent: agentSpec(input.modelName, input.instructions),
+    agent: agentSpec(input.modelName, input.instructions, input.mcpName ?? null),
   });
   const cached = sessions.get(input.conversationId);
-  if (cached) cached.model = input.modelName;
-  else sessions.set(input.conversationId, { id: input.sessionId, model: input.modelName });
+  if (cached) {
+    cached.model = input.modelName;
+    cached.instructions = input.instructions;
+  } else {
+    sessions.set(input.conversationId, { id: input.sessionId, model: input.modelName });
+  }
 }
 
 export function trueforgeClient() {

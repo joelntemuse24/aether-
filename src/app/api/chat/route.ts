@@ -278,12 +278,26 @@ export async function POST(req: Request) {
     const { trueforgeSidecarReachable } = await import("@/lib/trueforge/config");
     if (hosted && (await trueforgeSidecarReachable())) {
       const { streamTrueForgeHostedChat } = await import("@/lib/trueforge/chat-stream");
+      const driveToken = hasDriveEarly && userId ? await getValidDriveAccessToken(userId) : null;
+      const githubToken = hasGitHubEarly && userId ? await getValidGitHubAccessToken(userId) : null;
       return streamTrueForgeHostedChat({
         conversationId,
         userText: lastUserText(enrichedMessages) || lastUserText(messages),
         system,
         attachments,
         abortSignal: req.signal,
+        toolContext: {
+          userId,
+          conversationId,
+          projectId: projectId ?? null,
+          runId: harnessRunId ?? null,
+          approvalMode,
+          hasMemory: !!(userId && isCloudDbConfigured()),
+          hasDrive: hasDriveEarly,
+          hasGitHub: hasGitHubEarly,
+          driveAccessToken: driveToken?.accessToken,
+          githubAccessToken: githubToken?.accessToken,
+        },
       });
     }
 

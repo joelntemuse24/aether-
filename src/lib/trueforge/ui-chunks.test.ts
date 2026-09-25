@@ -68,4 +68,30 @@ describe("TrueForge UI chunks", () => {
     );
     assert.equal(after[0]?.id, "tf-text-2");
   });
+
+  it("opens the confirm card when a tool result is waiting for approval", () => {
+    const state = createTrueForgeUiState();
+    const chunks = chunksForTrueForgeEvent(
+      {
+        type: "tool.response",
+        toolCallId: "call_1",
+        content: JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                needs_confirmation: true,
+                confirmation_id: "conf_1",
+                title: "Save memory",
+                preview: "note",
+              }),
+            },
+          ],
+        }),
+      },
+      state,
+    );
+    const card = chunks.find((chunk) => chunk.toolName === "request_confirmation");
+    assert.equal((card?.input as { title?: string }).title, "Save memory");
+  });
 });
