@@ -22,7 +22,32 @@ export function trueforgeSandboxDir(suffix?: string): string {
   return path.join(trueforgeDataDir(suffix), "sandboxes");
 }
 
-/** Delete sandbox directories whose mtime is older than maxAgeMs. Active dirs stay. */
+const SANDBOX_MTIME_DEPTH = 4;
+
+/** Newest mtime in the tree, bounded so a venv is not fully walked. */
+export async function newestMtimeMs(dir: string, depth = SANDBOX_MTIME_DEPTH): Promise<number> {
+  const stat = await fs.lstat(dir);
+  let newest = stat.mtimeMs;
+  if (depth <= 0 || !stat.isDirectory()) return newest;
+  let entries;
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    return newest;
+  }
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      newest = Math.max(newest, await newestMtimeMs(full, depth - 1));
+    } else if (entry.isFile()) {
+      newest = Math.max(newest, (await fs.lstat(full)).mtimeMs);
+    }
+  }
+  return newest;
+}
+
+/** Delete sandbox directories with no recent file or directory mtime. */
 export async function pruneOldSandboxes(
   dir: string,
   maxAgeMs = DEFAULT_SANDBOX_MAX_AGE_MS,
@@ -38,8 +63,8 @@ export async function pruneOldSandboxes(
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const full = path.join(dir, entry.name);
-    const stat = await fs.stat(full);
-    if (now - stat.mtimeMs < maxAgeMs) continue;
+    const newest = await newestMtimeMs(full);
+    if (now - newest < maxAgeMs) continue;
     await fs.rm(full, { recursive: true, force: true });
     removed.push(entry.name);
   }

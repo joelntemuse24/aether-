@@ -51,11 +51,18 @@ const FILE_OUTPUT = `        ## File outputs
 
 const FILE_OUTPUT_PATCHED = `        To give the user a file, write it in the sandbox and emit a sandbox_artifacts block: [label](/absolute/path). One link per line.`;
 
-function patchText(source: string): { text: string; changed: boolean } {
+function patchText(source: string, kind: "deferred" | "sandbox"): { text: string; changed: boolean } {
   let text = source;
   let changed = false;
-  if (text.includes(GET_TOOLS) && !text.includes("!server.preload")) {
-    text = text.replace(GET_TOOLS, GET_TOOLS_PATCHED);
+  if (kind === "deferred") {
+    if (text.includes(GET_TOOLS) && !text.includes("!server.preload")) {
+      text = text.replace(GET_TOOLS, GET_TOOLS_PATCHED);
+      changed = true;
+    }
+    return { text, changed };
+  }
+  if (text.includes(GET_TOOLS_PATCHED)) {
+    text = text.replaceAll(GET_TOOLS_PATCHED, GET_TOOLS);
     changed = true;
   }
   if (text.includes(SKILLS_AND_MCP) && !text.includes("exec can reach these MCP servers")) {
@@ -87,7 +94,8 @@ export function applyTrueForgeSidecarPatches(root = process.cwd()): string[] {
     const file = path.join(root, relative);
     if (!fs.existsSync(file)) continue;
     const source = fs.readFileSync(file, "utf8");
-    const next = patchText(source);
+    const kind = relative.includes("DeferredTool") ? "deferred" : "sandbox";
+    const next = patchText(source, kind);
     if (!next.changed) continue;
     fs.writeFileSync(file, next.text);
     patched.push(relative);
