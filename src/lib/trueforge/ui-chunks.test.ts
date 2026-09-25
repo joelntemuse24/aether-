@@ -55,12 +55,16 @@ describe("TrueForge UI chunks", () => {
       { type: "model.message.delta", content: "Before", finishReason: "tool_calls" },
       state,
     );
-    chunksForTrueForgeEvent(
+    const finished = chunksForTrueForgeEvent(
       {
         type: "model.message",
         toolCalls: [{ id: "call_1", function: { name: "web_search", arguments: "{}" } }],
       },
       state,
+    );
+    assert.equal(
+      finished.some((chunk) => chunk.type === "text-end" && chunk.id === "tf-text-1"),
+      true,
     );
     const after = chunksForTrueForgeEvent(
       { type: "model.message.delta", content: "After" },

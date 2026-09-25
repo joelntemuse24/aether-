@@ -51,6 +51,23 @@ const FILE_OUTPUT = `        ## File outputs
 
 const FILE_OUTPUT_PATCHED = `        To give the user a file, write it in the sandbox and emit a sandbox_artifacts block: [label](/absolute/path). One link per line.`;
 
+function patchClock(source: string): { text: string; changed: boolean } {
+  if (source.includes(CLOCK_OFF) && !source.includes("currentDateTime({ tracing })") && !source.includes("import_CurrentDateTime.currentDateTime")) {
+    return { text: source, changed: false };
+  }
+  let text = source;
+  let changed = false;
+  if (text.includes(CLOCK_JS)) {
+    text = text.replace(CLOCK_JS, CLOCK_OFF);
+    changed = true;
+  }
+  if (text.includes(CLOCK_MJS)) {
+    text = text.replace(CLOCK_MJS, CLOCK_OFF);
+    changed = true;
+  }
+  return { text, changed };
+}
+
 function patchText(source: string, kind: "deferred" | "sandbox"): { text: string; changed: boolean } {
   let text = source;
   let changed = false;
@@ -80,11 +97,17 @@ function patchText(source: string, kind: "deferred" | "sandbox"): { text: string
   return { text, changed };
 }
 
+const CLOCK_JS = "const capabilities = [(0, import_CurrentDateTime.currentDateTime)({ tracing })];";
+const CLOCK_MJS = "const capabilities = [currentDateTime({ tracing })];";
+const CLOCK_OFF = "const capabilities = [];";
+
 const RELATIVE_FILES = [
   "node_modules/@truefoundry/trueforge-core/dist/core/runtime/DeferredTool.js",
   "node_modules/@truefoundry/trueforge-core/dist/core/runtime/DeferredTool.mjs",
   "node_modules/@truefoundry/trueforge-core/dist/core/sandbox/Sandbox.js",
   "node_modules/@truefoundry/trueforge-core/dist/core/sandbox/Sandbox.mjs",
+  "node_modules/@truefoundry/trueforge-core/dist/agent-session/builtinsFromSpec.js",
+  "node_modules/@truefoundry/trueforge-core/dist/agent-session/builtinsFromSpec.mjs",
 ];
 
 /** Patch the installed sidecar package. Missing files are skipped. */
@@ -94,8 +117,12 @@ export function applyTrueForgeSidecarPatches(root = process.cwd()): string[] {
     const file = path.join(root, relative);
     if (!fs.existsSync(file)) continue;
     const source = fs.readFileSync(file, "utf8");
-    const kind = relative.includes("DeferredTool") ? "deferred" : "sandbox";
-    const next = patchText(source, kind);
+    const kind = relative.includes("DeferredTool")
+      ? "deferred"
+      : relative.includes("builtinsFromSpec")
+        ? "clock"
+        : "sandbox";
+    const next = kind === "clock" ? patchClock(source) : patchText(source, kind);
     if (!next.changed) continue;
     fs.writeFileSync(file, next.text);
     patched.push(relative);

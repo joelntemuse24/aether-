@@ -54,12 +54,24 @@ function parseToolInput(args: string): unknown {
   }
 }
 
+function closeOpenText(state: TrueForgeUiState, chunks: UiChunk[]) {
+  if (!state.textId) return;
+  chunks.push({ type: "text-end", id: state.textId });
+  state.textId = null;
+}
+
 /** Emit tool-input-available once arguments have stopped streaming. */
 export function flushPendingTools(state: TrueForgeUiState, chunks: UiChunk[]) {
+  let closing = false;
+  for (const tool of state.tools.values()) {
+    if (!tool.id || !tool.name || state.opened.has(tool.id)) continue;
+    closing = true;
+    break;
+  }
+  if (closing) closeOpenText(state, chunks);
   for (const tool of state.tools.values()) {
     if (!tool.id || !tool.name || state.opened.has(tool.id)) continue;
     state.opened.add(tool.id);
-    state.textId = null;
     chunks.push({
       type: "tool-input-available",
       toolCallId: tool.id,

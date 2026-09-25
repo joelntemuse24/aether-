@@ -4,6 +4,7 @@ import {
   AETHER_EXPERT_MODEL_FQN,
   DEFAULT_BUZZ_BASE_URL,
   aetherProviderManifests,
+  modelProfile,
   normalizeBuzzBaseUrl,
   preferAetherExpertModel,
 } from "./providers";
@@ -64,6 +65,38 @@ describe("aether TrueForge providers", () => {
       aetherProviderManifests({ OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1" }),
       [],
     );
+  });
+
+  it("uses a per-family context, output limit, and reasoning effort", () => {
+    const luna = modelProfile("buzz/gpt-5-6-luna");
+    assert.equal(luna.reasoningEffort, "none");
+    assert.equal(luna.maxOutputTokens, 128_000);
+    assert.equal(luna.reasoningEfforts.includes("none"), true);
+    const astra = modelProfile("gpt-6-astra");
+    assert.equal(astra.reasoningEffort, "low");
+    assert.equal(astra.reasoningEfforts.includes("none"), false);
+    const haiku = modelProfile("claude-haiku-4-5-20251001");
+    assert.equal(haiku.maxOutputTokens, 64_000);
+    assert.equal(haiku.reasoningEffort, undefined);
+    const sonnet = modelProfile("anthropic/claude-sonnet-5");
+    assert.equal(sonnet.maxOutputTokens, 64_000);
+    assert.equal(sonnet.reasoningEffort, undefined);
+    const opus = modelProfile("claude-opus-5-5");
+    assert.equal(opus.maxOutputTokens, 128_000);
+    assert.equal(opus.reasoningEffort, undefined);
+    const fable = modelProfile("claude-fable-5");
+    assert.equal(fable.maxOutputTokens, 128_000);
+    const unknown = modelProfile("mystery-model");
+    assert.equal(unknown.maxOutputTokens, 64_000);
+    assert.equal(unknown.reasoningEffort, undefined);
+    const manifests = aetherProviderManifests(
+      { AETHER_HOSTED_BUZZ_API_KEY: "buzz-secret" },
+      ["gpt-6-astra", "claude-haiku-4-5-20251001"],
+    );
+    assert.equal(manifests[0]?.models[0]?.properties.maxOutputTokens, 128_000);
+    assert.equal(manifests[0]?.models[0]?.properties.reasoningEfforts.includes("none"), false);
+    assert.equal(manifests[1]?.models[0]?.properties.maxOutputTokens, 64_000);
+    assert.deepEqual(manifests[1]?.models[0]?.properties.reasoningEfforts, []);
   });
 
   it("prefers the Buzz Luna FQN over catalog order", () => {
