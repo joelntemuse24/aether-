@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { AETHER_MCP_PRELOAD, handleTrueForgeMcpRpc } from "./mcp-http";
+import { AETHER_MCP_DIRECT, handleTrueForgeMcpRpc } from "./mcp-http";
+import { aetherMcpServers } from "./mcp-register";
 import { readTrueForgeToolContext, signTrueForgeToolContext } from "./tool-context";
 import { trueforgeInstructions } from "./instructions";
 import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
@@ -11,7 +12,12 @@ describe("TrueForge MCP tools", () => {
     const listed = await handleTrueForgeMcpRpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, null);
     const tools = (listed?.result as { tools?: { name: string }[] }).tools ?? [];
     assert.equal(tools.some((tool) => tool.name === "web_search"), true);
-    assert.deepEqual(AETHER_MCP_PRELOAD.includes("web_search"), true);
+    assert.deepEqual(AETHER_MCP_DIRECT.includes("web_search"), true);
+    const specs = aetherMcpServers({ direct: "aether-chat", deferred: "aetherx-chat" });
+    assert.equal(specs[0]?.preload, true);
+    assert.deepEqual(specs[0]?.enableTools, ["web_search", "fetch_url", "browse_page", "current_time"]);
+    assert.equal(specs[1]?.preload, false);
+    assert.equal(specs[1]?.enableTools.includes("web_search"), false);
     const clock = await handleTrueForgeMcpRpc(
       {
         jsonrpc: "2.0",
@@ -35,6 +41,15 @@ describe("TrueForge MCP tools", () => {
     assert.equal(readTrueForgeToolContext(token, secret, 1_000)?.userId, "u1");
     assert.equal(readTrueForgeToolContext(token, secret, 1_000 + 3 * 60 * 60 * 1000), null);
     assert.equal(readTrueForgeToolContext(`${token}x`, secret, 1_000), null);
+    const sealed = signTrueForgeToolContext(
+      { approvalMode: "ask", driveAccessToken: "drive-secret-token" },
+      secret,
+      1_000,
+    );
+    assert.equal(sealed.includes("drive-secret-token"), false);
+    assert.equal(sealed.startsWith("v1."), true);
+    assert.equal(readTrueForgeToolContext(sealed, secret, 1_000)?.driveAccessToken, "drive-secret-token");
+    assert.equal(readTrueForgeToolContext("eyJhbGciOiJub25lIn0.payload.sig", secret, 1_000), null);
   });
 
   it("replaces the long tool catalog in session instructions", () => {

@@ -56,7 +56,7 @@ Approvals use the existing confirm card. Approving or declining resumes the paus
 
 ## Tools
 
-Web search, page fetch, browse, and the clock run on Vercel through `POST /api/trueforge/mcp`. The sidecar calls that route; `BRAVE_SEARCH_API_KEY` and `FIRECRAWL_API_KEY` stay in Vercel env. Memory search, project knowledge, Drive reads, and GitHub reads use the same callback. Writes (`memory_write`, `create_artifact`) return the existing confirm card. Set `AETHER_APP_URL` to the public origin the VM can reach. Locally that is `http://127.0.0.1:3000`, and the sidecar allowlists `127.0.0.1` and `localhost`. `AETHER_TRUEFORGE_TOKEN` signs the per-chat tool context.
+Web search, page fetch, browse, and the clock are preloaded on the session, so the model calls them directly. Memory, artifacts, Drive, and GitHub stay on a second server and are discovered only when needed. All of them run on Vercel through `POST /api/trueforge/mcp`. `BRAVE_SEARCH_API_KEY` and `FIRECRAWL_API_KEY` stay in Vercel env. Writes (`memory_write`, `create_artifact`) return the existing confirm card. Set `AETHER_APP_URL` to the public origin the VM can reach. Locally that is `http://127.0.0.1:3000`, and the sidecar allowlists `127.0.0.1` and `localhost`. Drive and GitHub tokens travel in an AES-GCM header keyed from `AETHER_TRUEFORGE_TOKEN`. The sidecar stores that ciphertext, not the tokens.
 
 ## VM
 
