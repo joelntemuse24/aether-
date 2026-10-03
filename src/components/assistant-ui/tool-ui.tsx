@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, type FC } from "react";
 import { useAuiState } from "@assistant-ui/react";
 import {
-  ChevronDownIcon,
   DownloadIcon,
   ExternalLinkIcon,
   FileIcon,
@@ -271,49 +270,6 @@ function extractPartialJsonString(
   return out;
 }
 
-/** Receipt label for completed work — a noun, not a GPT “Web search” chip. */
-function toolTraceNoun(name: string): string {
-  switch (name) {
-    case TOOL_NAMES.webSearch:
-      return "Sources";
-    case TOOL_NAMES.executePython:
-      return "Output";
-    case TOOL_NAMES.currentTime:
-      return "Time";
-    case TOOL_NAMES.createArtifact:
-      return "Preview";
-    case TOOL_NAMES.createPresentation:
-    case TOOL_NAMES.createSpreadsheet:
-    case TOOL_NAMES.createDocument:
-    case TOOL_NAMES.createPdf:
-    case TOOL_NAMES.workspacePublishFile:
-      return "File";
-    case TOOL_NAMES.memorySearch:
-    case TOOL_NAMES.memoryWrite:
-      return "Memory";
-    case TOOL_NAMES.projectKnowledgeSearch:
-      return "Project";
-    case TOOL_NAMES.driveSearch:
-    case TOOL_NAMES.driveRead:
-      return "Drive";
-    case TOOL_NAMES.githubGetRepo:
-    case TOOL_NAMES.githubListContents:
-    case TOOL_NAMES.githubReadFile:
-      return "Repository";
-    case TOOL_NAMES.fetchUrl:
-    case TOOL_NAMES.browsePage:
-    case TOOL_NAMES.browserSnapshot:
-    case TOOL_NAMES.browserNavigate:
-    case TOOL_NAMES.browserAct:
-      return "Page";
-    case TOOL_NAMES.searchImages:
-    case TOOL_NAMES.generateImage:
-      return "Image";
-    default:
-      return "Result";
-  }
-}
-
 const ToolShell: FC<{
   name: string;
   running: boolean;
@@ -328,11 +284,9 @@ const ToolShell: FC<{
   expandWhileRunning?: boolean;
   /** Confirm / approval card — render the body, never a status chip. */
   stayOpen?: boolean;
-  /** Search hits and similar receipts sit inline as cards, not behind a chip. */
+  /** Kept for callers. Receipts no longer render a second disclosure. */
   surface?: "details" | "inline";
-}> = ({ name, running, error, children, headerAction, stayOpen, surface }) => {
-  const hasBody = !!children;
-
+}> = ({ running, error, children, headerAction, stayOpen }) => {
   if (running && !stayOpen) {
     // Live work is the compact activity one-liner. Rendering bodies here
     // grows the thread and jumps the docked composer.
@@ -350,9 +304,9 @@ const ToolShell: FC<{
     );
   }
 
-  if (!hasBody && !headerAction && !error) return null;
-
-  const inline = surface === "inline";
+  // Finished tools belong in the single activity disclosure. An error
+  // line and an Open action stay, without a second collapsed chip.
+  if (!error && !headerAction) return null;
 
   return (
     <div className="aether-tool-trace">
@@ -363,17 +317,6 @@ const ToolShell: FC<{
       ) : null}
       {headerAction ? (
         <div className="aether-tool-trace__action">{headerAction}</div>
-      ) : null}
-      {hasBody && inline ? (
-        <div className="aether-tool-trace__body">{children}</div>
-      ) : hasBody ? (
-        <details className="aether-tool-trace__details">
-          <summary className="aether-tool-trace__summary">
-            <span>{toolTraceNoun(name)}</span>
-            <ChevronDownIcon className="aether-activity__caret" aria-hidden />
-          </summary>
-          <div className="aether-tool-trace__body">{children}</div>
-        </details>
       ) : null}
     </div>
   );

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import {
   activityClockShouldRun,
   closeActivityClock,
@@ -264,7 +264,7 @@ describe("deriveAgentActivity — honesty", () => {
 
     assert.equal(view.visible, true);
     assert.equal(view.mode, "collapsed");
-    assert.equal(view.summaryLabel, "Searched the web");
+    assert.equal(view.summaryLabel, "Thought for 12s · Searched the web");
     assert.equal(view.elapsedSeconds, 12);
     assert.equal(view.steps.length, 1);
     assert.equal(view.steps[0]?.label, "Searched the web");
@@ -297,7 +297,7 @@ describe("deriveAgentActivity — honesty", () => {
       elapsedSeconds: 8,
     });
     assert.equal(view.mode, "collapsed");
-    assert.equal(view.summaryLabel, "Searched the web · 2 sources");
+    assert.equal(view.summaryLabel, "Thought for 8s · Searched the web · 2 sources");
     assert.equal(view.liveLine, null);
   });
 
@@ -350,8 +350,12 @@ describe("deriveAgentActivity — honesty", () => {
     });
 
     assert.equal(view.mode, "collapsed");
-    assert.equal(view.summaryLabel, "Searched the web");
+    assert.equal(
+      view.summaryLabel,
+      "Thought for 12s · Searched the web · Created table",
+    );
     assert.equal(view.steps.length, 2);
+    assert.equal(view.summaryLabel?.includes("\n"), false);
   });
 
   it("ignores classifying — no Planning costume", () => {
@@ -509,6 +513,112 @@ describe("deriveAgentActivity — honesty", () => {
       }),
       true,
     );
+  });
+
+  it("freezes the clock when the answer's first text token arrives", () => {
+    const prose = [
+      {
+        role: "assistant" as const,
+        id: "asst-answer",
+        parts: [
+          {
+            type: "tool-web_search",
+            args: { query: "central bank rate" },
+            state: "output-available",
+            result: { ok: true, results: [] },
+          },
+          { type: "text", text: "The rate is 2%." },
+        ],
+      },
+    ];
+    assert.equal(
+      activityClockShouldRun({ isRunning: true, messages: prose }),
+      false,
+    );
+    assert.equal(
+      activityClockShouldRun({
+        isRunning: true,
+        messages: [
+          {
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-web_search",
+                args: { query: "central bank rate" },
+                state: "input-available",
+              },
+              { type: "text", text: "The rate is 2%." },
+            ],
+          },
+        ],
+      }),
+      true,
+    );
+    assert.equal(
+      activityClockShouldRun({
+        isRunning: true,
+        messages: [
+          {
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-web_search",
+                args: { query: "central bank rate" },
+                state: "input-available",
+              },
+            ],
+          },
+        ],
+      }),
+      true,
+    );
+    assert.equal(
+      activityClockShouldRun({
+        isRunning: true,
+        messages: [
+          {
+            role: "assistant",
+            parts: [
+              {
+                type: "text",
+                text: '<|DSML| tool_search query="time"><|/DSML| tool_search>',
+              },
+            ],
+          },
+        ],
+      }),
+      true,
+    );
+
+    resetActivityClock();
+    mock.timers.enable({ apis: ["Date"], now: 1_700_000_000_000 });
+    try {
+      syncActivityClock(true);
+      mock.timers.tick(12_000);
+      assert.equal(syncActivityClock(true), 12);
+      assert.equal(
+        activityClockShouldRun({ isRunning: true, messages: prose }),
+        false,
+      );
+      const frozen = closeActivityClock("asst-answer");
+      assert.equal(frozen, 12);
+      mock.timers.tick(3_000);
+      assert.equal(recalledActivityElapsed("asst-answer"), 12);
+      assert.equal(syncActivityClock(false), 12);
+      const view = deriveAgentActivity({
+        messages: prose,
+        isRunning: true,
+        elapsedSeconds: recalledActivityElapsed("asst-answer"),
+      });
+      assert.equal(view.mode, "collapsed");
+      assert.equal(
+        view.summaryLabel,
+        "Thought for 12s · Searched the web",
+      );
+    } finally {
+      mock.timers.reset();
+      resetActivityClock();
+    }
   });
 
   it("names a web search in natural language and keeps the query off the live line", () => {
@@ -677,7 +787,10 @@ describe("deriveAgentActivity — honesty", () => {
       elapsedSeconds: 31,
     });
     assert.equal(view.mode, "collapsed");
-    assert.equal(view.summaryLabel, "Searched the web");
+    assert.equal(
+      view.summaryLabel,
+      "Thought for 31s · Searched the web · Ran Python",
+    );
     assert.equal(view.steps.every((step) => step.state === "complete"), true);
     assert.equal(
       activityClockShouldRun({
@@ -799,6 +912,167 @@ describe("formatActivityElapsed", () => {
   });
 });
 
+describe("one disclosure per finished turn", () => {
+  it("collapses a time tool to a single Checked the time line", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "reasoning",
+              text: "The user wants Dublin local time.",
+            },
+            {
+              type: "tool-call",
+              toolName: "current_time",
+              args: { timezone: "Europe/Dublin" },
+              result: { ok: true, time: "17:27" },
+              status: { type: "complete" },
+            },
+            { type: "text", text: "It is 5:27 PM in Dublin." },
+          ],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 4,
+    });
+
+    assert.equal(view.mode, "collapsed");
+    assert.equal(view.summaryLabel, "Checked the time");
+    assert.equal(view.steps.length, 1);
+    assert.equal(view.reasoning, "The user wants Dublin local time.");
+    assert.equal(view.summaryLabel?.includes("Dublin local time"), false);
+    assert.equal(view.summaryLabel?.includes("\n"), false);
+    assert.doesNotMatch(JSON.stringify(view.summaryLabel), /"time"|17:27/);
+  });
+
+  it("joins search and fetch into one headline and keeps both steps", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-call",
+              toolName: "web_search",
+              args: { query: "Central Bank of Ireland funds" },
+              result: {
+                ok: true,
+                results: [
+                  {
+                    title: "Funds",
+                    url: "https://www.centralbank.ie/news",
+                  },
+                ],
+              },
+              status: { type: "complete" },
+            },
+            {
+              type: "tool-call",
+              toolName: "fetch_url",
+              args: { url: "https://www.centralbank.ie/funds" },
+              result: {
+                ok: true,
+                title: "Funds",
+                url: "https://www.centralbank.ie/funds",
+                text: "A long page body that must stay out of the headline.",
+              },
+              status: { type: "complete" },
+            },
+            { type: "text", text: "The funds page is up." },
+          ],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 4,
+    });
+
+    assert.equal(view.mode, "collapsed");
+    assert.equal(
+      view.summaryLabel,
+      "Thought for 4s · Searched the web · 2 sources · Read centralbank.ie",
+    );
+    assert.equal(view.steps.length, 2);
+    assert.equal(view.steps[0]?.toolName, "web_search");
+    assert.equal(view.steps[0]?.query, "Central Bank of Ireland funds");
+    assert.equal(view.steps[1]?.toolName, "fetch_url");
+    assert.equal(view.steps[1]?.site, "centralbank.ie");
+    assert.equal(view.reasoning, null);
+    assert.equal(view.summaryLabel?.includes("\n"), false);
+    assert.equal(view.summaryLabel?.includes("long page body"), false);
+  });
+
+  it("keeps a python run inside the step and out of the headline", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-call",
+              toolName: "execute_python",
+              args: { code: "print(1 + 1)\n" },
+              result: { ok: true, stdout: "2\n" },
+              status: { type: "complete" },
+            },
+            { type: "text", text: "The result is 2." },
+          ],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 5,
+    });
+
+    assert.equal(view.summaryLabel, "Ran Python");
+    assert.equal(view.steps[0]?.code, "print(1 + 1)");
+    assert.equal(JSON.stringify(view).includes('"stdout"'), false);
+  });
+
+  it("strips DSML, system text, and raw tool JSON from reasoning", () => {
+    const dumped = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "reasoning",
+              text: '<|DSML| tool_search query="x"><|/DSML| tool_search> {"toolName":"current_time","arguments":{"tz":"Europe/Dublin"}}',
+            },
+            { type: "text", text: "Done." },
+          ],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 4,
+    });
+    assert.equal(dumped.reasoning, null);
+    assert.doesNotMatch(JSON.stringify(dumped), /DSML|toolName|Europe\/Dublin/);
+
+    const mixed = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "reasoning",
+              text: 'System: you are a hidden planner.\nCheck the clock. {"toolName":"current_time","arguments":{"tz":"Europe/Dublin"}}',
+            },
+            { type: "text", text: "It is evening." },
+          ],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 4,
+    });
+    assert.equal(mixed.summaryLabel, "Thought for 4s");
+    assert.equal(mixed.reasoning, "Check the clock.");
+    assert.equal(mixed.summaryLabel?.includes("Check the clock"), false);
+    assert.equal(JSON.stringify(mixed.reasoning).includes("toolName"), false);
+    assert.equal(JSON.stringify(mixed.reasoning).includes("System:"), false);
+  });
+});
+
 describe("thread / composer copy stays honest", () => {
   it("does not keep Thinking / Planning / Working costume strings", () => {
     const files = [
@@ -875,6 +1149,8 @@ describe("thread / composer copy stays honest", () => {
     assert.match(css, /aether-source-tray__hosts/);
     assert.doesNotMatch(css, /translateY\(3px\)/);
     assert.match(toolUi, /aether-tool-trace/);
+    assert.doesNotMatch(toolUi, /aether-tool-trace__summary/);
+    assert.doesNotMatch(toolUi, /toolTraceNoun/);
     assert.doesNotMatch(toolUi, /const ICONS/);
     assert.doesNotMatch(toolUi, /display\.runningLabel/);
     assert.doesNotMatch(toolUi, /Searching the web…/);
@@ -901,6 +1177,29 @@ describe("thread / composer copy stays honest", () => {
     assert.match(strip, /aria-live="polite"/);
     assert.match(strip, /aria-expanded/);
     assert.match(strip, /aria-controls/);
+    assert.match(strip, /aether-activity__reasoning/);
+    assert.match(strip, /step\.query/);
+    assert.match(strip, /step\.site/);
+    assert.match(strip, /step\.code/);
+    assert.match(thread, /type === "reasoning"/);
+    const assistantMessage = thread.slice(
+      thread.indexOf("const AssistantMessage"),
+      thread.indexOf("const AssistantActionBar"),
+    );
+    assert.match(assistantMessage, /isLast/);
+    assert.match(assistantMessage, /md:group-hover\/message:opacity-100/);
+    assert.doesNotMatch(
+      assistantMessage,
+      /opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover\/message:opacity-100/,
+    );
+    const userMessage = thread.slice(
+      thread.indexOf("const UserMessage"),
+      thread.indexOf("const UserActionBar"),
+    );
+    assert.match(
+      userMessage,
+      /md:opacity-0 md:group-hover\/message:opacity-100/,
+    );
     assert.match(strip, /activityClockShouldRun/);
     assert.match(strip, /shouldShowComposerActivity/);
     assert.match(strip, /sourceChipLabel/);

@@ -82,3 +82,97 @@ export function isHiddenToolMarkup(text: unknown): boolean {
   if (!looksLikeRawToolMarkup(value)) return false;
   return sanitizeVisibleAssistantText(value).length === 0;
 }
+
+const SYSTEM_LINE = /^\s*(?:system|developer)\s*:\s*[^\n]*$/gim;
+const SYSTEM_TAG = /<\s*\/?\s*system\b[^>]*>/gi;
+
+function looksLikeToolPayload(blob: string): boolean {
+  return /"(?:toolName|tool_name|arguments|function_call)"\s*:/.test(blob);
+}
+
+function isJsonBlob(value: string): boolean {
+  const trimmed = value.trim();
+  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return false;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    return parsed !== null && typeof parsed === "object";
+  } catch {
+    return false;
+  }
+}
+
+/** End index after a JSON object/array, or -1 when the slice is not closed. */
+function scanJsonEnd(value: string, start: number): number {
+  const open = value[start];
+  const close = open === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < value.length; i++) {
+    const ch = value[i]!;
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === open || ch === "{" || ch === "[") depth++;
+    else if (ch === close || ch === "}" || ch === "]") {
+      depth--;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+
+function stripToolJsonBlobs(value: string): string {
+  if (isJsonBlob(value) && looksLikeToolPayload(value.trim())) return "";
+  let out = "";
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i]!;
+    if (ch !== "{" && ch !== "[") {
+      out += ch;
+      continue;
+    }
+    const end = scanJsonEnd(value, i);
+    if (end < 0) {
+      out += ch;
+      continue;
+    }
+    const blob = value.slice(i, end);
+    if (looksLikeToolPayload(blob)) {
+      i = end - 1;
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+/**
+ * Reasoning shown inside the collapsed disclosure.
+ * Reuses the visible-text strip, then drops system lines and tool JSON.
+ */
+export function sanitizeReasoningText(text: unknown): string {
+  let value = sanitizeVisibleAssistantText(text);
+  if (!value) return "";
+  value = value.replace(SYSTEM_TAG, " ");
+  value = value.replace(SYSTEM_LINE, " ");
+  value = stripToolJsonBlobs(value);
+  value = value
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return value;
+}
