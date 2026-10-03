@@ -43,6 +43,22 @@ export function resolveHistoryPersistId(input: {
   return { id: null, initialize: true };
 }
 
+/**
+ * Id sent on every chat POST. Guest first-send and the in-turn Continuing
+ * retry often have no remoteId yet; the fallback keeps one session.
+ */
+export function conversationIdForTurn(input: {
+  remoteId?: string | null;
+  locationId?: string | null;
+  fallbackId?: string | null;
+}): string | null {
+  for (const value of [input.remoteId, input.locationId, input.fallbackId]) {
+    const id = value?.trim();
+    if (id) return id;
+  }
+  return null;
+}
+
 export function resolveInitializedRemoteId(assistantThreadId: string): string {
   if (!assistantThreadId.startsWith("__LOCALID_")) {
     return assistantThreadId;
