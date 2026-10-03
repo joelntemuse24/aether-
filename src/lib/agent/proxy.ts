@@ -48,6 +48,7 @@ export type ProxyNativeChatInput = {
   timeMinutes: number | null;
   tools?: readonly string[];
   projectId?: string | null;
+  canPersist?: boolean;
   abortSignal?: AbortSignal;
   openRouterKey?: string | null;
   requestId?: string;
@@ -94,6 +95,7 @@ export async function proxyNativeAgentChat(input: ProxyNativeChatInput): Promise
       approvalMode: input.approvalMode,
       requestId,
       projectId: input.projectId || undefined,
+      canPersist: input.canPersist === true,
     },
     secret,
   );

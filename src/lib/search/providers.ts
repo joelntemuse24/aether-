@@ -147,7 +147,7 @@ export async function searchFirecrawl(
     },
     body: JSON.stringify(firecrawlSearchPayload(query)),
   });
-  if (!res.ok) return [];
+  if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
   const parsed = await readJson(res);
   if (!parsed.ok) return [];
   const data = parsed.data as {
@@ -186,7 +186,7 @@ export async function searchBrave(
       "User-Agent": SEARCH_UA,
     },
   });
-  if (!res.ok) return [];
+  if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
   const parsed = await readJson(res);
   if (!parsed.ok) return [];
   const data = parsed.data as {
@@ -223,7 +223,7 @@ export async function searchExa(
       contents: { text: { maxCharacters: 600 } },
     }),
   });
-  if (!res.ok) return [];
+  if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
   const parsed = await readJson(res);
   if (!parsed.ok) return [];
   const data = parsed.data as {
@@ -265,7 +265,7 @@ export async function searchTavily(
       include_answer: false,
     }),
   });
-  if (!res.ok) return [];
+  if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
   const parsed = await readJson(res);
   if (!parsed.ok) return [];
   const data = parsed.data as {

@@ -11,6 +11,7 @@ import { runAgentLoop, type AgentLoopResult } from "@/lib/agent/loop";
 import { AGENT_MODEL_UNAVAILABLE, buildAgentLanguageModels, type AgentModelBuild } from "@/lib/agent/models";
 import { agentToolGroup, type AgentToolDefinition, type AgentToolExecute, type AgentToolGroup } from "@/lib/agent/registry";
 import { bubblewrapAvailable, createBubblewrapSandbox, type AgentSandbox } from "@/lib/agent/sandbox";
+import { sandboxDirectoryKey } from "@/lib/agent/sandbox-key";
 import type { WebExecDeps } from "@/lib/agent/web-exec";
 import { assertPublicHttpUrl } from "@/lib/connectors/url-safety";
 import type { UiChunk } from "@/lib/trueforge/ui-chunks";
@@ -86,15 +87,22 @@ export async function runNativeTurn(
   const callbackOk = await callbackOriginAllowed(body.callbackOrigin, deps.allowCallback === true);
   const listed = definitionsForAllowList(body.tools);
   const wantsSandbox = listed.some((definition) => agentToolGroup(definition.name) === "sandbox");
-  const sandboxOk =
+  const probed =
     deps.sandboxAvailable != null
       ? deps.sandboxAvailable
       : wantsSandbox
         ? await bubblewrapAvailable()
         : false;
+  const identityOk = sandboxDirectoryKey(body.userId, body.conversationId) != null;
+  const sandboxOk = probed && (deps.sandbox != null || identityOk);
   const tools = attachNativeTools(body.tools, { callbackOk, sandboxOk });
   const sandbox = sandboxOk
-    ? (deps.sandbox ?? createBubblewrapSandbox({ conversationId: body.conversationId, env }))
+    ? (deps.sandbox ??
+      createBubblewrapSandbox({
+        conversationId: body.conversationId,
+        userId: body.userId,
+        env,
+      }))
     : null;
   const result: AgentLoopResult = await runAgentLoop({
     model: built.model,

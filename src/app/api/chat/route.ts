@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai";
 import { selectChatEngine } from "@/lib/agent/engine";
-import { NATIVE_PROVIDER_UNSUPPORTED, proxyNativeAgentChat } from "@/lib/agent/proxy";
+import { NATIVE_ENGINE_UNAVAILABLE, NATIVE_PROVIDER_UNSUPPORTED, proxyNativeAgentChat } from "@/lib/agent/proxy";
+import { nativeSandboxIdentity } from "@/lib/agent/sandbox-key";
 import { streamLegacyLocalChat } from "@/lib/harness/legacy-local-stream";
 import { updateAgentRunStatus } from "@/lib/harness/runs-store";
 import type { HarnessChatContext } from "@/lib/harness/types";
@@ -384,11 +385,26 @@ export async function POST(req: Request) {
         canPersistArtifacts: !!(userId && isCloudDbConfigured()),
         approvalMode,
       }).system;
+      const identity = nativeSandboxIdentity({
+        userId,
+        guestId: guest.id,
+        conversationId,
+      });
+      if (!identity) {
+        return withGuestCookie(
+          new Response(JSON.stringify({ error: NATIVE_ENGINE_UNAVAILABLE }), {
+            status: 503,
+            headers: { "Content-Type": "application/json" },
+          }),
+          guest.setCookie,
+        );
+      }
       return withGuestCookie(
         proxyNativeAgentChat({
           env: process.env,
-          conversationId: conversationId ?? "",
-          userId: userId || guest.id,
+          conversationId: identity.conversationId,
+          userId: identity.userId,
+          canPersist: !!(userId && isCloudDbConfigured()),
           messages: enrichedMessages,
           system: nativeSystem,
           modelId,

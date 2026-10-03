@@ -10,6 +10,14 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
+import {
+  MAX_PUBLISHED_BYTES,
+  MAX_PUBLISHED_FILES,
+  mimeForPublishedExtension,
+  PUBLISHED_EXTENSIONS,
+  type SandboxFilePayload,
+} from "./publish-files";
+import { sandboxDirectoryKey } from "./sandbox-key";
 import { pruneOldSandboxes } from "@/lib/trueforge/sandbox-prune";
 
 export const SANDBOX_UNAVAILABLE = "The sandbox is unavailable this turn.";
@@ -44,6 +52,8 @@ export interface AgentSandbox {
   writeFile(relativePath: string, content: string): Promise<void>;
   readFile(relativePath: string): Promise<string>;
   list(relativePath?: string): Promise<string[]>;
+  /** Files created at or after `sinceMs`. Pass `only` to read one relative path. */
+  exportFiles(sinceMs: number, only?: string): Promise<SandboxFilePayload[]>;
 }
 
 export class SandboxPathError extends Error {
@@ -78,9 +88,57 @@ export function nativeSandboxRoot(env: Record<string, string | undefined> = proc
   return path.join(base, "aether-agent", "sandboxes");
 }
 
-export function sandboxConversationKey(conversationId: string): string {
-  const cleaned = conversationId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
-  return cleaned || "unknown";
+/**
+ * One limit per call. `/bin/sh` on Ubuntu is dash: it accepts a single limit
+ * and uses `-p` for processes, so `ulimit -v N -u N -t N` exits 125.
+ */
+export const SANDBOX_ULIMIT_SCRIPT =
+  'ulimit -v "$1" && ulimit -p "$2" && ulimit -t "$3" || exit 125; exec /bin/sh -c "$4"';
+
+/** How many bubblewrap commands may run at once. The per-run virtual limit stays 2048 MB. */
+export const SANDBOX_MAX_CONCURRENT = 2;
+
+let activeSandboxRuns = 0;
+const sandboxWaiters: Array<() => void> = [];
+
+export function resetSandboxSlotsForTests(): void {
+  activeSandboxRuns = 0;
+  sandboxWaiters.length = 0;
+}
+
+function acquireSandboxSlot(signal?: AbortSignal): Promise<boolean> {
+  if (signal?.aborted) return Promise.resolve(false);
+  if (activeSandboxRuns < SANDBOX_MAX_CONCURRENT) {
+    activeSandboxRuns += 1;
+    return Promise.resolve(true);
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const grant = () => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      resolve(true);
+    };
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      const index = sandboxWaiters.indexOf(grant);
+      if (index >= 0) sandboxWaiters.splice(index, 1);
+      resolve(false);
+    };
+    sandboxWaiters.push(grant);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function releaseSandboxSlot(): void {
+  const next = sandboxWaiters.shift();
+  if (next) {
+    next();
+    return;
+  }
+  activeSandboxRuns = Math.max(0, activeSandboxRuns - 1);
 }
 
 /** Relative path inside `root`. Rejects NUL and `..`. */
@@ -193,7 +251,7 @@ export function bubblewrapArgs(input: {
     "--",
     "/bin/sh",
     "-c",
-    'ulimit -v "$1" -u "$2" -t "$3" || exit 125; exec /bin/sh -c "$4"',
+    SANDBOX_ULIMIT_SCRIPT,
     "sandbox",
     String(memoryKb),
     String(SANDBOX_LIMITS.pids),
@@ -253,7 +311,9 @@ export async function pruneNativeSandboxes(env: Record<string, string | undefine
   }
 }
 
-async function prepareWorkspace(root: string, conversationId: string): Promise<string> {
+async function prepareWorkspace(root: string, userId: string, conversationId: string): Promise<string | null> {
+  const key = sandboxDirectoryKey(userId, conversationId);
+  if (!key) return null;
   if (!prunedRoots.has(root)) {
     prunedRoots.add(root);
     try {
@@ -262,9 +322,63 @@ async function prepareWorkspace(root: string, conversationId: string): Promise<s
       // A failed cleanup does not block the turn.
     }
   }
-  const dir = path.join(root, sandboxConversationKey(conversationId));
+  const dir = path.join(root, key);
   await fsp.mkdir(dir, { recursive: true, mode: 0o700 });
   return dir;
+}
+
+async function collectSandboxFiles(root: string, sinceMs: number, only?: string): Promise<SandboxFilePayload[]> {
+  const found: Array<SandboxFilePayload & { mtimeMs: number }> = [];
+  const walk = async (dir: string, prefix: string, depth: number): Promise<void> => {
+    if (depth > 3) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = await fsp.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const abs = path.join(dir, entry.name);
+      let stat: fs.Stats;
+      try {
+        stat = await fsp.lstat(abs);
+      } catch {
+        continue;
+      }
+      if (stat.isSymbolicLink()) continue;
+      if (stat.isDirectory()) {
+        await walk(abs, relative, depth + 1);
+        continue;
+      }
+      if (!stat.isFile()) continue;
+      const ext = entry.name.includes(".") ? (entry.name.split(".").pop()?.toLowerCase() ?? "") : "";
+      if (!PUBLISHED_EXTENSIONS.has(ext)) continue;
+      const filename = relative.split(path.sep).join("/");
+      if (only && filename !== only) continue;
+      if (!only && stat.mtimeMs + 5 < sinceMs) continue;
+      if (stat.size <= 0 || stat.size > MAX_PUBLISHED_BYTES) continue;
+      const buffer = await fsp.readFile(abs);
+      const mime = mimeForPublishedExtension(ext);
+      found.push({
+        filename,
+        mime,
+        bytes: buffer.length,
+        dataUrl: `data:${mime};base64,${buffer.toString("base64")}`,
+        mtimeMs: stat.mtimeMs,
+      });
+    }
+  };
+  await walk(root, "", 0);
+  found.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const picked = only ? found.slice(0, 1) : found.slice(0, MAX_PUBLISHED_FILES);
+  return picked.map((file) => ({
+    filename: file.filename,
+    mime: file.mime,
+    bytes: file.bytes,
+    dataUrl: file.dataUrl,
+  }));
 }
 
 export function resetSandboxPruneForTests(): void {
@@ -327,6 +441,7 @@ export function bubblewrapAvailable(options?: {
 
 export function createBubblewrapSandbox(options: {
   conversationId: string;
+  userId: string;
   env?: Record<string, string | undefined>;
   rootDir?: string;
   spawn?: SandboxSpawn;
@@ -339,10 +454,10 @@ export function createBubblewrapSandbox(options: {
   const spawnImpl = options.spawn ?? defaultSpawn;
   const killProcess = options.killProcess ?? defaultKill;
   const binary = options.bwrapPath ?? "bwrap";
-  let workspaceReady: Promise<string> | null = null;
+  let workspaceReady: Promise<string | null> | null = null;
 
-  const workspace = (): Promise<string> => {
-    workspaceReady ??= prepareWorkspace(root, options.conversationId);
+  const workspace = (): Promise<string | null> => {
+    workspaceReady ??= prepareWorkspace(root, options.userId, options.conversationId);
     return workspaceReady;
   };
 
@@ -362,7 +477,12 @@ export function createBubblewrapSandbox(options: {
         return { ok: false, stdout: "", stderr: "", exitCode: null, aborted: true };
       }
       const dir = await workspace();
+      if (!dir) return { ok: false, stdout: "", stderr: "", exitCode: null, error: SANDBOX_UNAVAILABLE };
       if (input.abortSignal?.aborted) {
+        return { ok: false, stdout: "", stderr: "", exitCode: null, aborted: true };
+      }
+      const acquired = await acquireSandboxSlot(input.abortSignal);
+      if (!acquired) {
         return { ok: false, stdout: "", stderr: "", exitCode: null, aborted: true };
       }
       const args = bubblewrapArgs({
@@ -374,6 +494,7 @@ export function createBubblewrapSandbox(options: {
       try {
         child = spawnImpl(binary, args, { stdio: ["ignore", "pipe", "pipe"] });
       } catch {
+        releaseSandboxSlot();
         return { ok: false, stdout: "", stderr: "", exitCode: null, error: SANDBOX_UNAVAILABLE };
       }
       let spawnError: unknown = null;
@@ -398,13 +519,20 @@ export function createBubblewrapSandbox(options: {
         kill();
       };
       input.abortSignal?.addEventListener("abort", onAbort, { once: true });
-      const [stdout, stderr, status] = await Promise.all([
-        readCapped(child.stdout, SANDBOX_LIMITS.maxOutputChars),
-        readCapped(child.stderr, SANDBOX_LIMITS.maxOutputChars),
-        closed,
-      ]);
-      clearTimeout(timer);
-      input.abortSignal?.removeEventListener("abort", onAbort);
+      let stdout = "";
+      let stderr = "";
+      let status: { code: number | null; signal: NodeJS.Signals | null } = { code: null, signal: null };
+      try {
+        [stdout, stderr, status] = await Promise.all([
+          readCapped(child.stdout, SANDBOX_LIMITS.maxOutputChars),
+          readCapped(child.stderr, SANDBOX_LIMITS.maxOutputChars),
+          closed,
+        ]);
+      } finally {
+        clearTimeout(timer);
+        input.abortSignal?.removeEventListener("abort", onAbort);
+        releaseSandboxSlot();
+      }
       if (bwrapFailure(spawnError, stderr)) {
         return { ok: false, stdout: "", stderr: "", exitCode: status.code, error: SANDBOX_UNAVAILABLE };
       }
@@ -423,6 +551,7 @@ export function createBubblewrapSandbox(options: {
         throw new Error("content is too long.");
       }
       const dir = await workspace();
+      if (!dir) throw new Error(SANDBOX_UNAVAILABLE);
       const target = resolveSandboxPath(dir, relativePath);
       await assertNoSymlinkEscape(dir, target);
       await fsp.mkdir(path.dirname(target), { recursive: true });
@@ -430,6 +559,7 @@ export function createBubblewrapSandbox(options: {
     },
     async readFile(relativePath) {
       const dir = await workspace();
+      if (!dir) throw new Error(SANDBOX_UNAVAILABLE);
       const target = resolveSandboxPath(dir, relativePath);
       await assertNoSymlinkEscape(dir, target);
       const buffer = await fsp.readFile(target);
@@ -440,10 +570,16 @@ export function createBubblewrapSandbox(options: {
     },
     async list(relativePath = "") {
       const dir = await workspace();
+      if (!dir) throw new Error(SANDBOX_UNAVAILABLE);
       const target = resolveSandboxPath(dir, relativePath, true);
       await assertNoSymlinkEscape(dir, target);
       const entries = await fsp.readdir(target, { withFileTypes: true });
       return entries.slice(0, 200).map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name));
+    },
+    async exportFiles(sinceMs, only) {
+      const dir = await workspace();
+      if (!dir) return [];
+      return collectSandboxFiles(dir, sinceMs, only);
     },
   };
 }

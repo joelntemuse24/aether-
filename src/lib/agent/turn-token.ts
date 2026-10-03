@@ -21,6 +21,8 @@ export type TurnClaims = {
   approvalMode: ToolApprovalMode;
   requestId: string;
   projectId?: string;
+  /** Signed-in user with cloud storage. Guests omit this and keep files in the thread. */
+  canPersist?: boolean;
 };
 
 function cleanProjectId(value: unknown): string | null {
@@ -54,6 +56,7 @@ export async function mintTurnToken(
     tools: [...claims.tools],
     approvalMode: claims.approvalMode,
     ...(projectId ? { projectId } : {}),
+    ...(claims.canPersist ? { canPersist: true } : {}),
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(claims.sub)
@@ -89,6 +92,7 @@ export async function verifyTurnToken(token: string, secret: string): Promise<Tu
       approvalMode: payload.approvalMode,
       requestId: payload.jti,
       ...(projectId ? { projectId } : {}),
+      ...(payload.canPersist === true ? { canPersist: true } : {}),
     };
   } catch {
     return null;

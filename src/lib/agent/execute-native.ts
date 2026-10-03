@@ -1,6 +1,6 @@
 /**
- * Dispatch one native tool call. Web tools and the sandbox stay on the VM.
- * Account tools are a signed callback.
+ * Dispatch one native tool call. Page tools stay on the VM.
+ * web_search, account tools, and published sandbox files call back to Vercel.
  */
 
 import { executeAccountCallback } from "./account-callback";
@@ -22,7 +22,18 @@ export async function executeNativeTool(input: {
   sandbox?: AgentSandbox | null;
 }): Promise<ToolResult> {
   const group = agentToolGroup(input.name);
-  if (group === "web") return executeWebTool(input.name, input.args, input.web);
+  if (group === "web") {
+    return executeWebTool(input.name, input.args, {
+      ...input.web,
+      callback: {
+        turnToken: input.turnToken,
+        origin: input.callbackOrigin,
+        abortSignal: input.abortSignal,
+        fetchImpl: input.fetchImpl,
+        checkOrigin: input.checkOrigin,
+      },
+    });
+  }
   if (group === "account") {
     return executeAccountCallback({
       name: input.name,
@@ -35,7 +46,13 @@ export async function executeNativeTool(input: {
     });
   }
   if (group === "sandbox") {
-    return executeSandboxTool(input.name, input.args, input.sandbox ?? null, input.abortSignal);
+    return executeSandboxTool(input.name, input.args, input.sandbox ?? null, input.abortSignal, {
+      turnToken: input.turnToken,
+      origin: input.callbackOrigin,
+      abortSignal: input.abortSignal,
+      fetchImpl: input.fetchImpl,
+      checkOrigin: input.checkOrigin,
+    });
   }
   return toolError("Tool is not available.", false);
 }

@@ -10,6 +10,7 @@ import { ensureConfirmationRepository } from "@/lib/harness/confirmation-store";
 import { resolveToolCallbackAuth } from "@/lib/trigger/tool-callback-auth";
 import { driveAccessFromAgentContext } from "@/lib/trigger/connector-from-context";
 import { executeTurnAccountTool } from "@/lib/agent/account-on-vercel";
+import { executeTurnNativeCallback, isNativeCallbackTool } from "@/lib/agent/native-callback";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -30,6 +31,24 @@ export async function POST(req: Request) {
     session_key?: string;
   };
   const name = (body.name || body.tool || "").trim();
+  if (isNativeCallbackTool(name)) {
+    const secret = (process.env.AETHER_TRUEFORGE_TOKEN ?? "").trim();
+    const turn = secret
+      ? await executeTurnNativeCallback({
+          authorization: req.headers.get("authorization"),
+          secret,
+          name,
+          args: body.arguments ?? body.args ?? {},
+        })
+      : { kind: "not-turn" as const };
+    if (turn.kind === "not-turn") {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+    if (turn.kind === "denied") {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 403 });
+    }
+    return NextResponse.json(turn.body);
+  }
   if (!name || !isAetherOwnedToolName(name)) {
     return NextResponse.json(
       { error: "Unknown Aether tool." },

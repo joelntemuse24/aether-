@@ -46,8 +46,17 @@ function capped(result: ToolResult, preview: string): ToolResult {
   return { ok: true, truncated: true, data: { truncated: true, preview } };
 }
 
+function measuredToolResult(result: ToolResult): string {
+  return JSON.stringify(result, (key, value) => {
+    if ((key === "content" || key === "dataUrl") && typeof value === "string" && value.startsWith("data:")) {
+      return "[file]";
+    }
+    return value;
+  });
+}
+
 export function capToolResult(result: ToolResult, maxChars = DEFAULT_TOOL_RESULT_CHARS): ToolResult {
-  if (JSON.stringify(result).length <= maxChars) return result;
+  if (measuredToolResult(result).length <= maxChars) return result;
   let preview = JSON.stringify(result).slice(0, Math.max(0, maxChars));
   let next = capped(result, preview);
   while (JSON.stringify(next).length > maxChars && preview.length > 0) {

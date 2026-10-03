@@ -146,6 +146,8 @@ export function agentToolNeedsConfirmation(input: {
   if (input.skipGate) return false;
   if (isAlwaysConfirmAetherCall(input.name, input.args)) return true;
   if (input.risk === "destructive") return true;
+  // The network-less sandbox runs in Ask and Auto. Account and external writes still confirm.
+  if (input.name === "sandbox_exec" || input.name === "sandbox_files") return false;
   if (input.risk === "read") return false;
   if (isUserDeliverableAetherTool(input.name)) return false;
   if (input.mode === "auto") return false;
