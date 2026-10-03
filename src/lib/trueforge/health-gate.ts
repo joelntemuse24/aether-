@@ -1,27 +1,20 @@
-export type HealthSample = {
-  pid: number | null;
+export type Pm2Sample = {
+  pid: number;
+  restartCount: number;
   healthOk: boolean;
 };
 
-/** True when the process identity stayed put and the sidecar is answering. */
-export function sidecarWatchOk(samples: HealthSample[]): boolean {
-  if (samples.length === 0) return false;
-  const first = samples[0]?.pid;
-  if (first == null) return false;
-  if (samples.some((sample) => sample.pid !== first)) return false;
-  return samples[samples.length - 1]?.healthOk === true;
-}
-
-export async function watchSidecarHealth(input: {
-  samples: number;
-  read: () => Promise<HealthSample>;
-  sleep?: () => Promise<void>;
-}): Promise<{ ok: boolean; samples: HealthSample[] }> {
-  const sleep = input.sleep ?? (() => Promise.resolve());
-  const samples: HealthSample[] = [];
-  for (let i = 0; i < input.samples; i++) {
-    samples.push(await input.read());
-    if (i < input.samples - 1) await sleep();
+/**
+ * Pass when reload raises restart_time by at most 1 and every later sample
+ * keeps that pid and count, and the last sample got HTTP 200.
+ */
+export function pm2ReloadStable(beforeCount: number, samples: Pm2Sample[]): boolean {
+  if (!Number.isInteger(beforeCount) || beforeCount < 0 || samples.length === 0) return false;
+  const after = samples[0];
+  if (!after) return false;
+  if (after.restartCount < beforeCount || after.restartCount > beforeCount + 1) return false;
+  for (const sample of samples) {
+    if (sample.pid !== after.pid || sample.restartCount !== after.restartCount) return false;
   }
-  return { ok: sidecarWatchOk(samples), samples };
+  return samples[samples.length - 1]?.healthOk === true;
 }

@@ -1,74 +1,141 @@
 #!/usr/bin/env bash
-# After a VM checkout of this repo, start the sidecar and require it to stay up.
-# Restart count must not change for 60s, and http://127.0.0.1:8790/health must answer.
-# On failure, check out the previous commit and start that build.
+# Reload the existing pm2 app "aether" and require it to stay up.
+# Does not start a second sidecar and does not touch any other pm2 app.
+# Run as user aether. Do not restart systemd unit pm2-aether (that owns every app).
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+APP="aether"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  deploy/trueforge/health-gate.sh --lockfile-changed <prev> [new]
+  deploy/trueforge/health-gate.sh <prev-sha>
+
+--lockfile-changed exits 0 when package-lock.json differs (npm ci is needed)
+and 1 when it does not.
+
+The deploy reloads pm2 app aether only. Health URL defaults to
+http://127.0.0.1:8790/api/v1/capabilities (override with AETHER_SIDECAR_HEALTH_URL).
+Pass when restart_time rises by at most 1 and then stays stable, and the URL
+returns 200. On failure, git reset --hard <prev> on master and reload aether.
+EOF
+}
+
+lockfile_changed() {
+  local prev="$1"
+  local new="$2"
+  ! git diff --quiet "$prev" "$new" -- package-lock.json
+}
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  usage
+  exit 0
+fi
+
+ROOT="${AETHER_REPO_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 cd "$ROOT"
+
+if [[ "${1:-}" == "--lockfile-changed" ]]; then
+  prev="${2:?previous commit required}"
+  new="${3:-HEAD}"
+  if lockfile_changed "$prev" "$new"; then
+    exit 0
+  fi
+  exit 1
+fi
 
 PREVIOUS="${1:-${AETHER_SIDECAR_PREVIOUS:-}}"
 if [[ -z "$PREVIOUS" ]]; then
-  PREVIOUS="$(git rev-parse HEAD~1)"
+  echo "[aether] previous commit sha is required" >&2
+  usage >&2
+  exit 2
 fi
 
-START_CMD="${AETHER_SIDECAR_START:-}"
-if [[ -z "$START_CMD" ]]; then
-  if [[ -f /opt/aether/sidecar-only.ts ]]; then
-    START_CMD="npx tsx /opt/aether/sidecar-only.ts"
-  else
-    START_CMD="npm run trueforge"
-  fi
-fi
+HEALTH_URL="${AETHER_SIDECAR_HEALTH_URL:-http://127.0.0.1:8790/api/v1/capabilities}"
+GATE_SECONDS="${AETHER_HEALTH_GATE_SECONDS:-60}"
+GATE_INTERVAL="${AETHER_HEALTH_GATE_INTERVAL:-5}"
 
-pid=""
-start_sidecar() {
-  nohup bash -c "$START_CMD" >>/tmp/aether-sidecar.log 2>&1 &
-  pid=$!
-  disown "$pid" 2>/dev/null || true
+read_aether() {
+  pm2 jlist | node "$SCRIPT_DIR/pm2-aether-status.mjs"
 }
 
-stop_sidecar() {
-  if [[ -n "${pid}" ]] && kill -0 "$pid" 2>/dev/null; then
-    kill "$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
-  fi
-  pid=""
+reload_aether() {
+  pm2 reload "$APP"
 }
 
 health_ok() {
-  node -e "fetch('http://127.0.0.1:8790/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  node -e 'fetch(process.argv[1], { signal: AbortSignal.timeout(5000) }).then((r) => process.exit(r.status === 200 ? 0 : 1)).catch(() => process.exit(1))' "$HEALTH_URL"
 }
 
-watch() {
-  local baseline=""
+watch_aether() {
+  local base_pid base_count now_pid now_count expect_pid expect_count last_health
+  read -r base_pid base_count < <(read_aether)
+  reload_aether
+  read -r now_pid now_count < <(read_aether)
+  echo "[aether] reloaded aether pid $base_pid -> $now_pid restart_time $base_count -> $now_count"
+  if (( now_count < base_count || now_count > base_count + 1 )); then
+    echo "[aether] restart_time moved from $base_count to $now_count" >&2
+    return 1
+  fi
+  expect_pid="$now_pid"
+  expect_count="$now_count"
+  local passes=1
   local i
-  for i in $(seq 1 12); do
-    if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
-      echo "[aether] sidecar process exited during the health gate" >&2
+  if (( GATE_INTERVAL > 0 && GATE_SECONDS > 0 )); then
+    passes="$((GATE_SECONDS / GATE_INTERVAL))"
+    if (( passes < 1 )); then
+      passes=1
+    fi
+  fi
+  last_health=1
+  for ((i = 0; i < passes; i++)); do
+    read -r now_pid now_count < <(read_aether)
+    if [[ "$now_pid" != "$expect_pid" || "$now_count" != "$expect_count" ]]; then
+      echo "[aether] aether restarted during the gate (pid $expect_pid count $expect_count -> pid $now_pid count $now_count)" >&2
       return 1
     fi
-    if [[ -z "$baseline" ]]; then
-      baseline="$pid"
-    elif [[ "$pid" != "$baseline" ]]; then
-      echo "[aether] sidecar restarted during the health gate ($baseline -> $pid)" >&2
-      return 1
+    if health_ok; then
+      last_health=0
+    else
+      last_health=1
     fi
-    sleep 5
+    if (( i + 1 < passes )); then
+      sleep "$GATE_INTERVAL"
+    fi
   done
-  health_ok
+  if (( last_health != 0 )); then
+    echo "[aether] $HEALTH_URL did not return 200" >&2
+    return 1
+  fi
+  echo "[aether] health gate passed pid=$expect_pid restart_time=$expect_count"
 }
+
+NPM_CI_RAN=0
+if lockfile_changed "$PREVIOUS" HEAD; then
+  npm ci
+  NPM_CI_RAN=1
+else
+  echo "[aether] package-lock.json unchanged; skipping npm ci"
+fi
 
 rollback() {
-  echo "[aether] health gate failed; rolling back to $PREVIOUS" >&2
-  stop_sidecar
-  git checkout --detach "$PREVIOUS"
-  start_sidecar
+  echo "[aether] health gate failed; resetting master to $PREVIOUS" >&2
+  git checkout master
+  git reset --hard "$PREVIOUS"
+  if [[ "$NPM_CI_RAN" == "1" ]]; then
+    npm ci
+  fi
+  reload_aether
+  if health_ok; then
+    echo "[aether] rolled back to $PREVIOUS and capabilities returned 200" >&2
+  else
+    echo "[aether] rollback reload did not return 200 from $HEALTH_URL" >&2
+  fi
 }
 
-start_sidecar
-if watch; then
-  echo "[aether] sidecar health gate passed (pid $pid)"
+if watch_aether; then
   exit 0
 fi
 rollback
