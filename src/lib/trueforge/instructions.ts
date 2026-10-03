@@ -12,14 +12,16 @@ memory_write and create_artifact wait on the user's approval card before they sa
 Cite web sources as [1], [2]. End every turn with a clear answer. Do not invent tools you were not given.
 If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.
 For a chart or interactive view, write a fenced svg, html, or react block, or a png image. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.
-${SANDBOX_FILE_LINE}`;
+${SANDBOX_FILE_LINE}
+If a command times out, answer with what you already have. Do not start another long command.`;
 
 export const TRUEFORGE_NO_TOOLS_NOTE = `You are Aether. Tools are not connected for this turn.
 Answer from the conversation. If the user needs a live lookup, say you cannot reach it right now.
 Do not invent tool results.
 If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.
 For a chart or interactive view, write a fenced svg, html, or react block, or a png image. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.
-${SANDBOX_FILE_LINE}`;
+${SANDBOX_FILE_LINE}
+If a command times out, answer with what you already have. Do not start another long command.`;
 
 export const TOOLS_UNAVAILABLE_NOTICE = "Tools are not connected for this turn.";
 
@@ -56,6 +58,9 @@ export function trueforgeToolNote(attached: readonly string[]): string {
     );
   }
   lines.push(SANDBOX_FILE_LINE);
+  lines.push(
+    "If a command times out, answer with what you already have. Do not start another long command.",
+  );
   return lines.join("\n");
 }
 
@@ -134,19 +139,59 @@ function formatClock(now: Date, timeZone: string): string {
   }).format(now);
 }
 
+const IANA_ZONE = /^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+){0,2}$/;
+
+/** Accept a browser IANA zone. Anything else is ignored. */
+export function normalizeTimeZone(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const zone = value.trim();
+  if (!zone || zone.length > 64 || !IANA_ZONE.test(zone)) return null;
+  try {
+    new Intl.DateTimeFormat("en-GB", { timeZone: zone }).format(new Date());
+    return zone;
+  } catch {
+    return null;
+  }
+}
+
+function formatToday(now: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(now);
+}
+
 /** Full clock in the prompt. The builtin clock tool is removed by the sidecar patch. */
-export function trueforgeClockLine(now = new Date()): string {
+export function trueforgeClockLine(now = new Date(), timeZone?: string | null): string {
+  const zone = normalizeTimeZone(timeZone);
+  const dateZone = zone ?? "Europe/Dublin";
+  const today = formatToday(now, dateZone);
   const utc = formatClock(now, "UTC");
   const dublin = formatClock(now, "Europe/Dublin");
-  return `Current time (UTC): ${utc}. Europe/Dublin: ${dublin}. Use this time. Call a clock tool only if you need a time more precise than the second.`;
+  const parts = [
+    `Today's date (${dateZone}): ${today}.`,
+    `Current time (UTC): ${utc}. Europe/Dublin: ${dublin}.`,
+  ];
+  if (zone && zone !== "UTC" && zone !== "Europe/Dublin") {
+    parts.push(`User timezone (${zone}): ${formatClock(now, zone)}.`);
+  } else if (zone) {
+    parts.push(`User timezone: ${zone}.`);
+  }
+  parts.push(
+    "Use this date and time. Call a clock tool only if you need a time more precise than the second.",
+  );
+  return parts.join(" ");
 }
 
 export function trueforgeInstructions(
   system: string,
   now = new Date(),
-  options?: { toolsAvailable?: boolean },
+  options?: { toolsAvailable?: boolean; timeZone?: string | null },
 ): string {
-  const clock = trueforgeClockLine(now);
+  const clock = trueforgeClockLine(now, options?.timeZone);
   const note = options?.toolsAvailable === false ? TRUEFORGE_NO_TOOLS_NOTE : TRUEFORGE_TOOL_NOTE;
   if (system.startsWith(TOOLS_SYSTEM_PROMPT)) {
     const rest = system.slice(TOOLS_SYSTEM_PROMPT.length).replace(/^\n+/, "");

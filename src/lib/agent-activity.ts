@@ -16,7 +16,9 @@ import {
 export type ActivityPart = {
   type?: string;
   toolName?: string;
+  toolCallId?: string;
   args?: unknown;
+  input?: unknown;
   argsText?: string;
   result?: unknown;
   output?: unknown;
@@ -172,6 +174,8 @@ function asRecord(value: unknown): Record<string, unknown> {
 function parseArgs(part: ActivityPart): Record<string, unknown> {
   const fromArgs = asRecord(part.args);
   if (Object.keys(fromArgs).length > 0) return fromArgs;
+  const fromInput = asRecord(part.input);
+  if (Object.keys(fromInput).length > 0) return fromInput;
   if (typeof part.argsText === "string" && part.argsText.trim()) {
     try {
       return asRecord(JSON.parse(part.argsText));
@@ -196,8 +200,14 @@ function partLooksComplete(part: ActivityPart): boolean {
   return false;
 }
 
+function isSandboxExec(name: string | null): boolean {
+  return name === "exec" || name === "sandbox_exec";
+}
+
 function partLooksRunning(part: ActivityPart, isRunning: boolean): boolean {
   if (partLooksComplete(part)) return false;
+  // A cut-off command is not still running. Leaving it "Running" freezes the status line.
+  if (!isRunning && isSandboxExec(toolNameFromActivityPart(part))) return false;
   const t = part.status?.type;
   if (t === "running" || t === "requires-action") return true;
   if (
@@ -346,9 +356,34 @@ export function activityLabelForTool(
       return running ? "Checking work" : "Checked work";
     case "request_confirmation":
       return running ? "Waiting for approval" : "Asked for approval";
+    case "exec":
+    case "sandbox_exec":
+      return running ? "Running exec" : "Ran exec";
     default:
       return running ? `Running ${toolName}` : `Ran ${toolName}`;
   }
+}
+
+function toolCallKey(part: ActivityPart): string | null {
+  const id = part.toolCallId?.trim();
+  return id ? `id:${id}` : null;
+}
+
+/** Same call shown as input and output, or as a typed part plus recovered markup. */
+function callFingerprint(
+  toolName: string,
+  args: Record<string, unknown>,
+  part: ActivityPart,
+): string | null {
+  const id = toolCallKey(part);
+  if (id) return id;
+  const query = typeof args.query === "string" ? args.query : "";
+  const url = typeof args.url === "string" ? args.url : "";
+  const title = typeof args.title === "string" ? args.title : "";
+  const code = typeof args.code === "string" ? args.code.slice(0, 120) : "";
+  const bits = [query, url, title, code].filter(Boolean);
+  if (bits.length === 0) return null;
+  return `call:${toolName}:${bits.join("|")}`;
 }
 
 export function collectActivitySteps(
@@ -357,41 +392,64 @@ export function collectActivitySteps(
 ): ActivityStep[] {
   const steps: ActivityStep[] = [];
   const seen = new Set<string>();
-  for (const [index, part] of (parts ?? []).entries()) {
+  const byKey = new Map<string, number>();
+  const list = parts ?? [];
+  for (const [index, part] of list.entries()) {
     if (!part || typeof part !== "object") continue;
     const toolName = toolNameFromActivityPart(part);
-    if (toolName) {
-      const running = partLooksRunning(part, isRunning);
-      const id = `${toolName}:${index}`;
-      const args = parseArgs(part);
-      seen.add(toolName);
-      steps.push({
-        id,
-        kind: "tool",
-        toolName,
-        label: activityLabelForTool(toolName, args, running),
-        state: running ? "running" : "complete",
-        ...stepDetail(toolName, args, part),
-      });
+    if (!toolName) continue;
+    const running = partLooksRunning(part, isRunning);
+    const output = part.output ?? part.result;
+    const failedExec =
+      isSandboxExec(toolName) &&
+      !!output &&
+      typeof output === "object" &&
+      (output as { ok?: boolean }).ok === false;
+    const stopped =
+      failedExec ||
+      (!running && !partLooksComplete(part) && !isRunning && isSandboxExec(toolName));
+    const args = parseArgs(part);
+    const key = callFingerprint(toolName, args, part);
+    const step: ActivityStep = {
+      id: `${toolName}:${index}`,
+      kind: "tool",
+      toolName,
+      label: stopped ? "Exec stopped" : activityLabelForTool(toolName, args, running),
+      state: running ? "running" : "complete",
+      ...stepDetail(toolName, args, part),
+    };
+    if (key && byKey.has(key)) {
+      const at = byKey.get(key)!;
+      const prev = steps[at]!;
+      if (prev.state === "running" && step.state === "complete") {
+        steps[at] = { ...step, id: prev.id };
+      } else {
+        steps[at] = {
+          ...prev,
+          query: prev.query ?? step.query,
+          site: prev.site ?? step.site,
+          code: prev.code ?? step.code,
+        };
+      }
       continue;
     }
-    if (part.type === "text" && typeof part.text === "string") {
-      for (const recovered of recoverToolCallsFromMarkup(part.text)) {
-        if (seen.has(recovered.toolName)) continue;
-        seen.add(recovered.toolName);
-        steps.push({
-          id: `${recovered.toolName}:markup:${index}`,
-          kind: "tool",
-          toolName: recovered.toolName,
-          label: activityLabelForTool(
-            recovered.toolName,
-            recovered.args,
-            isRunning,
-          ),
-          state: isRunning ? "running" : "complete",
-          ...stepDetail(recovered.toolName, recovered.args),
-        });
-      }
+    if (key) byKey.set(key, steps.length);
+    seen.add(toolName);
+    steps.push(step);
+  }
+  for (const [index, part] of list.entries()) {
+    if (!part || part.type !== "text" || typeof part.text !== "string") continue;
+    for (const recovered of recoverToolCallsFromMarkup(part.text)) {
+      if (seen.has(recovered.toolName)) continue;
+      seen.add(recovered.toolName);
+      steps.push({
+        id: `${recovered.toolName}:markup:${index}`,
+        kind: "tool",
+        toolName: recovered.toolName,
+        label: activityLabelForTool(recovered.toolName, recovered.args, isRunning),
+        state: isRunning ? "running" : "complete",
+        ...stepDetail(recovered.toolName, recovered.args),
+      });
     }
   }
   return steps;

@@ -84,6 +84,7 @@ export type RunAgentLoopInput = {
   concurrency?: number;
   abortSignal?: AbortSignal;
   now?: Date;
+  timeZone?: string | null;
   log?: (entry: AgentTurnLog) => void;
   /**
    * Called as each UI chunk is produced. Without it, chunks stay buffered
@@ -279,6 +280,7 @@ export async function runAgentLoop(input: RunAgentLoopInput): Promise<AgentLoopR
         depth,
         intent: input.intent,
         now: input.now,
+        timeZone: input.timeZone,
         approvalMode: input.approvalMode,
         approvedToolCallIds: input.approvedToolCallIds,
         concurrency: input.concurrency,
@@ -327,6 +329,7 @@ async function runAttempt(input: {
   depth: HarnessDepth;
   intent?: HarnessIntent;
   now?: Date;
+  timeZone?: string | null;
   approvalMode?: ToolApprovalMode;
   approvedToolCallIds?: readonly string[];
   concurrency?: number;
@@ -342,6 +345,7 @@ async function runAttempt(input: {
     definitions: selected,
     unavailableGroups: input.unavailableGroups,
     now: input.now,
+    timeZone: input.timeZone,
     depth: input.depth,
     intent: input.intent,
   });

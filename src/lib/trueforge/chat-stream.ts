@@ -34,6 +34,35 @@ type TurnEvent = { type?: string; [key: string]: unknown };
 
 const CONTENT_TYPES = new Set(["text-delta", "tool-input-available", "reasoning-delta"]);
 
+/** Stop a turn before the platform cuts it off with no answer. */
+export const TURN_BUDGET_MS = 240_000;
+
+export const CUT_OFF_ANSWER =
+  "Stopped before this finished. The last command ran too long.";
+
+/** Close a command the turn had to abandon, and keep any answer already written. */
+export function settleCutOffChunks(input: {
+  sawText: boolean;
+  openTools: { id: string; name: string }[];
+}): UiChunk[] {
+  const chunks: UiChunk[] = [];
+  for (const tool of input.openTools) {
+    if (!tool.id) continue;
+    chunks.push({
+      type: "tool-output-available",
+      toolCallId: tool.id,
+      output: { ok: false, error: "The command timed out. Try a smaller step." },
+      providerExecuted: true,
+    });
+  }
+  if (!input.sawText) {
+    chunks.push({ type: "text-start", id: "tf-cutoff" });
+    chunks.push({ type: "text-delta", id: "tf-cutoff", delta: CUT_OFF_ANSWER });
+    chunks.push({ type: "text-end", id: "tf-cutoff" });
+  }
+  return chunks;
+}
+
 export async function driveTrueForgeTurn(input: {
   events: AsyncIterable<TurnEvent>;
   write: (chunk: UiChunk) => void;
@@ -47,13 +76,17 @@ export async function driveTrueForgeTurn(input: {
     mime: string;
     dataUrl: string;
   }) => Promise<{ id?: string; persisted: boolean }>;
+  /** True when this process stopped the turn before the platform time limit. */
+  cutoff?: () => boolean;
 }): Promise<{ failedBeforeOutput: boolean; wroteError: boolean; errorText: string }> {
   const state = createTrueForgeUiState();
   let sawContent = false;
+  let sawText = false;
   let failed = false;
   let errorText = "";
   let turnId = "";
   const emit = (chunk: UiChunk) => {
+    if (chunk.type === "text-delta") sawText = true;
     if (CONTENT_TYPES.has(String(chunk.type))) sawContent = true;
     if (chunk.type === "error") {
       failed = true;
@@ -67,6 +100,14 @@ export async function driveTrueForgeTurn(input: {
       return;
     }
     input.write(chunk);
+  };
+  const settle = () => {
+    for (const chunk of settleCutOffChunks({
+      sawText,
+      openTools: [...state.openTools.entries()].map(([id, name]) => ({ id, name })),
+    })) {
+      emit(chunk);
+    }
   };
   const emitSandboxFiles = async () => {
     for (const chunk of flushSandboxHold(state)) emit(chunk);
@@ -114,6 +155,12 @@ export async function driveTrueForgeTurn(input: {
       for (const chunk of chunksForTrueForgeEvent(payload, state)) emit(chunk);
     }
   } catch (error) {
+    if (input.cutoff?.()) {
+      await emitSandboxFiles();
+      settle();
+      for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
+      return { failedBeforeOutput: false, wroteError: false, errorText: "" };
+    }
     const message = error instanceof Error ? error.message : "The harness turn failed.";
     await emitSandboxFiles();
     if (!sawContent) return { failedBeforeOutput: true, wroteError: false, errorText: message };
@@ -122,6 +169,11 @@ export async function driveTrueForgeTurn(input: {
     return { failedBeforeOutput: false, wroteError: true, errorText: message };
   }
   await emitSandboxFiles();
+  if (input.cutoff?.()) {
+    settle();
+    for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
+    return { failedBeforeOutput: false, wroteError: false, errorText: "" };
+  }
   if (failed && !sawContent) return { failedBeforeOutput: true, wroteError: false, errorText };
   for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
   return { failedBeforeOutput: false, wroteError: failed, errorText };
@@ -189,6 +241,7 @@ async function runTurn(input: {
     mime: string;
     dataUrl: string;
   }) => Promise<{ id?: string; persisted: boolean }>;
+  cutoff?: () => boolean;
 }): Promise<{
   failedBeforeOutput: boolean;
   wroteError: boolean;
@@ -220,6 +273,7 @@ async function runTurn(input: {
       modelId: input.modelId,
       loadSandboxFile: input.loadSandboxFile,
       persistSandboxFile: input.persistSandboxFile,
+      cutoff: input.cutoff,
     });
     return { ...outcome, retryFrom: retryPreviousTurnId(created) };
   } catch (error) {
@@ -275,10 +329,13 @@ export async function streamTrueForgeHostedChat(input: {
   toolContext?: Omit<TrueForgeToolContext, "exp"> | null;
   modelId?: string | null;
   openRouterKey?: string | null;
+  timeZone?: string | null;
   history?: { role: "user" | "assistant"; content: string }[];
 }): Promise<Response> {
   const conversationId = resolveHostedConversationId(input.conversationId);
-  const instructions = trueforgeInstructions(input.system);
+  const instructions = trueforgeInstructions(input.system, new Date(), {
+    timeZone: input.timeZone,
+  });
   const modelId = input.modelId || "gpt-5.6-luna";
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
@@ -323,6 +380,11 @@ export async function streamTrueForgeHostedChat(input: {
         const onUserAbort = () => controller.abort();
         input.abortSignal?.addEventListener("abort", onUserAbort);
         const timer = setTimeout(() => controller.abort(), FIRST_BYTE_MS);
+        let cutoff = false;
+        const budget = setTimeout(() => {
+          cutoff = true;
+          controller.abort();
+        }, TURN_BUDGET_MS);
         let sawByte = false;
         const guardedWrite = (chunk: UiChunk) => {
           if (isTurnActivityChunk(chunk)) {
@@ -350,13 +412,16 @@ export async function streamTrueForgeHostedChat(input: {
                     file,
                   )
               : undefined,
+            cutoff: () => cutoff,
           });
           outcome = result;
           if (attempt === 0) retryFrom = result.retryFrom;
         } finally {
           clearTimeout(timer);
+          clearTimeout(budget);
           input.abortSignal?.removeEventListener("abort", onUserAbort);
         }
+        if (cutoff) break;
         if (sawByte || !outcome.failedBeforeOutput) break;
         if (input.abortSignal?.aborted) break;
         if (

@@ -31,6 +31,7 @@ export type AgentTurnRequest = {
   tools: string[];
   depth: HarnessDepth;
   timeMinutes: number | null;
+  timeZone: string | null;
   openRouterKey: string | null;
   turnToken: string;
   callbackOrigin: string | null;
@@ -246,6 +247,7 @@ export function createAgentServer(options: {
           tools,
           depth: depthOf(record.depth),
           timeMinutes: minutesOf(record.timeMinutes),
+          timeZone: typeof record.timeZone === "string" ? record.timeZone : null,
           openRouterKey: typeof headerKey === "string" && headerKey.trim() ? headerKey.trim() : null,
           turnToken,
           callbackOrigin: callbackOriginOf(record.callbackOrigin),

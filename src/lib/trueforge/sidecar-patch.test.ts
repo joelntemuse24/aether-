@@ -71,6 +71,28 @@ describe("TrueForge sidecar patch", () => {
     assert.equal(fs.readFileSync(path.join(root, sandbox), "utf8"), original);
   });
 
+  it("gives each sandbox command a timeout the model can recover from", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tf-exec-timeout-"));
+    for (const relative of [
+      "node_modules/@truefoundry/trueforge-core/dist/core/sandbox/provider/TFYSandboxProvider.js",
+      "node_modules/@truefoundry/trueforge-core/dist/core/sandbox/provider/TFYSandboxProvider.mjs",
+    ]) {
+      const from = path.join(process.cwd(), relative);
+      const to = path.join(root, relative);
+      fs.mkdirSync(path.dirname(to), { recursive: true });
+      fs.copyFileSync(from, to);
+    }
+    const patched = applyTrueForgeSidecarPatches(root);
+    assert.equal(patched.length, 2);
+    for (const relative of patched) {
+      const text = fs.readFileSync(path.join(root, relative), "utf8");
+      assert.match(text, /DEFAULT_TIMEOUT_SECONDS = 45/);
+      assert.match(text, /Sandbox exec timed out after/);
+      assert.doesNotMatch(text, /DEFAULT_TIMEOUT_SECONDS = 60/);
+    }
+    assert.deepEqual(applyTrueForgeSidecarPatches(root), []);
+  });
+
   it("removes the builtin clock tool and leaves the file alone on a second run", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "tf-clock-"));
     const relative = "node_modules/@truefoundry/trueforge-core/dist/agent-session/builtinsFromSpec.mjs";
