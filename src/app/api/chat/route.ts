@@ -280,8 +280,12 @@ export async function POST(req: Request) {
       const { streamTrueForgeHostedChat } = await import("@/lib/trueforge/chat-stream");
       const driveToken = hasDriveEarly && userId ? await getValidDriveAccessToken(userId) : null;
       const githubToken = hasGitHubEarly && userId ? await getValidGitHubAccessToken(userId) : null;
-      const { listBuzzChatModels, resolveBuzzModelId } = await import("@/lib/buzz/models");
-      const buzzModelId = resolveBuzzModelId(incomingModel, await listBuzzChatModels());
+      const { hostedBuzzModelChoice, listBuzzChatModels } = await import("@/lib/buzz/models");
+      const buzzModelId = hostedBuzzModelChoice({
+        bodyModel: typeof body.model === "string" ? body.model : null,
+        headerModel,
+        models: await listBuzzChatModels(),
+      });
       return streamTrueForgeHostedChat({
         conversationId,
         userText: lastUserText(enrichedMessages) || lastUserText(messages),

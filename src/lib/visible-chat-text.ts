@@ -64,15 +64,16 @@ export function recoverToolCallsFromMarkup(text: unknown): RecoveredToolCall[] {
   return found;
 }
 
-/** Prose only — raw DSML / tool XML removed. Empty when the part was markup. */
+/** Prose only — raw DSML / tool XML removed. Ordinary markdown is left intact. */
 export function sanitizeVisibleAssistantText(text: unknown): string {
   const value = asText(text);
   if (!value) return "";
+  if (!looksLikeRawToolMarkup(value)) return value.trim() ? value : "";
   let next = value.replace(DSML_BLOCK, " ");
   next = next.replace(DSML_TAG, " ");
   next = next.replace(TOOL_XML_BLOCK, " ");
   next = next.replace(/<\s*\|\s*\/?\s*DSML[\s\S]*/gi, " ");
-  next = next.replace(/\s+/g, " ").trim();
+  next = next.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
   return next;
 }
 
