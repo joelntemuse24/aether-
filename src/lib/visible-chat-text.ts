@@ -187,6 +187,7 @@ function stripToolJsonBlobs(value: string): string {
 
 /** Reasoning shown inside the collapsed disclosure.
  * Reuses the visible-text strip, then drops system lines and tool JSON.
+ * Emphasis markers render as plain text there, so `**bold**` drops its stars.
  */
 export function sanitizeReasoningText(text: unknown): string {
   let value = sanitizeVisibleAssistantText(text);
@@ -194,6 +195,7 @@ export function sanitizeReasoningText(text: unknown): string {
   value = value.replace(SYSTEM_TAG, " ");
   value = value.replace(SYSTEM_LINE, " ");
   value = stripToolJsonBlobs(value);
+  value = value.replace(/\*\*([^*\n]+)\*\*/g, "$1").replace(/\*\*/g, "");
   value = value
     .replace(/[ \t]{2,}/g, " ")
     .replace(/[ \t]*\n[ \t]*/g, "\n")
