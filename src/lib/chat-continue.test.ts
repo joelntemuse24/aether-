@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import type { UIMessage } from "ai";
 import {
+  CONTINUE_MESSAGE_METADATA,
+  CONTINUE_USER_TEXT,
   hasContinuableAssistant,
   hasIncompleteToolWork,
   isAbortError,
+  isHiddenContinuation,
   isServerTimeoutError,
   looksLikeTimeoutCopy,
   looksLikeUnfinishedTurn,
@@ -297,5 +301,57 @@ describe("chat-continue", () => {
       }),
       false,
     );
+  });
+});
+
+describe("hidden automatic continue turns", () => {
+  it("flags only the marked user message", () => {
+    const hidden: UIMessage = {
+      id: "u1",
+      role: "user",
+      parts: [{ type: "text", text: CONTINUE_USER_TEXT }],
+      metadata: CONTINUE_MESSAGE_METADATA,
+    };
+    assert.equal(isHiddenContinuation(hidden), true);
+    const shown: UIMessage = {
+      id: "u2",
+      role: "user",
+      parts: [{ type: "text", text: CONTINUE_USER_TEXT }],
+    };
+    assert.equal(isHiddenContinuation(shown), false);
+    assert.equal(
+      isHiddenContinuation({ ...hidden, role: "assistant" }),
+      false,
+    );
+    assert.equal(
+      isHiddenContinuation({ ...hidden, metadata: { custom: {} } }),
+      false,
+    );
+    assert.equal(isHiddenContinuation(null), false);
+    assert.equal(isHiddenContinuation(undefined), false);
+  });
+
+  it("marks the automatic send and hides the bubble, history intact", () => {
+    const provider = readFileSync(
+      new URL("../providers/runtime-provider.tsx", import.meta.url),
+      "utf8",
+    );
+    const thread = readFileSync(
+      new URL("../components/assistant-ui/thread.tsx", import.meta.url),
+      "utf8",
+    );
+    // The automatic send carries the hidden marker; the manual Continue button
+    // (a user tap) keeps its visible bubble and does not.
+    assert.match(
+      provider,
+      /text: CONTINUE_USER_TEXT,\s*metadata: CONTINUE_MESSAGE_METADATA,/,
+    );
+    const manualSends = provider.match(
+      /sendMessage\(\{ text: CONTINUE_USER_TEXT \}\)/g,
+    );
+    assert.equal(manualSends?.length, 1);
+    // The thread hides only the marked user message, not the message list.
+    assert.match(thread, /isHiddenContinuation\(s\.message\)/);
+    assert.match(thread, /s\.message\.role === "user"/);
   });
 });

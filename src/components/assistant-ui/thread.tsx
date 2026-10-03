@@ -94,7 +94,7 @@ import {
   type MicState,
   type SpeechSession,
 } from "@/lib/speech";
-import { looksLikeTimeoutCopy } from "@/lib/chat-continue";
+import { isHiddenContinuation, looksLikeTimeoutCopy } from "@/lib/chat-continue";
 import { parseTimeBudgetFromText } from "@/lib/harness/time-budget";
 import { isChatHistoryReady, waitForChatHistoryReady } from "@/lib/chat-history-gate";
 import {
@@ -219,7 +219,12 @@ export const Thread: FC = () => {
 const ThreadMessage: FC = () => {
   const role = useAuiState((s) => s.message.role);
   const isEditing = useAuiState((s) => s.message.composer.isEditing);
+  const isHidden = useAuiState((s) =>
+    s.message.role === "user" ? isHiddenContinuation(s.message) : false,
+  );
 
+  // An automatic continue turn stays in the model history but has no bubble.
+  if (isHidden) return null;
   if (isEditing) return <EditComposer />;
   if (role === "user") return <UserMessage />;
   return <AssistantMessage />;

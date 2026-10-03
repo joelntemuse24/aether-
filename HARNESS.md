@@ -46,6 +46,7 @@ The chat shell stays the cream Aether UI. TrueForge events become AI SDK UI chun
 | Rule | Status | Check |
 | --- | --- | --- |
 | Visible text, tool parts, and errors follow the UI chunk translator. | deterministic | `src/lib/trueforge/ui-chunks.test.ts` |
+| The automatic "Continue from where you left off…" turn stays in the model history but shows no user bubble; the manual Continue button keeps its bubble. | deterministic | `src/lib/chat-continue.test.ts` |
 | A sandbox command times out and returns that error to the model. A turn stops before the platform limit, keeps any partial answer, and does not leave the status line on "Running exec". | deterministic | `src/lib/trueforge/sidecar-patch.test.ts`, `src/lib/trueforge/chat-stream.test.ts`, `src/lib/agent-activity.test.ts` |
 | Today's date and the user's timezone are in every model's instructions. Answers render common maths and `\text{...}` leftovers. Reasoning headings that ran together are separated. A bare top-level `<svg>` renders as an inline image, not raw text. Each tool call is one step in the single disclosure. | deterministic | `src/lib/trueforge/clock.test.ts`, `src/lib/render-math.test.ts`, `src/lib/agent-activity.test.ts`, `src/lib/visible-chat-text.test.ts` |
 | No visual redesign without an explicit design ask. | agent | this file |
