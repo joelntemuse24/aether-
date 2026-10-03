@@ -208,8 +208,18 @@ body::before {
 }
 
 .prose-aether p {
-  line-height: 1.65;
-  letter-spacing: -0.01em;
+  line-height: 1.7;
+  letter-spacing: -0.011em;
+}
+
+.aether-thread-enter,
+.aether-title-enter,
+.aether-welcome {
+  animation: aether-fade-up var(--motion-base) var(--motion-ease) both;
+}
+
+.aether-title-enter {
+  animation-duration: var(--motion-slow);
 }
 
 /* Code highlighting */

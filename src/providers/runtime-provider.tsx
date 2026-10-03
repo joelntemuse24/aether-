@@ -23,7 +23,11 @@ import {
   parseMintedAccessToken,
   parseStartSessionResult,
 } from "@/lib/trigger/session-auth";
-import { bindDurableChatId, peekBoundDurableChatId } from "@/lib/trigger/thread-remote-id";
+import {
+  bindDurableChatId,
+  conversationIdForTurn,
+  peekBoundDurableChatId,
+} from "@/lib/trigger/thread-remote-id";
 import { DURABLE_HEAD_START_PATH } from "@/lib/trigger/head-start";
 import { wrapDurableChatTransport } from "@/lib/trigger/head-start-reconnect";
 import {
@@ -134,6 +138,8 @@ function useChatThreadRuntime() {
   const threadIdRef = useRef<string | undefined>(undefined);
   threadIdRef.current = readThreadStorageKey(aui) ?? readThreadIdFromLocation();
   const persistedKeyRef = useRef<string | undefined>(threadIdRef.current);
+  /** Stable when the thread has no remoteId yet (guest first send, Continuing). */
+  const conversationFallbackRef = useRef("");
 
   // Each remote-thread runtime instance mounts for one thread. Seed that
   // thread's useChat from localStorage so refresh/switch don't depend on
@@ -193,7 +199,11 @@ function useChatThreadRuntime() {
       harness: harness ?? lastHarnessRef.current ?? undefined,
       memoryContext: memoryContext || undefined,
       projectId: projectIdRef.current ?? undefined,
-      conversationId: threadIdRef.current ?? undefined,
+      conversationId:
+        conversationIdForTurn({
+          remoteId: threadIdRef.current,
+          fallbackId: conversationFallbackRef.current,
+        }) ?? undefined,
       continueSegment: continueSegment || undefined,
     };
   }, [activeModel]);
@@ -211,6 +221,23 @@ function useChatThreadRuntime() {
             // and blanks a live Expert/guest turn. Bind after the turn persists.
             remoteId = readThreadIdFromLocation();
           }
+          let localThreadId: string | undefined;
+          try {
+            const state = aui.threadListItem().getState();
+            localThreadId = state.id;
+            if (state.remoteId) remoteId = state.remoteId;
+          } catch {
+            // Thread list is not ready on the first guest send.
+          }
+          const conversationId = conversationIdForTurn({
+            remoteId,
+            locationId: readThreadIdFromLocation(),
+            fallbackId: conversationFallbackRef.current,
+          });
+          if (conversationId && localThreadId && !remoteId) {
+            bindDurableChatId(conversationId, localThreadId);
+          }
+          if (!remoteId && conversationId) remoteId = conversationId;
           if (remoteId) {
             threadIdRef.current = remoteId;
             if (
@@ -239,7 +266,7 @@ function useChatThreadRuntime() {
             body: {
               ...options.body,
               id: remoteId,
-              conversationId: remoteId,
+              conversationId: conversationId ?? remoteId,
               messages: outgoing,
               trigger: options.trigger,
               messageId: options.messageId,
@@ -270,10 +297,16 @@ function useChatThreadRuntime() {
     }
     return id;
   });
+  if (!conversationFallbackRef.current) {
+    conversationFallbackRef.current = durableChatId;
+  }
   try {
-    bindDurableChatId(durableChatId, aui.threadListItem().getState().id);
+    const state = aui.threadListItem().getState();
+    if (!state.remoteId) {
+      bindDurableChatId(conversationFallbackRef.current, state.id);
+    }
   } catch {
-    bindDurableChatId(durableChatId);
+    bindDurableChatId(conversationFallbackRef.current);
   }
 
   const durableClientData = buildBrowserChatClientData({
@@ -282,7 +315,11 @@ function useChatThreadRuntime() {
     harness: peekHarnessRef.current() ?? lastHarnessRef.current,
     memoryContext: localMemoryContextForChat() || undefined,
     projectId: projectIdRef.current,
-    conversationId: threadIdRef.current || durableChatId,
+    conversationId:
+      conversationIdForTurn({
+        remoteId: threadIdRef.current,
+        fallbackId: conversationFallbackRef.current || durableChatId,
+      }) ?? durableChatId,
     continueSegment: continueSegmentRef.current,
     attachments: buildTurnBody().attachments,
     textPrefix: buildTurnBody().textPrefix,
@@ -311,9 +348,14 @@ function useChatThreadRuntime() {
         bindDurableChatId(chatId);
       }
       if (!threadIdRef.current) {
-        threadIdRef.current = readThreadIdFromLocation() || chatId;
+        threadIdRef.current =
+          readThreadIdFromLocation() || conversationFallbackRef.current || chatId;
       }
-      const conversationId = threadIdRef.current || chatId;
+      const conversationId =
+        conversationIdForTurn({
+          remoteId: threadIdRef.current,
+          fallbackId: conversationFallbackRef.current || chatId,
+        }) ?? chatId;
       const turn = buildTurnBodyRef.current();
       const payload = buildBrowserChatClientData({
         settings: settingsRef.current,
@@ -713,6 +755,10 @@ function useChatThreadRuntime() {
         storedCountRef.current = 0;
         threadIdRef.current = undefined;
         persistedKeyRef.current = undefined;
+        conversationFallbackRef.current =
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `chat-${Date.now()}`;
         messagesRef.current = [];
         setMessages([]);
         setHistoryReady(true);
@@ -752,9 +798,12 @@ function useChatThreadRuntime() {
   // live — that remounts useChat and blanks the guest first send.
   useEffect(() => {
     try {
-      bindDurableChatId(durableChatId, aui.threadListItem().getState().id);
+      const state = aui.threadListItem().getState();
+      if (!state.remoteId) {
+        bindDurableChatId(conversationFallbackRef.current || durableChatId, state.id);
+      }
     } catch {
-      bindDurableChatId(durableChatId);
+      bindDurableChatId(conversationFallbackRef.current || durableChatId);
     }
     if (status === "submitted" || status === "streaming") return;
     if (status !== "ready" && status !== "error") return;
@@ -766,6 +815,7 @@ function useChatThreadRuntime() {
         const persistKey =
           state.remoteId ||
           peekBoundDurableChatId(state.id) ||
+          conversationFallbackRef.current ||
           durableChatId;
         persistThreadUIMessages(persistKey, messagesRef.current);
         persistedKeyRef.current = persistKey;
@@ -784,7 +834,11 @@ function useChatThreadRuntime() {
         }
         if (cancelled) return;
         const key =
-          readThreadStorageKey(aui) ?? readThreadIdFromLocation() ?? durableChatId;
+          conversationIdForTurn({
+            remoteId: readThreadStorageKey(aui),
+            locationId: readThreadIdFromLocation(),
+            fallbackId: conversationFallbackRef.current || durableChatId,
+          }) ?? durableChatId;
         if (!key) return;
         threadIdRef.current = key;
         if (
@@ -811,9 +865,11 @@ function useChatThreadRuntime() {
   // research turns cannot PUT the whole repo on every chunk.
   useEffect(() => {
     const key =
-      threadIdRef.current ??
-      readThreadStorageKey(auiRef.current) ??
-      durableChatId;
+      conversationIdForTurn({
+        remoteId: threadIdRef.current ?? readThreadStorageKey(auiRef.current),
+        locationId: readThreadIdFromLocation(),
+        fallbackId: conversationFallbackRef.current || durableChatId,
+      }) ?? durableChatId;
     rememberLiveTurn({
       keys: [key, durableChatId, readThreadIdFromLocation()],
       messages,
