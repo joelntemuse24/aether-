@@ -6,10 +6,12 @@ import { browserSafeChatError } from "./hosted-limit";
 import { TOOLS_UNAVAILABLE_NOTICE, trueforgeInstructions } from "./instructions";
 import { trueforgeClient, trueforgeSessionId } from "./sessions";
 import type { TrueForgeToolContext } from "./tool-context";
+import { sandboxFileCards, type SandboxFileRef } from "./sandbox-files";
 import {
   chunksForTrueForgeEvent,
   closeTrueForgeUi,
   createTrueForgeUiState,
+  flushSandboxHold,
   type UiChunk,
 } from "./ui-chunks";
 import { planHostedTurnResume, resolveHostedConversationId } from "./conversation-continuity";
@@ -37,11 +39,20 @@ export async function driveTrueForgeTurn(input: {
   write: (chunk: UiChunk) => void;
   sessionId: string;
   modelId?: string;
+  /** Loads sandbox bytes for a path the model listed. Tests pass a stub. */
+  loadSandboxFile?: (filePath: string, turnId: string) => Promise<Uint8Array | Buffer | null>;
+  persistSandboxFile?: (file: {
+    title: string;
+    filename: string;
+    mime: string;
+    dataUrl: string;
+  }) => Promise<{ id?: string; persisted: boolean }>;
 }): Promise<{ failedBeforeOutput: boolean; wroteError: boolean; errorText: string }> {
   const state = createTrueForgeUiState();
   let sawContent = false;
   let failed = false;
   let errorText = "";
+  let turnId = "";
   const emit = (chunk: UiChunk) => {
     if (CONTENT_TYPES.has(String(chunk.type))) sawContent = true;
     if (chunk.type === "error") {
@@ -57,8 +68,30 @@ export async function driveTrueForgeTurn(input: {
     }
     input.write(chunk);
   };
+  const emitSandboxFiles = async () => {
+    for (const chunk of flushSandboxHold(state)) emit(chunk);
+    if (!turnId || state.sandboxFiles.length === 0) return;
+    const refs: SandboxFileRef[] = state.sandboxFiles.splice(0, state.sandboxFiles.length);
+    const load =
+      input.loadSandboxFile ??
+      ((filePath: string) => downloadHostedSandboxFile(input.sessionId, turnId, filePath));
+    try {
+      const cards = await sandboxFileCards({
+        refs,
+        load: (filePath) => load(filePath, turnId),
+        persist: input.persistSandboxFile,
+      });
+      for (const chunk of cards) emit(chunk);
+    } catch {
+      // The private path is already hidden. Skip a card we could not build.
+    }
+  };
   try {
     for await (const event of input.events) {
+      if (event.type === "turn.created") {
+        const id = event.turnId ?? event.turn_id;
+        if (typeof id === "string" && id) turnId = id;
+      }
       let payload = event;
       if (event.type === "tool.approval_required" && Array.isArray(event.toolCalls)) {
         payload = {
@@ -82,14 +115,51 @@ export async function driveTrueForgeTurn(input: {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "The harness turn failed.";
+    await emitSandboxFiles();
     if (!sawContent) return { failedBeforeOutput: true, wroteError: false, errorText: message };
     input.write({ type: "error", errorText: hostedTurnErrorCopy(message, input.modelId ?? "") });
     for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
     return { failedBeforeOutput: false, wroteError: true, errorText: message };
   }
+  await emitSandboxFiles();
   if (failed && !sawContent) return { failedBeforeOutput: true, wroteError: false, errorText };
   for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
   return { failedBeforeOutput: false, wroteError: failed, errorText };
+}
+
+async function persistSandboxDownload(
+  owner: { userId?: string | null; conversationId?: string | null; projectId?: string | null },
+  file: { title: string; filename: string; mime: string; dataUrl: string },
+): Promise<{ id?: string; persisted: boolean }> {
+  if (!owner.userId) return { persisted: false };
+  const { isCloudDbConfigured } = await import("@/lib/db");
+  if (!isCloudDbConfigured()) return { persisted: false };
+  const { saveArtifact } = await import("@/lib/artifacts/store");
+  try {
+    const saved = await saveArtifact(owner.userId, {
+      kind: "file",
+      title: file.title,
+      language: file.filename,
+      content: file.dataUrl,
+      conversationId: owner.conversationId ?? undefined,
+      projectId: owner.projectId ?? undefined,
+      producedBy: ["sandbox"],
+    });
+    return { id: saved.id, persisted: true };
+  } catch {
+    return { persisted: false };
+  }
+}
+
+async function downloadHostedSandboxFile(
+  sessionId: string,
+  turnId: string,
+  filePath: string,
+): Promise<Buffer | null> {
+  const response = await trueforgeClient().sessions.downloadSandboxFile(sessionId, turnId, {
+    path: filePath,
+  });
+  return Buffer.from(await response.arrayBuffer());
 }
 
 /** Retry forks from the failed turn's parent. `none` would start a new root and drop history. */
@@ -112,6 +182,13 @@ async function runTurn(input: {
   previousTurnId?: "auto" | "none" | string;
   write: (chunk: UiChunk) => void;
   modelId?: string;
+  loadSandboxFile?: (filePath: string, turnId: string) => Promise<Uint8Array | Buffer | null>;
+  persistSandboxFile?: (file: {
+    title: string;
+    filename: string;
+    mime: string;
+    dataUrl: string;
+  }) => Promise<{ id?: string; persisted: boolean }>;
 }): Promise<{
   failedBeforeOutput: boolean;
   wroteError: boolean;
@@ -141,6 +218,8 @@ async function runTurn(input: {
       write: input.write,
       sessionId: input.sessionId,
       modelId: input.modelId,
+      loadSandboxFile: input.loadSandboxFile,
+      persistSandboxFile: input.persistSandboxFile,
     });
     return { ...outcome, retryFrom: retryPreviousTurnId(created) };
   } catch (error) {
@@ -260,6 +339,17 @@ export async function streamTrueForgeHostedChat(input: {
             previousTurnId: attempt === 0 ? "auto" : retryFrom,
             write: guardedWrite,
             modelId,
+            persistSandboxFile: input.toolContext?.userId
+              ? (file) =>
+                  persistSandboxDownload(
+                    {
+                      userId: input.toolContext?.userId,
+                      conversationId,
+                      projectId: input.toolContext?.projectId,
+                    },
+                    file,
+                  )
+              : undefined,
           });
           outcome = result;
           if (attempt === 0) retryFrom = result.retryFrom;

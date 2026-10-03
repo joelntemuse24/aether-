@@ -3,6 +3,8 @@
  * Tool rows use the existing tool shells. Approvals use the existing confirm card.
  */
 
+import { redactSandboxText, redactSandboxValue, type SandboxFileRef } from "./sandbox-files";
+
 export type UiChunk = Record<string, unknown>;
 
 type ToolBuf = { id?: string; name?: string; args: string };
@@ -17,6 +19,9 @@ export type TrueForgeUiState = {
   opened: Set<string>;
   rootThreadId: string | null;
   childThreads: Map<string, ChildThread>;
+  sandboxHold: string;
+  reasoningHold: string;
+  sandboxFiles: SandboxFileRef[];
 };
 
 export function createTrueForgeUiState(): TrueForgeUiState {
@@ -28,6 +33,9 @@ export function createTrueForgeUiState(): TrueForgeUiState {
     opened: new Set(),
     rootThreadId: null,
     childThreads: new Map(),
+    sandboxHold: "",
+    reasoningHold: "",
+    sandboxFiles: [],
   };
 }
 
@@ -41,6 +49,64 @@ function textOf(content: unknown): string {
         : "",
     )
     .join("");
+}
+
+function rememberSandboxFiles(state: TrueForgeUiState, refs: SandboxFileRef[]) {
+  for (const ref of refs) {
+    if (!state.sandboxFiles.some((existing) => existing.path === ref.path)) {
+      state.sandboxFiles.push(ref);
+    }
+  }
+}
+
+function pushVisibleText(state: TrueForgeUiState, chunks: UiChunk[], raw: string) {
+  if (!raw) return;
+  const fed = redactSandboxText(state.sandboxHold + raw);
+  state.sandboxHold = fed.held;
+  rememberSandboxFiles(state, fed.refs);
+  if (!fed.visible) return;
+  const id = ensureText(state, chunks);
+  chunks.push({ type: "text-delta", id, delta: fed.visible });
+}
+
+function pushVisibleReasoning(state: TrueForgeUiState, chunks: UiChunk[], raw: string) {
+  if (!raw) return;
+  const fed = redactSandboxText(state.reasoningHold + raw);
+  state.reasoningHold = fed.held;
+  rememberSandboxFiles(state, fed.refs);
+  if (!fed.visible) return;
+  if (!state.reasoningId) {
+    state.reasoningId = "tf-reason";
+    chunks.push({ type: "reasoning-start", id: state.reasoningId });
+  }
+  chunks.push({ type: "reasoning-delta", id: state.reasoningId, delta: fed.visible });
+}
+
+/** Release a path fragment held across streamed chunks. */
+export function flushSandboxHold(state: TrueForgeUiState): UiChunk[] {
+  const chunks: UiChunk[] = [];
+  if (state.sandboxHold) {
+    const fed = redactSandboxText(state.sandboxHold, { flush: true });
+    state.sandboxHold = "";
+    rememberSandboxFiles(state, fed.refs);
+    if (fed.visible) {
+      const id = ensureText(state, chunks);
+      chunks.push({ type: "text-delta", id, delta: fed.visible });
+    }
+  }
+  if (state.reasoningHold) {
+    const fed = redactSandboxText(state.reasoningHold, { flush: true });
+    state.reasoningHold = "";
+    rememberSandboxFiles(state, fed.refs);
+    if (fed.visible) {
+      if (!state.reasoningId) {
+        state.reasoningId = "tf-reason";
+        chunks.push({ type: "reasoning-start", id: state.reasoningId });
+      }
+      chunks.push({ type: "reasoning-delta", id: state.reasoningId, delta: fed.visible });
+    }
+  }
+  return chunks;
 }
 
 function ensureText(state: TrueForgeUiState, chunks: UiChunk[]): string {
@@ -240,35 +306,17 @@ export function chunksForTrueForgeEvent(
 
   if (type === "model.message.delta") {
     const reasoning = typeof event.reasoningContent === "string" ? event.reasoningContent : "";
-    if (reasoning) {
-      if (!state.reasoningId) {
-        state.reasoningId = "tf-reason";
-        chunks.push({ type: "reasoning-start", id: state.reasoningId });
-      }
-      chunks.push({ type: "reasoning-delta", id: state.reasoningId, delta: reasoning });
-    }
+    if (reasoning) pushVisibleReasoning(state, chunks, reasoning);
     if (event.finishReason) flushPendingTools(state, chunks);
-    const delta = textOf(event.content);
-    if (delta) {
-      const id = ensureText(state, chunks);
-      chunks.push({ type: "text-delta", id, delta });
-    }
+    pushVisibleText(state, chunks, textOf(event.content));
     absorbToolDelta(state, chunks, event.toolCalls);
     return chunks;
   }
 
   if (type === "model.message") {
     const reasoning = typeof event.reasoningContent === "string" ? event.reasoningContent : "";
-    if (reasoning && !state.reasoningId) {
-      state.reasoningId = "tf-reason";
-      chunks.push({ type: "reasoning-start", id: state.reasoningId });
-      chunks.push({ type: "reasoning-delta", id: state.reasoningId, delta: reasoning });
-    }
-    const text = textOf(event.content);
-    if (text) {
-      const id = ensureText(state, chunks);
-      chunks.push({ type: "text-delta", id, delta: text });
-    }
+    if (reasoning && !state.reasoningId) pushVisibleReasoning(state, chunks, reasoning);
+    pushVisibleText(state, chunks, textOf(event.content));
     if (Array.isArray(event.toolCalls)) {
       event.toolCalls.forEach((call, index) => {
         if (!call || typeof call !== "object") return;
@@ -313,6 +361,7 @@ export function chunksForTrueForgeEvent(
     const childReport = childTextForTool(state, toolCallId);
     const blankOutput = output == null || (typeof output === "string" && output.trim() === "");
     if (childReport && blankOutput) output = childReport;
+    output = redactSandboxValue(output, state.sandboxFiles);
     chunks.push({
       type: "tool-output-available",
       toolCallId,

@@ -217,4 +217,127 @@ describe("TrueForge live stream", () => {
     assert.equal(outcome.wroteError, true);
     assert.equal(writes.filter((chunk) => chunk.type === "text-delta").length, 1);
   });
+
+  it("publishes the housing deck instead of the sandbox path", async () => {
+    const deck =
+      "/home/aether/.local/share/trueforge-aether/sandboxes/abc/abc/artifacts/irish_housing_crisis.pptx";
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield { type: "turn.created", turnId: "turn_deck", previousTurnId: null };
+      yield { type: "model.message.delta", content: "```sandbox_artif" };
+      yield {
+        type: "model.message.delta",
+        content: `acts\n[Irish housing crisis](${deck})\n\`\`\`\nThe slides cover supply and prices.`,
+      };
+      yield { type: "turn.done", state: { status: "completed" } };
+    }
+    await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses_deck",
+      loadSandboxFile: async (filePath, turnId) => {
+        assert.equal(filePath, deck);
+        assert.equal(turnId, "turn_deck");
+        return Buffer.from("PK\u0003\u0004deck");
+      },
+    });
+    const text = writes
+      .filter((chunk) => chunk.type === "text-delta")
+      .map((chunk) => String(chunk.delta ?? ""))
+      .join("");
+    assert.match(text, /The slides cover supply and prices/);
+    assert.equal(text.includes("/home/"), false);
+    assert.equal(text.includes("sandbox_artifacts"), false);
+    const output = writes.find((chunk) => chunk.type === "tool-output-available");
+    const file = output?.output as { kind?: string; filename?: string; content?: string };
+    assert.equal(file.kind, "file");
+    assert.equal(file.filename, "irish_housing_crisis.pptx");
+    assert.match(file.content ?? "", /^data:/);
+    assert.equal(JSON.stringify(writes).includes("/home/aether"), false);
+  });
+
+  it("recovers the Sol chart whose link dropped the sandbox subfolder", async () => {
+    const dropped =
+      "/home/aether/.local/share/trueforge-aether/sandboxes/01m41kmnnhkvjzf15ft86zez84/bitcoin_30d_chart.svg";
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield { type: "turn.created", turnId: "turn_chart", previousTurnId: null };
+      yield {
+        type: "model.message.delta",
+        content: `Chart ready.\n\`\`\`sandbox_artifacts\n[Bitcoin 30-Day Chart](${dropped})\n\`\`\``,
+      };
+      yield { type: "turn.done", state: { status: "completed" } };
+    }
+    const loaded: string[] = [];
+    await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses_chart",
+      loadSandboxFile: async (filePath) => {
+        loaded.push(filePath);
+        return filePath === "bitcoin_30d_chart.svg"
+          ? Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>', "utf8")
+          : null;
+      },
+    });
+    assert.deepEqual(loaded, [dropped, "bitcoin_30d_chart.svg"]);
+    const text = writes
+      .filter((chunk) => chunk.type === "text-delta")
+      .map((chunk) => String(chunk.delta ?? ""))
+      .join("");
+    assert.match(text, /Chart ready/);
+    assert.equal(text.includes("/home/"), false);
+    const input = writes.find((chunk) => chunk.type === "tool-input-available")?.input as {
+      kind?: string;
+    };
+    const output = writes.find((chunk) => chunk.type === "tool-output-available")?.output as {
+      kind?: string;
+      content?: string;
+    };
+    assert.equal(input.kind, "svg");
+    assert.equal(output.kind, "svg");
+    assert.match(output.content ?? "", /^<svg/);
+    assert.equal(JSON.stringify(writes).includes("/home/aether"), false);
+  });
+
+  it("opens the Sonnet P4 calculator html in the panel instead of a dead path", async () => {
+    const path =
+      "/home/aether/.local/share/trueforge-aether/sandboxes/01m41kxcy8wqyjrcx2bzgbvmc9/01m41kxhz8q5w/mortgage_calculator_ireland.html";
+    const html = "<!DOCTYPE html><html><body><input id=rate></body></html>";
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield { type: "turn.created", turnId: "turn_calc", previousTurnId: null };
+      yield {
+        type: "model.message.delta",
+        content: `Mortgage calculator:\n\`\`\`sandbox_artifacts\n[🏡 Ireland Mortgage Calculator](${path})\n\`\`\``,
+      };
+      yield { type: "turn.done", state: { status: "completed" } };
+    }
+    await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses_calc",
+      loadSandboxFile: async (filePath) =>
+        filePath.endsWith("mortgage_calculator_ireland.html") ? Buffer.from(html, "utf8") : null,
+    });
+    const text = writes
+      .filter((chunk) => chunk.type === "text-delta")
+      .map((chunk) => String(chunk.delta ?? ""))
+      .join("");
+    assert.match(text, /Mortgage calculator:/);
+    assert.equal(text.includes("/home/"), false);
+    assert.equal(text.includes("sandbox_artifacts"), false);
+    const input = writes.find((chunk) => chunk.type === "tool-input-available")?.input as {
+      kind?: string;
+    };
+    const output = writes.find((chunk) => chunk.type === "tool-output-available")?.output as {
+      kind?: string;
+      content?: string;
+    };
+    assert.equal(input.kind, "html");
+    assert.equal(output.kind, "html");
+    assert.equal(output.content, html);
+    assert.equal(JSON.stringify(writes).includes("data:"), false);
+    assert.equal(JSON.stringify(writes).includes("/home/aether"), false);
+  });
 });

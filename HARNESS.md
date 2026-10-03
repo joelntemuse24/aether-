@@ -35,6 +35,7 @@ The system prompt may name only tools attached to that turn. Web tools are `web_
 | Rule | Status | Check |
 | --- | --- | --- |
 | The prompt's tool names equal the attached MCP tool set. A turn with no registration uses the no-tools note. | deterministic | `src/lib/trueforge/harness-rules.test.ts` |
+| Sandbox files are published as cards: pptx, xlsx, pdf, and png as download cards; html and svg open in the preview panel. Internal sandbox paths, fenced or unfenced `sandbox_artifacts` blocks, and paths that drop the sandbox subfolder are recovered or removed from the answer. The hosted prompt does not name office tools that are not attached. | deterministic | `src/lib/trueforge/sandbox-files.test.ts`, `src/lib/trueforge/chat-stream.test.ts`, `src/lib/trueforge/harness-rules.test.ts` |
 | User-supplied URL fetches go through `src/lib/connectors/url-safety.ts` (`assertPublicHttpUrl`, `fetchWithPublicRedirects`). | deterministic | `src/lib/trueforge/harness-rules.test.ts` |
 | Sidecar string patches still match the installed `@truefoundry/trueforge-core` package. A missing target string warns. | deterministic | `src/lib/trueforge/harness-rules.test.ts`, `src/lib/trueforge/sidecar-patch.test.ts` |
 
