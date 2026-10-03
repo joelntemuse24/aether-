@@ -12,14 +12,16 @@ memory_write and create_artifact wait on the user's approval card before they sa
 Cite web sources as [1], [2]. End every turn with a clear answer. Do not invent tools you were not given.
 If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.
 For a chart or interactive view, write a fenced svg, html, or react block, or a png image. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.
-${SANDBOX_FILE_LINE}`;
+${SANDBOX_FILE_LINE}
+If a command times out, answer with what you already have. Do not start another long command.`;
 
 export const TRUEFORGE_NO_TOOLS_NOTE = `You are Aether. Tools are not connected for this turn.
 Answer from the conversation. If the user needs a live lookup, say you cannot reach it right now.
 Do not invent tool results.
 If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.
 For a chart or interactive view, write a fenced svg, html, or react block, or a png image. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.
-${SANDBOX_FILE_LINE}`;
+${SANDBOX_FILE_LINE}
+If a command times out, answer with what you already have. Do not start another long command.`;
 
 export const TOOLS_UNAVAILABLE_NOTICE = "Tools are not connected for this turn.";
 
@@ -56,6 +58,9 @@ export function trueforgeToolNote(attached: readonly string[]): string {
     );
   }
   lines.push(SANDBOX_FILE_LINE);
+  lines.push(
+    "If a command times out, answer with what you already have. Do not start another long command.",
+  );
   return lines.join("\n");
 }
 

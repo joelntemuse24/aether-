@@ -46,6 +46,7 @@ The chat shell stays the cream Aether UI. TrueForge events become AI SDK UI chun
 | Rule | Status | Check |
 | --- | --- | --- |
 | Visible text, tool parts, and errors follow the UI chunk translator. | deterministic | `src/lib/trueforge/ui-chunks.test.ts` |
+| A sandbox command times out and returns that error to the model. A turn stops before the platform limit, keeps any partial answer, and does not leave the status line on "Running exec". | deterministic | `src/lib/trueforge/sidecar-patch.test.ts`, `src/lib/trueforge/chat-stream.test.ts`, `src/lib/agent-activity.test.ts` |
 | No visual redesign without an explicit design ask. | agent | this file |
 
 ## Native agent engine

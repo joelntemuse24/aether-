@@ -106,18 +106,30 @@ const CLOCK_JS = "const capabilities = [(0, import_CurrentDateTime.currentDateTi
 const CLOCK_MJS = "const capabilities = [currentDateTime({ tracing })];";
 const CLOCK_OFF = "const capabilities = [];";
 
+const EXEC_TIMEOUT_FROM = "var DEFAULT_TIMEOUT_SECONDS = 60;";
+const EXEC_TIMEOUT_TO = "var DEFAULT_TIMEOUT_SECONDS = 45;";
+
 const RELATIVE_FILES = [
   "node_modules/@truefoundry/trueforge-core/dist/core/runtime/DeferredTool.js",
   "node_modules/@truefoundry/trueforge-core/dist/core/runtime/DeferredTool.mjs",
   "node_modules/@truefoundry/trueforge-core/dist/core/sandbox/Sandbox.js",
   "node_modules/@truefoundry/trueforge-core/dist/core/sandbox/Sandbox.mjs",
+  "node_modules/@truefoundry/trueforge-core/dist/core/sandbox/provider/TFYSandboxProvider.js",
+  "node_modules/@truefoundry/trueforge-core/dist/core/sandbox/provider/TFYSandboxProvider.mjs",
   "node_modules/@truefoundry/trueforge-core/dist/agent-session/builtinsFromSpec.js",
   "node_modules/@truefoundry/trueforge-core/dist/agent-session/builtinsFromSpec.mjs",
 ];
 
-function alreadyPatched(source: string, kind: "deferred" | "sandbox" | "clock"): boolean {
+function patchExecTimeout(source: string): { text: string; changed: boolean } {
+  if (source.includes(EXEC_TIMEOUT_TO)) return { text: source, changed: false };
+  if (!source.includes(EXEC_TIMEOUT_FROM)) return { text: source, changed: false };
+  return { text: source.replace(EXEC_TIMEOUT_FROM, EXEC_TIMEOUT_TO), changed: true };
+}
+
+function alreadyPatched(source: string, kind: "deferred" | "sandbox" | "clock" | "exec-timeout"): boolean {
   if (kind === "deferred") return source.includes("!server.preload");
   if (kind === "clock") return source.includes(CLOCK_OFF);
+  if (kind === "exec-timeout") return source.includes(EXEC_TIMEOUT_TO);
   return (
     source.includes("exec can reach these MCP servers") &&
     source.includes("buildSchemaSection(builder) {\n    return;")
@@ -135,8 +147,15 @@ export function applyTrueForgeSidecarPatches(root = process.cwd()): string[] {
       ? "deferred"
       : relative.includes("builtinsFromSpec")
         ? "clock"
-        : "sandbox";
-    const next = kind === "clock" ? patchClock(source) : patchText(source, kind);
+        : relative.includes("TFYSandboxProvider")
+          ? "exec-timeout"
+          : "sandbox";
+    const next =
+      kind === "clock"
+        ? patchClock(source)
+        : kind === "exec-timeout"
+          ? patchExecTimeout(source)
+          : patchText(source, kind);
     if (next.changed) {
       fs.writeFileSync(file, next.text);
       patched.push(relative);
