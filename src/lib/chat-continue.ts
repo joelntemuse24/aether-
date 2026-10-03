@@ -13,6 +13,22 @@ export const MIN_DISCONNECT_RUN_MS = 45_000;
 export const CONTINUE_USER_TEXT =
   "Continue from where you left off. The previous reply was cut off by a platform time limit — do not restart the task; finish incomplete artifacts/tools and avoid repeating completed work.";
 
+/**
+ * Marks an automatic continue turn. The message stays in the model history
+ * (the next request still carries it), but the thread hides the user bubble.
+ */
+export const CONTINUE_MESSAGE_METADATA = { custom: { hiddenContinuation: true } } as const;
+
+export function isHiddenContinuation(
+  message: { role?: unknown; metadata?: unknown } | null | undefined,
+): boolean {
+  if (!message || message.role !== "user") return false;
+  const metadata = message.metadata as { custom?: unknown } | undefined | null;
+  const custom = metadata?.custom;
+  if (!custom || typeof custom !== "object") return false;
+  return (custom as { hiddenContinuation?: unknown }).hiddenContinuation === true;
+}
+
 /** Injected into /api/chat system prompt for continue segments. */
 export const CONTINUE_SYSTEM_ADDENDUM = [
   "## Continue segment",

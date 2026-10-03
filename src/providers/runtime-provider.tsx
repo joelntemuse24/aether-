@@ -57,6 +57,7 @@ import { useHarness } from "./harness-provider";
 import { useProjects } from "./projects-provider";
 import { localMemoryContextForChat } from "@/lib/memory/local";
 import {
+  CONTINUE_MESSAGE_METADATA,
   CONTINUE_USER_TEXT,
   MAX_AUTO_CONTINUES,
   hasContinuableAssistant,
@@ -414,7 +415,10 @@ function useChatThreadRuntime() {
   const statusRef = useRef<string>("ready");
   const errorRef = useRef<Error | undefined>(undefined);
   const chatApiRef = useRef<{
-    sendMessage: (msg: { text: string }) => Promise<void>;
+    sendMessage: (msg: {
+      text: string;
+      metadata?: Record<string, unknown>;
+    }) => Promise<void>;
     regenerate?: () => Promise<void>;
     clearError?: () => void;
   } | null>(null);
@@ -467,7 +471,10 @@ function useChatThreadRuntime() {
         // ignore
       }
       void api
-        .sendMessage({ text: CONTINUE_USER_TEXT })
+        .sendMessage({
+          text: CONTINUE_USER_TEXT,
+          metadata: CONTINUE_MESSAGE_METADATA,
+        })
         .catch((err) => {
           console.error("[chat] auto-continue failed", err);
           continueSegmentRef.current = false;
