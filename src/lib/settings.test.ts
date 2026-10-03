@@ -11,8 +11,15 @@ import { EXPERT_PRIMARY_MODEL } from "./hosted/speed-tiers";
 
 function installLocalStorage() {
   const map = new Map<string, string>();
-  const localStorage = {
+  const localStorage: Storage = {
+    get length() {
+      return map.size;
+    },
+    clear() {
+      map.clear();
+    },
     getItem: (key: string) => map.get(key) ?? null,
+    key: (index: number) => [...map.keys()][index] ?? null,
     setItem: (key: string, value: string) => {
       map.set(key, value);
     },
@@ -20,9 +27,9 @@ function installLocalStorage() {
       map.delete(key);
     },
   };
-  const globals = globalThis as typeof globalThis & {
-    window?: { localStorage: typeof localStorage };
-    localStorage?: typeof localStorage;
+  const globals = globalThis as {
+    window?: { localStorage: Storage };
+    localStorage?: Storage;
   };
   const previousWindow = globals.window;
   const previousLocalStorage = globals.localStorage;
@@ -31,9 +38,9 @@ function installLocalStorage() {
   return {
     map,
     restore: () => {
-      if (previousWindow === undefined) delete globals.window;
+      if (previousWindow === undefined) Reflect.deleteProperty(globals, "window");
       else globals.window = previousWindow;
-      if (previousLocalStorage === undefined) delete globals.localStorage;
+      if (previousLocalStorage === undefined) Reflect.deleteProperty(globals, "localStorage");
       else globals.localStorage = previousLocalStorage;
     },
   };

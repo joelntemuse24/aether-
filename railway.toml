@@ -1,5 +1,5 @@
-# Aether chat — long-lived `next start` (no Vercel function wall clock).
-# Optional / deprecated Hermes gateway: deploy/hermes/railway.toml
+# Deprecated. Production is Vercel (aether-seven-theta) plus the Contabo sidecar.
+# This file is not used. Optional / deprecated Hermes gateway: deploy/hermes/railway.toml
 
 [build]
 builder = "DOCKERFILE"
