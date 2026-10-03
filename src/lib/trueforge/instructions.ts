@@ -139,19 +139,59 @@ function formatClock(now: Date, timeZone: string): string {
   }).format(now);
 }
 
+const IANA_ZONE = /^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+){0,2}$/;
+
+/** Accept a browser IANA zone. Anything else is ignored. */
+export function normalizeTimeZone(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const zone = value.trim();
+  if (!zone || zone.length > 64 || !IANA_ZONE.test(zone)) return null;
+  try {
+    new Intl.DateTimeFormat("en-GB", { timeZone: zone }).format(new Date());
+    return zone;
+  } catch {
+    return null;
+  }
+}
+
+function formatToday(now: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(now);
+}
+
 /** Full clock in the prompt. The builtin clock tool is removed by the sidecar patch. */
-export function trueforgeClockLine(now = new Date()): string {
+export function trueforgeClockLine(now = new Date(), timeZone?: string | null): string {
+  const zone = normalizeTimeZone(timeZone);
+  const dateZone = zone ?? "Europe/Dublin";
+  const today = formatToday(now, dateZone);
   const utc = formatClock(now, "UTC");
   const dublin = formatClock(now, "Europe/Dublin");
-  return `Current time (UTC): ${utc}. Europe/Dublin: ${dublin}. Use this time. Call a clock tool only if you need a time more precise than the second.`;
+  const parts = [
+    `Today's date (${dateZone}): ${today}.`,
+    `Current time (UTC): ${utc}. Europe/Dublin: ${dublin}.`,
+  ];
+  if (zone && zone !== "UTC" && zone !== "Europe/Dublin") {
+    parts.push(`User timezone (${zone}): ${formatClock(now, zone)}.`);
+  } else if (zone) {
+    parts.push(`User timezone: ${zone}.`);
+  }
+  parts.push(
+    "Use this date and time. Call a clock tool only if you need a time more precise than the second.",
+  );
+  return parts.join(" ");
 }
 
 export function trueforgeInstructions(
   system: string,
   now = new Date(),
-  options?: { toolsAvailable?: boolean },
+  options?: { toolsAvailable?: boolean; timeZone?: string | null },
 ): string {
-  const clock = trueforgeClockLine(now);
+  const clock = trueforgeClockLine(now, options?.timeZone);
   const note = options?.toolsAvailable === false ? TRUEFORGE_NO_TOOLS_NOTE : TRUEFORGE_TOOL_NOTE;
   if (system.startsWith(TOOLS_SYSTEM_PROMPT)) {
     const rest = system.slice(TOOLS_SYSTEM_PROMPT.length).replace(/^\n+/, "");

@@ -157,6 +157,7 @@ export function agentSystemPrompt(input: {
   definitions: readonly AgentToolDefinition[];
   unavailableGroups?: readonly AgentToolGroup[];
   now?: Date;
+  timeZone?: string | null;
   depth?: HarnessDepth;
   intent?: HarnessIntent;
 }): string {
@@ -165,7 +166,7 @@ export function agentSystemPrompt(input: {
   const attached = input.definitions;
   const lines: string[] = [];
   if (input.base?.trim()) lines.push(input.base.trim());
-  lines.push(trueforgeClockLine(input.now ?? new Date()));
+  lines.push(trueforgeClockLine(input.now ?? new Date(), input.timeZone));
   lines.push(
     harnessSystemAddendum({ depth, intent }),
     `Step budget: ${budgetForDepth(depth).maxSteps}. Search budget: ${webSearchBudgetForDepth(depth)}. Page budget: ${pageFetchBudgetForDepth(depth)}.`,

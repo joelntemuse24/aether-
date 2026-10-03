@@ -329,10 +329,13 @@ export async function streamTrueForgeHostedChat(input: {
   toolContext?: Omit<TrueForgeToolContext, "exp"> | null;
   modelId?: string | null;
   openRouterKey?: string | null;
+  timeZone?: string | null;
   history?: { role: "user" | "assistant"; content: string }[];
 }): Promise<Response> {
   const conversationId = resolveHostedConversationId(input.conversationId);
-  const instructions = trueforgeInstructions(input.system);
+  const instructions = trueforgeInstructions(input.system, new Date(), {
+    timeZone: input.timeZone,
+  });
   const modelId = input.modelId || "gpt-5.6-luna";
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {

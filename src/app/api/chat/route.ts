@@ -114,6 +114,7 @@ export async function POST(req: Request) {
     }
     const conversationId =
       typeof body.conversationId === "string" ? body.conversationId : null;
+    const timeZone = typeof body.timeZone === "string" ? body.timeZone : null;
     const toolsEnabled = getHeader(req, "x-tools") !== "0";
     const continueSegment = body.continueSegment === true;
     const userSystem =
@@ -395,6 +396,7 @@ export async function POST(req: Request) {
           approvalMode,
           depth: harnessDepth,
           timeMinutes: timeBudget?.minutes ?? null,
+          timeZone,
           abortSignal: req.signal,
           openRouterKey: forwardedKey || null,
           tools: nativeToolNames(accountReady, toolsEnabled),
@@ -435,6 +437,7 @@ export async function POST(req: Request) {
         abortSignal: req.signal,
         modelId: buzzModelId,
         openRouterKey: openRouterKey || null,
+        timeZone,
         toolContext: {
           userId,
           conversationId,
