@@ -86,6 +86,16 @@ describe("reasoning summaries stay free of tool dumps", () => {
     );
     assert.equal(sanitizeReasoningText("Draft a short answer."), "Draft a short answer.");
   });
+
+  it("drops the bold markers the disclosure renders as plain text", () => {
+    assert.equal(sanitizeReasoningText("**Gather prices** then **compute the average**."),
+      "Gather prices then compute the average.");
+    assert.equal(
+      sanitizeReasoningText("**Gather prices****Compute the average**"),
+      "Gather prices\n\nCompute the average",
+    );
+    assert.equal(sanitizeReasoningText("A stray ** marker drops."), "A stray marker drops.");
+  });
 });
 
 describe("visible-text wiring", () => {

@@ -155,7 +155,7 @@ function stripUnfencedSandboxBlock(text: string, refs: SandboxFileRef[]): string
       continue;
     }
     const kept = line.replace(
-      new RegExp(LINK_RE.source, "g"),
+      new RegExp(`(?:!)?${LINK_RE.source}`, "g"),
       (all: string, label: string, angle?: string, plain?: string) => {
         const target = stripSandboxScheme(
           ((angle ?? "").trim() || (plain ?? "").trim()) as string,
@@ -163,6 +163,7 @@ function stripUnfencedSandboxBlock(text: string, refs: SandboxFileRef[]): string
         if (!target) return all;
         if (isPublishableSandboxPath(target) || isFenceFile(target)) {
           remember(refs, label, target, true);
+          if (all.startsWith("!")) return "";
           return label.trim() ? label : "";
         }
         return all;
@@ -234,7 +235,7 @@ export function redactSandboxText(
   }
   visible = stripUnfencedSandboxBlock(visible, refs);
   visible = visible.replace(
-    new RegExp(LINK_RE.source, "g"),
+    new RegExp(`(?:!)?${LINK_RE.source}`, "g"),
     (
       all: string,
       label: string,
@@ -246,12 +247,11 @@ export function redactSandboxText(
       const raw = ((angle ?? "").trim() || (plain ?? "").trim()) as string;
       if (!raw) return all;
       const target = stripSandboxScheme(raw);
-      const source = subject ?? "";
-      const isImage =
+      const escaped =
         typeof offset === "number" &&
         offset > 0 &&
-        source[offset - 1] === "!" &&
-        source[offset - 2] !== "\\";
+        (subject ?? "")[offset - 1] === "\\";
+      const isImage = all.startsWith("!") && !escaped;
       const eligible = isPublishableSandboxPath(target) || isFenceFile(target);
       if (!eligible) return all;
       remember(refs, label, target, true);

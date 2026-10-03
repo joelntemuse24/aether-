@@ -271,15 +271,15 @@ describe("probe replay (re-run and round-1 strings)", () => {
 });
 
 describe("probe replay (r3 strings)", () => {
-  it("publishes the Luna chart image written with a sandbox: scheme", () => {
+  it("publishes the Luna chart image written with a sandbox: scheme and drops the bang", () => {
     const fed = redactSandboxText(
       "Here is the chart:\n![](sandbox:/workspace/btc_30d.png)",
       { flush: true },
     );
     assert.equal(fed.visible.includes("sandbox:"), false);
-    assert.equal(fed.visible.includes("!["), false);
+    assert.equal(fed.visible.includes("!"), false);
     assert.equal(fed.visible.includes("btc_30d.png"), false);
-    assert.match(fed.visible, /Here is the chart:/);
+    assert.equal(fed.visible.trim(), "Here is the chart:");
     assert.deepEqual(fed.refs.map((ref) => ref.path), ["/workspace/btc_30d.png"]);
     assert.equal(fed.refs[0]?.label, "btc_30d.png");
   });
@@ -289,8 +289,11 @@ describe("probe replay (r3 strings)", () => {
     assert.equal(first.visible.includes("!"), false);
     assert.match(first.held, /!\[chart\]/);
     const second = redactSandboxText(`${first.held}ace/btc_30d.png)`);
-    assert.equal(second.visible.includes("!["), false);
+    assert.equal(second.visible.includes("!"), false);
     assert.equal(second.visible.includes("sandbox:"), false);
+    assert.equal(second.visible, "");
+    assert.match(first.visible, /Here is the chart:/);
+    assert.equal(first.visible.includes("!"), false);
     assert.deepEqual(second.refs.map((ref) => ref.path), ["/workspace/btc_30d.png"]);
   });
 
@@ -298,15 +301,36 @@ describe("probe replay (r3 strings)", () => {
     const path = `${VM}/01m41kbvxrxkqgksr9nfjcpc44/01m41kd2fzvkast0qzhpz50ec4/btc_30d.png`;
     const fed = redactSandboxText(`Done.\n![chart](${path})`, { flush: true });
     assert.equal(fed.visible.includes("/home/"), false);
-    assert.equal(fed.visible.includes("!["), false);
+    assert.equal(fed.visible.includes("!"), false);
+    assert.equal(fed.visible.trim(), "Done.");
     assert.deepEqual(fed.refs.map((ref) => ref.path), [path]);
   });
 
-  it("publishes a bare relative chart image", () => {
+  it("publishes a bare relative chart image without leaving a bang", () => {
     const fed = redactSandboxText("Chart:\n![btc 30d](btc_30d.png)", { flush: true });
-    assert.equal(fed.visible.includes("!["), false);
+    assert.equal(fed.visible.includes("!"), false);
+    assert.equal(fed.visible.trim(), "Chart:");
     assert.deepEqual(fed.refs.map((ref) => ref.path), ["btc_30d.png"]);
     assert.equal(fed.refs[0]?.label, "btc 30d");
+  });
+
+  it("drops the bang when an unfenced sandbox_artifacts block publishes an image", () => {
+    const path = `${VM}/01m41kbvxrxkqgksr9nfjcpc44/01m41kd2fzvkast0qzhpz50ec4/rent_chart.png`;
+    const fed = redactSandboxText(
+      ["The chart:", "sandbox_artifacts", `![chart](${path})`, "Anything else?"].join("\n"),
+      { flush: true },
+    );
+    assert.equal(fed.visible.includes("!"), false);
+    assert.equal(fed.visible.includes("/home/"), false);
+    assert.deepEqual(fed.refs.map((ref) => ref.path), [path]);
+    assert.match(fed.visible, /The chart:/);
+    assert.match(fed.visible, /Anything else\?/);
+  });
+
+  it("keeps a markdown image that points at the open web", () => {
+    const fed = redactSandboxText("Logo: ![logo](https://example.com/logo.png)", { flush: true });
+    assert.equal(fed.visible, "Logo: ![logo](https://example.com/logo.png)");
+    assert.deepEqual(fed.refs, []);
   });
 
   it("replays the Luna image as a png file card the thread renders inline", async () => {
