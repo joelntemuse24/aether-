@@ -4,7 +4,9 @@ import type { UiChunk } from "./ui-chunks";
 
 export type SandboxFileRef = { label: string; path: string };
 
-const PUBLISH_EXT = /\.(?:pptx|xlsx|xls|docx|pdf|png|jpe?g|webp|gif|csv|zip|svg)$/i;
+const PUBLISH_EXT = /\.(?:pptx|xlsx|xls|docx|pdf|png|jpe?g|webp|gif|csv|zip|svg|html?)$/i;
+
+const PANEL_EXT = /\.(?:svg|html?)$/i;
 
 /** Bytes kept in the thread. Larger files are skipped rather than shown as a private path. */
 export const SANDBOX_FILE_BYTE_CAP = 3_000_000;
@@ -23,6 +25,15 @@ export function isHiddenSandboxPath(filePath: string): boolean {
 export function isPublishableSandboxPath(filePath: string): boolean {
   const clean = filePath.split("?")[0] ?? filePath;
   return isHiddenSandboxPath(clean) && PUBLISH_EXT.test(clean);
+}
+
+/** html and svg open in the preview panel instead of a download card. */
+export function isPanelSandboxPath(filePath: string): boolean {
+  return PANEL_EXT.test(filePath.split("?")[0] ?? filePath);
+}
+
+export function sandboxPanelKind(filePath: string): "html" | "svg" {
+  return /\.svg$/i.test(filePath.split("?")[0] ?? filePath) ? "svg" : "html";
 }
 
 export function sandboxFileName(filePath: string): string {
@@ -51,11 +62,20 @@ function remember(refs: SandboxFileRef[], label: string, filePath: string, allow
   refs.push({ label: safeLabel, path });
 }
 
+/** Markdown links, including the `(<path>)` and `( path )` forms models emit. */
+const LINK_RE = /\[([^\]]*)\]\(\s*(?:<([^<>\n]*)>|([^)\n]+?))\s*\)/g;
+
+function linkTarget(match: RegExpExecArray): string {
+  const angle = (match[2] ?? "").trim();
+  if (angle) return angle;
+  return (match[3] ?? "").trim();
+}
+
 function collectPaths(body: string, refs: SandboxFileRef[], fence: boolean) {
-  const link = /\[([^\]]*)\]\(([^)\s]+)\)/g;
+  const link = new RegExp(LINK_RE.source, "g");
   let match: RegExpExecArray | null;
   while ((match = link.exec(body))) {
-    const target = match[2] ?? "";
+    const target = linkTarget(match);
     if (fence || isPublishableSandboxPath(target)) remember(refs, match[1] ?? "", target, fence);
   }
   const bare = /\/(?:home\/|\.local\/share\/)[^\s)\]"'<>]+/g;
@@ -63,6 +83,65 @@ function collectPaths(body: string, refs: SandboxFileRef[], fence: boolean) {
   while ((pathMatch = bare.exec(body))) {
     remember(refs, sandboxFileName(pathMatch[0]), pathMatch[0]);
   }
+}
+
+/** A line that is only the `sandbox_artifacts` marker opens a file block even without a fence. */
+export function isSandboxHeaderLine(line: string): boolean {
+  const trimmed = line.trim();
+  return (
+    trimmed === "sandbox_artifacts" ||
+    trimmed === "[sandbox_artifacts]" ||
+    trimmed === "[sandbox_artifacts]:"
+  );
+}
+
+/**
+ * Hold from an unfenced header while its block is still open (no blank line
+ * after it yet), so links that arrive in later chunks are still collected.
+ */
+function openSandboxHeaderIndex(text: string): number {
+  const lines = text.split("\n");
+  let offset = 0;
+  let found = -1;
+  for (const line of lines) {
+    if (isSandboxHeaderLine(line)) found = offset;
+    offset += line.length + 1;
+  }
+  if (found < 0) return -1;
+  if (text.slice(found).includes("\n\n")) return -1;
+  return found;
+}
+
+/** Collect and drop the links in an unfenced `sandbox_artifacts` block. */
+function stripUnfencedSandboxBlock(text: string, refs: SandboxFileRef[]): string {
+  const out: string[] = [];
+  let inBlock = false;
+  for (const line of text.split("\n")) {
+    if (isSandboxHeaderLine(line)) {
+      inBlock = true;
+      continue;
+    }
+    const blank = line.trim() === "";
+    if (!inBlock || blank) {
+      if (blank) inBlock = false;
+      out.push(line);
+      continue;
+    }
+    const kept = line.replace(
+      new RegExp(LINK_RE.source, "g"),
+      (all: string, label: string, angle?: string, plain?: string) => {
+        const target = ((angle ?? "").trim() || (plain ?? "").trim()) as string;
+        if (!target) return all;
+        if (isPublishableSandboxPath(target) || isFenceFile(target)) {
+          remember(refs, label, target, true);
+          return label.trim() ? label : "";
+        }
+        return all;
+      },
+    );
+    out.push(kept);
+  }
+  return out.join("\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
 }
 
 function holdIndex(text: string): number {
@@ -88,6 +167,9 @@ function holdIndex(text: string): number {
   if (home?.index != null && !PUBLISH_EXT.test(home[0])) points.push(home.index);
   const local = text.match(/\/(?:[\w.+-]+\/)*\.local(?:\/[^\s)\]"'<>]*)?$/);
   if (local?.index != null && !PUBLISH_EXT.test(local[0])) points.push(local.index);
+
+  const openHeader = openSandboxHeaderIndex(text);
+  if (openHeader >= 0) points.push(openHeader);
 
   if (points.length === 0) return text.length;
   return Math.min(...points);
@@ -116,8 +198,10 @@ export function redactSandboxText(
       return "";
     });
   }
-  visible = visible.replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, (all, label: string, target: string) => {
-    if (!isPublishableSandboxPath(target)) return all;
+  visible = stripUnfencedSandboxBlock(visible, refs);
+  visible = visible.replace(new RegExp(LINK_RE.source, "g"), (all, label: string, angle?: string, plain?: string) => {
+    const target = ((angle ?? "").trim() || (plain ?? "").trim()) as string;
+    if (!target || !isPublishableSandboxPath(target)) return all;
     remember(refs, label, target);
     return label;
   });
@@ -189,23 +273,42 @@ export async function sandboxFileCards(input: {
     if (seen.has(ref.path)) continue;
     seen.add(ref.path);
     let bytes: Uint8Array | Buffer | null = null;
-    try {
-      bytes = await input.load(ref.path);
-    } catch {
-      bytes = null;
+    for (const candidate of downloadCandidates(ref.path)) {
+      try {
+        bytes = await input.load(candidate);
+      } catch {
+        bytes = null;
+      }
+      if (bytes && bytes.byteLength > 0) break;
     }
     if (!bytes || bytes.byteLength === 0 || bytes.byteLength > SANDBOX_FILE_BYTE_CAP) continue;
     const filename = sandboxFileName(ref.path);
-    const mime = mimeForFilename(filename);
     const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+    const title = ref.label || filename;
+    if (isPanelSandboxPath(ref.path)) {
+      chunks.push(
+        ...sandboxPanelArtifactChunks(
+          {
+            title,
+            filename,
+            kind: sandboxPanelKind(ref.path),
+            content: buffer.toString("utf8"),
+          },
+          index,
+        ),
+      );
+      index += 1;
+      continue;
+    }
+    const mime = mimeForFilename(filename);
     const dataUrl = bufferToDataUrl(buffer, mime);
     const saved = input.persist
-      ? await input.persist({ title: ref.label || filename, filename, mime, dataUrl })
+      ? await input.persist({ title, filename, mime, dataUrl })
       : { persisted: false };
     chunks.push(
       ...sandboxFileCardChunks(
         fileToolResult({
-          title: ref.label || filename,
+          title,
           filename,
           mime,
           bytes: buffer.byteLength,
@@ -218,4 +321,50 @@ export async function sandboxFileCards(input: {
     index += 1;
   }
   return chunks;
+}
+
+/**
+ * A model path that drops the sandbox subfolder still names the file. The
+ * download endpoint resolves a bare name against the turn's sandbox root, so
+ * retry the basename when the listed path misses.
+ */
+export function downloadCandidates(filePath: string): string[] {
+  const clean = filePath.split("?")[0] ?? filePath;
+  const base = clean.split("/").filter(Boolean).pop() ?? "";
+  const out = [filePath];
+  if (base && base !== clean && isFenceFile(base)) out.push(base);
+  return out;
+}
+
+/** An html or svg sandbox file opens in the preview panel, like a fenced block. */
+export function sandboxPanelArtifactChunks(
+  input: { title: string; filename: string; kind: "html" | "svg"; content: string },
+  index: number,
+): UiChunk[] {
+  const toolCallId = `sandbox-file-${index + 1}`;
+  return [
+    {
+      type: "tool-input-available",
+      toolCallId,
+      toolName: "create_artifact",
+      providerExecuted: true,
+      input: {
+        title: input.title,
+        kind: input.kind,
+        language: input.filename,
+      },
+    },
+    {
+      type: "tool-output-available",
+      toolCallId,
+      providerExecuted: true,
+      output: {
+        ok: true,
+        kind: input.kind,
+        title: input.title,
+        filename: input.filename,
+        content: input.content,
+      },
+    },
+  ];
 }
