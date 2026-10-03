@@ -1376,21 +1376,20 @@ const AssistantMessage: FC = () => {
               return null;
             }}
           </MessagePrimitive.Parts>
+          <div
+            data-running={isLive ? "true" : undefined}
+            className={cn(
+              "aether-action-row mt-2 flex min-h-8 items-center gap-0.5 opacity-100 transition-opacity duration-150 data-[running=true]:opacity-0",
+              !isLast &&
+                "md:opacity-0 md:group-hover/message:opacity-100 md:focus-within:opacity-100",
+            )}
+          >
+            <BranchPicker />
+            <AssistantActionBar />
+          </div>
           <MessageSourceCards />
           <MessageError />
         </ChatRenderErrorBoundary>
-      </div>
-
-      <div
-        data-running={isLive ? "true" : undefined}
-        className={cn(
-          "aether-action-row mt-2 flex min-h-8 items-center gap-0.5 opacity-100 transition-opacity duration-150 data-[running=true]:opacity-0",
-          !isLast &&
-            "md:opacity-0 md:group-hover/message:opacity-100 md:focus-within:opacity-100",
-        )}
-      >
-        <BranchPicker />
-        <AssistantActionBar />
       </div>
     </MessagePrimitive.Root>
   );

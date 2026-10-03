@@ -295,10 +295,7 @@ export const MessageSourceCards: FC = () => {
           const chip = sourceChipLabel(hit);
           const inner = (
             <>
-              <span className="aether-inline-source__title">
-                {hit.id ? `[${hit.id}] ` : ""}
-                {hit.title}
-              </span>
+              <span className="aether-inline-source__title">{hit.title}</span>
               {chip ? (
                 <span className="aether-source-tray__pill">{chip}</span>
               ) : host ? (
