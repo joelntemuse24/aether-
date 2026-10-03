@@ -12,6 +12,8 @@ import {
   trueforgeInstructions,
   trueforgeToolNote,
 } from "./instructions";
+import { playbooksSystemAddendum, resolvePlaybooks } from "@/lib/harness/playbooks";
+import { verifySystemAddendum } from "@/lib/harness/verify";
 import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
 import { applyTrueForgeSidecarPatches } from "./sidecar-patch";
 import fs from "node:fs";
@@ -85,6 +87,30 @@ describe("harness rules", () => {
     assert.deepEqual(toolNamesInPrompt(TRUEFORGE_NO_TOOLS_NOTE, catalog), []);
     assert.equal(webPrompt.includes("memory_search"), false);
     assert.equal(webPrompt.includes("execute_python"), false);
+  });
+
+  it("does not name a presentation tool the hosted turn did not attach", () => {
+    const catalog = AETHER_MCP_TOOL_NAMES;
+    const web = ["web_search", "fetch_url", "browse_page"];
+    const deck = playbooksSystemAddendum(
+      resolvePlaybooks({ text: "Build a 5-slide deck as a downloadable pptx" }),
+    );
+    const sheet = playbooksSystemAddendum(
+      resolvePlaybooks({ text: "now put that in a spreadsheet" }),
+    );
+    const verify = verifySystemAddendum({ depth: "deep", intent: "write" }) ?? "";
+    const hosted = instructionsForAttachedTools(
+      trueforgeInstructions(`${TOOLS_SYSTEM_PROMPT}\n\n${deck}\n\n${sheet}\n\n${verify}`),
+      web,
+    );
+    assert.equal(hosted.includes("create_presentation"), false);
+    assert.equal(hosted.includes("create_spreadsheet"), false);
+    assert.equal(hosted.includes("create_document"), false);
+    assert.equal(hosted.includes("create_pdf"), false);
+    assert.equal(hosted.includes("workspace_exec"), false);
+    assert.match(hosted, /sandbox_artifacts block/);
+    assert.doesNotMatch(hosted, /\/home\//);
+    assert.deepEqual(toolNamesInPrompt(hosted, catalog), [...web].sort());
   });
 
   it("still matches the installed sidecar package", () => {
