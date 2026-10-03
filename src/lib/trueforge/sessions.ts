@@ -5,7 +5,7 @@ import {
   trueforgeSandboxEnabled,
   trueforgeToken,
 } from "./config";
-import { instructionsForRegisteredTools } from "./instructions";
+import { instructionsForAttachedTools } from "./instructions";
 import { toolContextKey } from "./tool-context";
 import {
   aetherMcpServerNames,
@@ -244,7 +244,10 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
   ) {
     return existing as CachedSession;
   }
-  const instructions = instructionsForRegisteredTools(input.instructions, mcp != null);
+  const attached = mcp
+    ? [...(aetherMcpServers({ direct: mcp.direct }, mcp.includeAccountTools)[0]?.enableTools ?? [])]
+    : [];
+  const instructions = instructionsForAttachedTools(input.instructions, attached);
   const mcpKey = `${
     mcp ? `${mcp.direct}:${mcp.includeAccountTools ? "all" : "web"}:${mcp.token}` : ""
   }:${sandboxEnabled ? "1" : "0"}`;

@@ -1,5 +1,7 @@
 # AGENTS.md
 
+Read [HARNESS.md](HARNESS.md) first. It is the product rule list and names the check for each rule. This file is the local environment guide.
+
 ## Cursor Cloud specific instructions
 
 ### Product
