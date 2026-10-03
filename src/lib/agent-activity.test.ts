@@ -1281,4 +1281,69 @@ describe("thread / composer copy stays honest", () => {
     assert.match(markdown, /aether-cite/);
     assert.match(markdown, /title=/);
   });
+
+  it("ends a cut-off exec instead of freezing Running exec", () => {
+    const messages = [
+      {
+        role: "assistant" as const,
+        parts: [
+          { type: "text" as const, text: "The first trials finished." },
+          {
+            type: "tool-exec",
+            toolName: "exec",
+            state: "input-available",
+            args: { command: "python sim.py" },
+          },
+        ],
+      },
+    ];
+    const running = deriveAgentActivity({
+      messages,
+      isRunning: true,
+      elapsedSeconds: 300,
+    });
+    assert.equal(running.liveLine, "Running exec");
+    assert.equal(formatActivityElapsed(running.elapsedSeconds), "5m 00s");
+    const stopped = deriveAgentActivity({
+      messages,
+      isRunning: false,
+      elapsedSeconds: 300,
+    });
+    assert.notEqual(stopped.liveLine, "Running exec");
+    assert.equal(
+      stopped.steps.some((step) => step.label === "Running exec"),
+      false,
+    );
+    assert.equal(
+      stopped.steps.some((step) => step.label === "Exec stopped"),
+      true,
+    );
+    assert.equal(
+      activityClockShouldRun({ isRunning: false, messages }),
+      false,
+    );
+    const timedOut = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            { type: "text", text: "The first trials finished." },
+            {
+              type: "tool-exec",
+              toolName: "exec",
+              state: "output-available",
+              output: { ok: false, error: "The command timed out. Try a smaller step." },
+            },
+          ],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 300,
+    });
+    assert.equal(
+      timedOut.steps.some((step) => step.label === "Exec stopped"),
+      true,
+    );
+    assert.notEqual(timedOut.mode, "live");
+  });
 });

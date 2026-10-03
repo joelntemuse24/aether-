@@ -3,11 +3,14 @@ import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import {
   FIRST_BYTE_MS,
+  CUT_OFF_ANSWER,
   driveTrueForgeTurn,
   hostedTurnErrorCopy,
   isTurnActivityChunk,
   retryPreviousTurnId,
+  settleCutOffChunks,
   shouldRetryBuzzTurn,
+  TURN_BUDGET_MS,
 } from "./chat-stream";
 import type { UiChunk } from "./ui-chunks";
 
@@ -254,5 +257,41 @@ describe("TrueForge live stream", () => {
     assert.equal(file.filename, "irish_housing_crisis.pptx");
     assert.match(file.content ?? "", /^data:/);
     assert.equal(JSON.stringify(writes).includes("/home/aether"), false);
+  });
+
+  it("keeps a partial answer when a long exec is cut off", async () => {
+    assert.ok(TURN_BUDGET_MS < 300_000);
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield { type: "model.message.delta", content: "The first trials finished." };
+      yield {
+        type: "model.message",
+        toolCalls: [
+          {
+            id: "call_exec",
+            function: { name: "exec", arguments: "{\"command\":\"python sim.py\"}" },
+          },
+        ],
+      };
+      throw new Error("aborted");
+    }
+    const outcome = await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses",
+      cutoff: () => true,
+    });
+    const text = writes
+      .filter((chunk) => chunk.type === "text-delta")
+      .map((chunk) => String(chunk.delta ?? ""))
+      .join("");
+    assert.match(text, /The first trials finished/);
+    assert.equal(text.includes(CUT_OFF_ANSWER), false);
+    const output = writes.find((chunk) => chunk.type === "tool-output-available");
+    assert.equal((output?.output as { ok?: boolean }).ok, false);
+    assert.match(String((output?.output as { error?: string }).error), /timed out/);
+    assert.equal(outcome.wroteError, false);
+    const empty = settleCutOffChunks({ sawText: false, openTools: [{ id: "call_exec", name: "exec" }] });
+    assert.match(JSON.stringify(empty), /Stopped before this finished/);
   });
 });

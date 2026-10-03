@@ -22,6 +22,7 @@ export type TrueForgeUiState = {
   sandboxHold: string;
   reasoningHold: string;
   sandboxFiles: SandboxFileRef[];
+  openTools: Map<string, string>;
 };
 
 export function createTrueForgeUiState(): TrueForgeUiState {
@@ -36,6 +37,7 @@ export function createTrueForgeUiState(): TrueForgeUiState {
     sandboxHold: "",
     reasoningHold: "",
     sandboxFiles: [],
+    openTools: new Map(),
   };
 }
 
@@ -144,6 +146,7 @@ export function flushPendingTools(state: TrueForgeUiState, chunks: UiChunk[]) {
   for (const tool of state.tools.values()) {
     if (!tool.id || !tool.name || state.opened.has(tool.id)) continue;
     state.opened.add(tool.id);
+    state.openTools.set(tool.id, tool.name);
     chunks.push({
       type: "tool-input-available",
       toolCallId: tool.id,
@@ -362,6 +365,7 @@ export function chunksForTrueForgeEvent(
     const blankOutput = output == null || (typeof output === "string" && output.trim() === "");
     if (childReport && blankOutput) output = childReport;
     output = redactSandboxValue(output, state.sandboxFiles);
+    state.openTools.delete(toolCallId);
     chunks.push({
       type: "tool-output-available",
       toolCallId,
