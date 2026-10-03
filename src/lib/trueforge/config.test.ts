@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   ageTrueforgeProbeCache,
   resetTrueforgeProbeCache,
+  setTrueforgeProbeClock,
   trueforgePort,
   trueforgeSandboxEnabled,
   trueforgeSidecarEnabled,
@@ -138,6 +139,22 @@ describe("TrueForge sidecar gate", { concurrency: 1 }, () => {
       };
       assert.equal(await trueforgeSandboxEnabled(20), true);
       assert.equal(await trueforgeSandboxEnabled(20), false);
+      resetTrueforgeProbeCache();
+      let now = 10_000;
+      setTrueforgeProbeClock(() => now);
+      let calls = 0;
+      globalThis.fetch = async () => {
+        calls += 1;
+        throw new Error("down");
+      };
+      assert.equal(await trueforgeSandboxEnabled(20), false);
+      assert.equal(await trueforgeSandboxEnabled(20), false);
+      const cachedCalls = calls;
+      assert.equal(await trueforgeSandboxEnabled(20), false);
+      assert.equal(calls, cachedCalls);
+      now += 3_001;
+      assert.equal(await trueforgeSandboxEnabled(20), false);
+      assert.equal(calls, cachedCalls + 1);
     } finally {
       globalThis.fetch = originalFetch;
       resetTrueforgeProbeCache();

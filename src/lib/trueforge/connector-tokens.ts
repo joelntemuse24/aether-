@@ -1,37 +1,22 @@
-/** Google access tokens last about an hour. Refresh before a tool call uses a stale one. */
-export async function freshDriveAccessToken(input: {
-  accessToken?: string;
-  refreshToken?: string;
-  expiresAt?: number;
-  now?: number;
-  refresh: (refreshToken: string) => Promise<{ accessToken: string; expiresAt: number } | null>;
-}): Promise<string | undefined> {
-  const now = input.now ?? Date.now();
-  const stillValid =
-    !!input.accessToken && (input.expiresAt == null || now < input.expiresAt - 60_000);
-  if (stillValid) return input.accessToken;
-  if (!input.refreshToken) return input.accessToken;
-  const next = await input.refresh(input.refreshToken);
-  if (next?.accessToken) return next.accessToken;
-  return input.expiresAt != null && now >= input.expiresAt - 60_000 ? undefined : input.accessToken;
-}
-
 /**
- * GitHub OAuth App tokens are long-lived. Prefer a cookie read when this
- * request has one; otherwise keep the token sealed in the tool context.
+ * Connector tokens are resolved when the tool runs. The sealed tool context
+ * must not carry them: the VM can read that header, and the transport secret
+ * must not also be the encryption key.
  */
-export async function freshGitHubAccessToken(input: {
+export async function connectorTokensForToolCall(input: {
   userId?: string | null;
-  accessToken?: string;
-  read: (userId: string) => Promise<{ accessToken: string } | null>;
-}): Promise<string | undefined> {
-  if (input.userId) {
-    try {
-      const live = await input.read(input.userId);
-      if (live?.accessToken) return live.accessToken;
-    } catch {
-      // Sidecar tool calls do not carry the browser cookie.
-    }
-  }
-  return input.accessToken;
+  hasDrive?: boolean;
+  hasGitHub?: boolean;
+  readDrive: (userId: string) => Promise<{ accessToken: string } | null>;
+  readGitHub: (userId: string) => Promise<{ accessToken: string } | null>;
+}): Promise<{ driveAccessToken?: string; githubAccessToken?: string }> {
+  const driveAccessToken =
+    input.userId && input.hasDrive
+      ? ((await input.readDrive(input.userId).catch(() => null))?.accessToken ?? undefined)
+      : undefined;
+  const githubAccessToken =
+    input.userId && input.hasGitHub
+      ? ((await input.readGitHub(input.userId).catch(() => null))?.accessToken ?? undefined)
+      : undefined;
+  return { driveAccessToken, githubAccessToken };
 }

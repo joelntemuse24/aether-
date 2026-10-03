@@ -285,6 +285,7 @@ export async function POST(req: Request) {
           { status: 401, headers: { "Content-Type": "application/json" } },
         );
       }
+      console.info("[api/chat] engine", { engine: "openrouter", conversationId });
       return openRouterChatResponse({
         apiKey: openRouterKey,
         model: incomingModel,
@@ -297,14 +298,13 @@ export async function POST(req: Request) {
     const { trueforgeSidecarReachable } = await import("@/lib/trueforge/config");
     if (hosted && (await trueforgeSidecarReachable())) {
       const { streamTrueForgeHostedChat } = await import("@/lib/trueforge/chat-stream");
-      const driveToken = hasDriveEarly && userId ? await getValidDriveAccessToken(userId) : null;
-      const githubToken = hasGitHubEarly && userId ? await getValidGitHubAccessToken(userId) : null;
       const { hostedBuzzModelChoice, listBuzzChatModels } = await import("@/lib/buzz/models");
       const buzzModelId = hostedBuzzModelChoice({
         bodyModel: typeof body.model === "string" ? body.model : null,
         headerModel,
         models: await listBuzzChatModels(),
       });
+      console.info("[api/chat] engine", { engine: "trueforge", conversationId });
       return streamTrueForgeHostedChat({
         conversationId,
         userText: lastUserText(enrichedMessages) || lastUserText(messages),
@@ -322,10 +322,6 @@ export async function POST(req: Request) {
           hasMemory: !!(userId && isCloudDbConfigured()),
           hasDrive: hasDriveEarly,
           hasGitHub: hasGitHubEarly,
-          driveAccessToken: driveToken?.accessToken,
-          driveRefreshToken: driveToken?.refreshToken,
-          driveExpiresAt: driveToken?.expiresAt,
-          githubAccessToken: githubToken?.accessToken,
         },
       });
     }
@@ -359,6 +355,7 @@ export async function POST(req: Request) {
         driveAccessToken: driveToken?.accessToken,
         githubAccessToken: githubToken?.accessToken,
       });
+      console.info("[api/chat] engine", { engine: "hermes", conversationId });
       return proxyChatToHermes({
         messages: enrichedMessages,
         system,
@@ -415,6 +412,7 @@ export async function POST(req: Request) {
       });
     }
 
+    console.info("[api/chat] engine", { engine: "legacy", conversationId });
     return streamLegacyLocalChat({
       hosted,
       requestedModel,

@@ -14,40 +14,55 @@ export function resetAetherMcpRegisterState(): void {
   mcpDeleteUnsupported = false;
 }
 
-function httpsHost(raw: string | undefined): string | null {
-  const host = (raw ?? "").trim().replace(/\/$/, "").replace(/^https?:\/\//, "");
-  return host || null;
-}
-
+/**
+ * Origin the VM sidecar calls back to. Prefer `AETHER_APP_URL` (the public
+ * production domain). `VERCEL_URL` is a deployment URL and Deployment
+ * Protection answers it with 401, so it is not a fallback.
+ */
 export function aetherPublicOrigin(): string | null {
   const explicit = (process.env.AETHER_APP_URL || process.env.AUTH_URL || "")
     .trim()
     .replace(/\/$/, "");
   if (explicit) return explicit;
-  const production = httpsHost(process.env.VERCEL_PROJECT_PRODUCTION_URL);
-  if (production) return `https://${production}`;
-  const vercel = httpsHost(process.env.VERCEL_URL);
-  if (vercel) return `https://${vercel}`;
-  if (process.env.NODE_ENV === "production") {
-    if (!loggedMissingOrigin) {
-      loggedMissingOrigin = true;
-      console.warn(
-        "[trueforge] No public app origin (AETHER_APP_URL, AUTH_URL, or VERCEL_URL). Tool registration is skipped.",
-      );
-    }
-    return null;
+  if (process.env.NODE_ENV !== "production") return "http://127.0.0.1:3000";
+  if (!loggedMissingOrigin) {
+    loggedMissingOrigin = true;
+    console.error(
+      "[trueforge] AETHER_APP_URL is not set. Tool registration is skipped. VERCEL_URL is not used because Deployment Protection rejects VM callbacks.",
+    );
   }
-  return "http://127.0.0.1:3000";
+  return null;
 }
 
 export function aetherMcpServerName(conversationId: string): string {
   return aetherMcpServerNames(conversationId).direct;
 }
 
+/**
+ * One server per conversation. Standalone TrueForge does not forward per-turn
+ * headers to MCP (`gatewayTurnHeaders` is empty unless TrueFoundry gateway
+ * mode is on), so a single shared server would reuse one user's context.
+ */
 export function aetherMcpServerNames(conversationId: string): { direct: string; deferred: string } {
   const clean = conversationId.toLowerCase().replace(/[^a-z0-9]/g, "");
   const suffix = (clean || "chat").slice(0, 32);
   return { direct: `aether-${suffix}`, deferred: `aetherx-${suffix}` };
+}
+
+/** Fields safe to seal. Connector tokens are resolved on the tool call. */
+export function sealableToolContext(
+  input: Omit<TrueForgeToolContext, "exp">,
+): Omit<TrueForgeToolContext, "exp"> {
+  return {
+    userId: input.userId,
+    conversationId: input.conversationId,
+    projectId: input.projectId,
+    runId: input.runId,
+    approvalMode: input.approvalMode,
+    hasMemory: input.hasMemory,
+    hasDrive: input.hasDrive,
+    hasGitHub: input.hasGitHub,
+  };
 }
 
 /** Memory, Drive, GitHub, and project search are the only tools beyond the preloaded web set. */
@@ -120,14 +135,15 @@ export function cachedToolContextToken(
   now = Date.now(),
 ): string {
   evictSignedToolTokens(now);
-  const key = contextKey(input);
+  const safe = sealableToolContext(input);
+  const key = contextKey(safe);
   const hit = signedTokens.get(conversationId);
   if (hit && hit.key === key && hit.exp - now > 30 * 60 * 1000) {
     signedTokens.delete(conversationId);
     signedTokens.set(conversationId, hit);
     return hit.token;
   }
-  const token = signTrueForgeToolContext(input, secret, now);
+  const token = signTrueForgeToolContext(safe, secret, now);
   signedTokens.delete(conversationId);
   signedTokens.set(conversationId, { token, key, exp: now + 2 * 60 * 60 * 1000 });
   evictSignedToolTokens(now);

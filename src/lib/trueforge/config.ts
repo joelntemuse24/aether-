@@ -41,10 +41,16 @@ export function trueforgeSidecarEnabled(): boolean {
 
 let reachabilityCache: ProbeState | null = null;
 let sandboxCache: ProbeState | null = null;
+let probeClock: () => number = () => Date.now();
+
+export function setTrueforgeProbeClock(clock: () => number): void {
+  probeClock = clock;
+}
 
 export function resetTrueforgeProbeCache(): void {
   reachabilityCache = null;
   sandboxCache = null;
+  probeClock = () => Date.now();
 }
 
 /** Move cached probe timestamps back so tests can expire a positive result. */
@@ -59,7 +65,7 @@ async function probeSidecar(
   timeoutMs: number,
   read: (response: Response) => Promise<boolean>,
 ): Promise<{ cache: ProbeState; ok: boolean }> {
-  const now = Date.now();
+  const now = probeClock();
   const cached = cachedProbe(cache, key, now);
   if (cached !== undefined) return { cache: cache as ProbeState, ok: cached };
   let result = { ok: false, confident: false };
@@ -72,7 +78,12 @@ async function probeSidecar(
   } catch {
     result = { ok: false, confident: false };
   }
-  const next = recordProbe(cache, key, result, Date.now());
+  const next = recordProbe(cache, key, result, probeClock());
+  if (cache?.confident && cache.ok !== next.ok && !next.ok && next.misses >= 2) {
+    console.info(`[trueforge] ${key.includes("|") ? "sidecar" : "sandbox"} down`);
+  } else if (cache && !cache.ok && next.confident && next.ok) {
+    console.info(`[trueforge] ${key.includes("|") ? "sidecar" : "sandbox"} up`);
+  }
   return { cache: next, ok: next.ok };
 }
 

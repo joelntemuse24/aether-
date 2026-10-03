@@ -12,6 +12,7 @@ import {
   resetAetherMcpRegisterState,
   signedToolTokenCount,
   cachedToolContextToken,
+  sealableToolContext,
 } from "./mcp-register";
 import {
   buildTrueForgeAgentSpec,
@@ -21,11 +22,12 @@ import {
   resetTrueForgeSessionCache,
   TRUEFORGE_SESSION_TTL_MS,
   trueforgeSessionCount,
+  shouldSkipFailedRegistrationUpdate,
 } from "./sessions";
 import { sandboxEnabledFromCapabilities } from "./config";
-import { freshDriveAccessToken } from "./connector-tokens";
+import { connectorTokensForToolCall } from "./connector-tokens";
 import { readTrueForgeToolContext, signTrueForgeToolContext } from "./tool-context";
-import { instructionsForRegisteredTools, trueforgeInstructions } from "./instructions";
+import { TOOLS_UNAVAILABLE_NOTICE, instructionsForRegisteredTools, trueforgeInstructions } from "./instructions";
 import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
 import { withLocalMcpHosts } from "./outbound-hosts";
 
@@ -208,31 +210,39 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
     assert.equal(source.includes(".slice(0, 24_000)"), false);
   });
 
-  it("refreshes an expired Google token and keeps a live one", async () => {
-    const refreshed = await freshDriveAccessToken({
-      accessToken: "old",
-      refreshToken: "refresh-secret",
-      expiresAt: 1_000,
-      now: 5_000,
-      refresh: async (token) => {
-        assert.equal(token, "refresh-secret");
-        return { accessToken: "new", expiresAt: 90_000 };
-      },
+  it("resolves connector tokens at call time and does not seal them", async () => {
+    const tokens = await connectorTokensForToolCall({
+      userId: "user-1",
+      hasDrive: true,
+      hasGitHub: true,
+      readDrive: async () => ({ accessToken: "drive-now" }),
+      readGitHub: async () => ({ accessToken: "github-now" }),
     });
-    assert.equal(refreshed, "new");
-    const kept = await freshDriveAccessToken({
-      accessToken: "still",
-      refreshToken: "refresh-secret",
-      expiresAt: 90_000,
-      now: 5_000,
-      refresh: async () => {
-        throw new Error("should not refresh");
-      },
+    assert.deepEqual(tokens, { driveAccessToken: "drive-now", githubAccessToken: "github-now" });
+    const missing = await connectorTokensForToolCall({
+      userId: "user-1",
+      hasDrive: true,
+      hasGitHub: false,
+      readDrive: async () => null,
+      readGitHub: async () => ({ accessToken: "unused" }),
     });
-    assert.equal(kept, "still");
+    assert.equal(missing.driveAccessToken, undefined);
+    const sealed = sealableToolContext({
+      approvalMode: "ask",
+      userId: "user-1",
+      hasDrive: true,
+      driveAccessToken: "must-not-seal",
+      githubAccessToken: "must-not-seal",
+    });
+    assert.equal("driveAccessToken" in sealed, false);
+    assert.equal("githubAccessToken" in sealed, false);
+    const secret = "test-secret";
+    const token = signTrueForgeToolContext(sealed, secret, 1_000);
+    assert.equal(token.includes("must-not-seal"), false);
+    assert.equal(readTrueForgeToolContext(token, secret, 1_000)?.driveAccessToken, undefined);
   });
 
-  it("falls back to the Vercel production host and logs once if none is set", () => {
+  it("uses AETHER_APP_URL and refuses VERCEL_URL when that is all production has", () => {
     const previous = {
       app: process.env.AETHER_APP_URL,
       auth: process.env.AUTH_URL,
@@ -240,27 +250,29 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
       vercel: process.env.VERCEL_URL,
       nodeEnv: process.env.NODE_ENV,
     };
-    const warnings: string[] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.map(String).join(" "));
+    const errors: string[] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(args.map(String).join(" "));
     };
     const env = process.env as Record<string, string | undefined>;
     resetAetherMcpRegisterState();
     try {
       delete process.env.AETHER_APP_URL;
       delete process.env.AUTH_URL;
-      process.env.VERCEL_PROJECT_PRODUCTION_URL = "aether-seven-theta.vercel.app";
+      process.env.AETHER_APP_URL = "https://aether.example";
       process.env.VERCEL_URL = "aether-preview.vercel.app";
       env.NODE_ENV = "production";
-      assert.equal(aetherPublicOrigin(), "https://aether-seven-theta.vercel.app");
-      delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
-      delete process.env.VERCEL_URL;
+      assert.equal(aetherPublicOrigin(), "https://aether.example");
+      delete process.env.AETHER_APP_URL;
+      delete process.env.AUTH_URL;
       assert.equal(aetherPublicOrigin(), null);
       assert.equal(aetherPublicOrigin(), null);
-      assert.equal(warnings.length, 1);
+      assert.equal(errors.length, 1);
+      assert.match(errors[0] ?? "", /AETHER_APP_URL/);
+      assert.match(errors[0] ?? "", /VERCEL_URL/);
     } finally {
-      console.warn = originalWarn;
+      console.error = originalError;
       resetAetherMcpRegisterState();
       if (previous.app === undefined) delete process.env.AETHER_APP_URL;
       else process.env.AETHER_APP_URL = previous.app;
@@ -273,6 +285,29 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
       if (previous.nodeEnv === undefined) delete env.NODE_ENV;
       else env.NODE_ENV = previous.nodeEnv;
     }
+  });
+
+  it("skips a later sessions.update after registration already failed", () => {
+    assert.equal(
+      shouldSkipFailedRegistrationUpdate({
+        existing: { toolsAttached: false, model: "buzz/gpt-5-6-luna" },
+        mcpAttached: false,
+        modelName: "buzz/gpt-5-6-luna",
+      }),
+      true,
+    );
+    assert.equal(
+      shouldSkipFailedRegistrationUpdate({
+        existing: { toolsAttached: true, model: "buzz/gpt-5-6-luna" },
+        mcpAttached: false,
+        modelName: "buzz/gpt-5-6-luna",
+      }),
+      false,
+    );
+    assert.equal(TOOLS_UNAVAILABLE_NOTICE, "Tools are not connected for this turn.");
+    const source = readFileSync(new URL("./chat-stream.ts", import.meta.url), "utf8");
+    assert.match(source, /TOOLS_UNAVAILABLE_NOTICE/);
+    assert.match(source, /toolsAttached === false/);
   });
 
   it("does not claim tools when registration is skipped", () => {

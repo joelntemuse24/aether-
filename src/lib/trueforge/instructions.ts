@@ -11,6 +11,8 @@ export const TRUEFORGE_NO_TOOLS_NOTE = `You are Aether. Tools are not connected 
 Answer from the conversation. If the user needs a live lookup, say you cannot reach it right now.
 Do not invent tool results.`;
 
+export const TOOLS_UNAVAILABLE_NOTICE = "Tools are not connected for this turn.";
+
 /** Drop the tool catalog when MCP registration did not run. */
 export function instructionsForRegisteredTools(instructions: string, toolsAvailable: boolean): string {
   if (toolsAvailable || !instructions.includes(TRUEFORGE_TOOL_NOTE)) return instructions;

@@ -28,8 +28,23 @@ type CachedSession = {
   model: string;
   instructions?: string;
   mcpKey?: string;
+  toolsAttached?: boolean;
   at: number;
 };
+
+/** After a failed registration, do not call sessions.update on every later turn. */
+export function shouldSkipFailedRegistrationUpdate(input: {
+  existing: { toolsAttached?: boolean; model: string } | null;
+  mcpAttached: boolean;
+  modelName: string;
+}): boolean {
+  return (
+    !!input.existing &&
+    !input.mcpAttached &&
+    input.existing.toolsAttached === false &&
+    input.existing.model === input.modelName
+  );
+}
 
 export const MAX_TRUEFORGE_SESSIONS = 200;
 export const TRUEFORGE_SESSION_TTL_MS = 6 * 60 * 60 * 1000;
@@ -192,6 +207,15 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
     return existing;
   }
   const mcp = plannedNames ? await attachTools(input.conversationId, input.toolContext) : null;
+  if (
+    shouldSkipFailedRegistrationUpdate({
+      existing,
+      mcpAttached: mcp != null,
+      modelName: input.modelName,
+    })
+  ) {
+    return existing as CachedSession;
+  }
   const instructions = instructionsForRegisteredTools(input.instructions, mcp != null);
   const mcpKey = `${
     mcp ? `${mcp.direct}:${mcp.includeAccountTools ? "all" : "web"}:${mcp.token}` : ""
@@ -201,6 +225,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
     existing.model = model;
     existing.instructions = instructions;
     existing.mcpKey = mcpKey;
+    existing.toolsAttached = mcp != null;
     existing.at = Date.now();
     await client().sessions.update(existing.id, {
       agent: buildTrueForgeAgentSpec({
@@ -227,6 +252,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
     model: input.modelName,
     instructions,
     mcpKey,
+    toolsAttached: mcp != null,
     at: Date.now(),
   };
   rememberTrueForgeSession(input.conversationId, row);

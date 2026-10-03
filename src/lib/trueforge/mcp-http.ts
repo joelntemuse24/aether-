@@ -4,7 +4,7 @@ import { fetchUrlText } from "@/lib/connectors/web-and-drive";
 import { resolveCurrentTime } from "@/lib/current-time";
 import { TOOL_NAMES } from "@/lib/tools";
 import { runWebSearch } from "@/lib/web-search";
-import { freshDriveAccessToken, freshGitHubAccessToken } from "./connector-tokens";
+import { connectorTokensForToolCall } from "./connector-tokens";
 import type { TrueForgeToolContext } from "./tool-context";
 
 type Json = Record<string, unknown>;
@@ -271,24 +271,24 @@ export async function withToolDeadline<T>(work: Promise<T>, ms: number): Promise
 }
 
 async function liveContext(ctx: TrueForgeToolContext): Promise<TrueForgeToolContext> {
-  const driveAccessToken = await freshDriveAccessToken({
-    accessToken: ctx.driveAccessToken,
-    refreshToken: ctx.driveRefreshToken,
-    expiresAt: ctx.driveExpiresAt,
-    refresh: async (refreshToken) => {
-      const { refreshGoogleAccessToken } = await import("@/lib/drive-session");
-      return refreshGoogleAccessToken(refreshToken);
-    },
-  });
-  const githubAccessToken = await freshGitHubAccessToken({
+  const tokens = await connectorTokensForToolCall({
     userId: ctx.userId,
-    accessToken: ctx.githubAccessToken,
-    read: async (userId) => {
+    hasDrive: ctx.hasDrive,
+    hasGitHub: ctx.hasGitHub,
+    readDrive: async (userId) => {
+      const { getValidDriveAccessToken } = await import("@/lib/drive-session");
+      return getValidDriveAccessToken(userId);
+    },
+    readGitHub: async (userId) => {
       const { getValidGitHubAccessToken } = await import("@/lib/github-session");
       return getValidGitHubAccessToken(userId);
     },
   });
-  return { ...ctx, driveAccessToken, githubAccessToken };
+  return {
+    ...ctx,
+    driveAccessToken: tokens.driveAccessToken,
+    githubAccessToken: tokens.githubAccessToken,
+  };
 }
 
 async function callTool(name: string, args: Json, ctx: TrueForgeToolContext | null) {
@@ -316,8 +316,11 @@ async function runTool(name: string, args: Json, ctx: TrueForgeToolContext | nul
   }
   if (!ctx) return textResult({ ok: false, error: "This tool needs a signed-in chat." }, true);
   const live = await liveContext(ctx);
-  if (ctx.hasDrive && ctx.driveRefreshToken && !live.driveAccessToken) {
+  if (ctx.hasDrive && !live.driveAccessToken) {
     return textResult({ ok: false, error: "Google Drive needs to be connected again." }, true);
+  }
+  if (ctx.hasGitHub && name.startsWith("github_") && !live.githubAccessToken) {
+    return textResult({ ok: false, error: "GitHub needs to be connected again." }, true);
   }
   const result = await executeAetherTool({
     name,
