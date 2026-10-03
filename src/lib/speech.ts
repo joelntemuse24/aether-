@@ -41,6 +41,46 @@ export function speechRecognitionSupported(): boolean {
   return getSpeechRecognitionCtor() !== null;
 }
 
+function normalizeSpoken(text: string): string {
+  return text.trim().replace(/\s+/g, " ");
+}
+
+/** True when `next` is the same utterance as `prev`, grown or repeated. */
+function isCumulativeExtension(next: string, prev: string): boolean {
+  if (!prev) return Boolean(next);
+  if (next === prev) return true;
+  if (!next.startsWith(prev)) return false;
+  const nextChar = next.charAt(prev.length);
+  return nextChar === "" || /[\s.,!?;:'")\]]/.test(nextChar);
+}
+
+export function mergeSpokenText(committed: string, incoming: string): string {
+  const prev = normalizeSpoken(committed);
+  const next = normalizeSpoken(incoming);
+  if (!next) return prev;
+  if (!prev) return next;
+  if (isCumulativeExtension(next, prev)) return next;
+  if (isCumulativeExtension(prev, next)) return prev;
+  return `${prev} ${next}`;
+}
+
+/**
+ * Rebuild spoken text from the current `event.results` list.
+ * Android Chrome often emits each new result as the full cumulative
+ * transcript (sometimes marked final); those must replace, not append.
+ */
+export function spokenTranscriptFromResults(
+  results: ArrayLike<SpeechRecognitionResultLike> & { readonly length: number },
+): string {
+  let spoken = "";
+  for (let i = 0; i < results.length; i++) {
+    const piece = normalizeSpoken(results[i]?.[0]?.transcript ?? "");
+    if (!piece) continue;
+    spoken = mergeSpokenText(spoken, piece);
+  }
+  return spoken;
+}
+
 export type SpeechSession = {
   stop: () => void;
 };
@@ -72,27 +112,24 @@ export function startSpeechSession(opts: {
       ? navigator.language
       : "en-US";
 
-  let finalText = "";
+  let committedText = "";
+  let currentText = "";
   let stopped = false;
   let ending = false;
+  let finalized = false;
 
-  const emitPartial = (interim: string) => {
-    opts.onPartial((finalText + (interim ? ` ${interim}` : "")).trim());
+  const spokenSoFar = () => mergeSpokenText(committedText, currentText);
+
+  const emitFinalOnce = () => {
+    if (finalized) return;
+    finalized = true;
+    const text = spokenSoFar();
+    if (text) opts.onFinal(text);
   };
 
   recognition.onresult = (event) => {
-    let interim = "";
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const result = event.results[i];
-      const piece = (result[0]?.transcript ?? "").trim();
-      if (!piece) continue;
-      if (result.isFinal) {
-        finalText = finalText ? `${finalText} ${piece}` : piece;
-      } else {
-        interim += (interim ? " " : "") + piece;
-      }
-    }
-    emitPartial(interim);
+    currentText = spokenTranscriptFromResults(event.results);
+    opts.onPartial(spokenSoFar());
   };
 
   recognition.onerror = (event) => {
@@ -114,9 +151,10 @@ export function startSpeechSession(opts: {
   };
 
   recognition.onend = () => {
+    committedText = spokenSoFar();
+    currentText = "";
     if (stopped || ending) {
-      const text = finalText.trim();
-      if (text) opts.onFinal(text);
+      emitFinalOnce();
       ending = true;
       opts.onEnd();
       return;
@@ -126,8 +164,7 @@ export function startSpeechSession(opts: {
       recognition.start();
     } catch {
       // Already started or permanently ended.
-      const text = finalText.trim();
-      if (text) opts.onFinal(text);
+      emitFinalOnce();
       ending = true;
       opts.onEnd();
     }
@@ -153,8 +190,7 @@ export function startSpeechSession(opts: {
         } catch {
           /* already stopped */
         }
-        const text = finalText.trim();
-        if (text) opts.onFinal(text);
+        emitFinalOnce();
         ending = true;
         opts.onEnd();
       }
