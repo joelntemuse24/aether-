@@ -45,7 +45,15 @@ function pushUnique(
   const key = (url || title).toLowerCase();
   if (!title || seen.has(key)) return;
   seen.add(key);
-  const text = snippet?.replace(/\s+/g, " ").trim();
+  const text = snippet
+    ?.replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
   out.push({
     id: id?.trim() || String(out.length + 1),
     title,

@@ -673,6 +673,22 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(hits[0]?.title, "Time in Dublin");
     assert.equal(hits[0]?.url, "https://example.com/dublin");
     assert.equal(hits[0]?.snippet, "Ireland uses IST in summer.");
+    const tagged = collectWebSearchHits([
+      {
+        type: "tool-call",
+        toolName: "web_search",
+        result: {
+          results: [
+            {
+              title: "Funds",
+              url: "https://example.com/funds",
+              snippet: "<strong>This page</strong> &amp; more",
+            },
+          ],
+        },
+      },
+    ]);
+    assert.equal(tagged[0]?.snippet, "This page & more");
     assert.equal(hits[0]?.id, "1");
     const fetched = collectWebSearchHits([
       {

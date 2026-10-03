@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FC } from "react";
+import { createPortal } from "react-dom";
 import { XIcon } from "lucide-react";
 import { ChevronDownIcon } from "lucide-react";
 import { useAuiState } from "@assistant-ui/react";
@@ -345,7 +346,8 @@ export const MessageSourceCards: FC = () => {
         </span>
         {sourcePagesLabel(hits.length)}
       </button>
-      {open ? (
+      {open && typeof document !== "undefined"
+        ? createPortal(
         <div className="aether-web-results__layer">
           <button
             type="button"
@@ -409,7 +411,8 @@ export const MessageSourceCards: FC = () => {
               })}
             </ul>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </section>
   );
