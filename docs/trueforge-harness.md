@@ -84,11 +84,15 @@ docker compose up -d --build
 
 Without Docker, from the repo root: `npm install` then `npm run trueforge`.
 
-After a VM update, run `bash deploy/trueforge/health-gate.sh [previous-commit]`. It starts the sidecar, requires that process to stay up for 60 seconds, and requires `http://127.0.0.1:8790/health` to answer. If either check fails, it checks out the previous commit and starts that build. Set `AETHER_SIDECAR_START` when the start command is not `/opt/aether/sidecar-only.ts` or `npm run trueforge`.
+On the VM the sidecar is the pm2 app `aether`, run as user `aether` under systemd unit `pm2-aether`, listening on `127.0.0.1:8790`. Do not start a second process and do not restart that systemd unit; pm2 also runs other apps, including `echomancer-takehome`.
+
+After a checkout of master, as user `aether`, run `bash deploy/trueforge/health-gate.sh "$PREV"`. It skips `npm ci` when `package-lock.json` is the same as `$PREV`. A wrapper that installs on its own can ask first: `bash deploy/trueforge/health-gate.sh --lockfile-changed "$PREV" HEAD` exits 0 only when the lockfile changed.
+
+The script then runs `pm2 reload aether` only. It passes when `restart_time` rises by at most 1 and stays there for 60 seconds, and `GET /api/v1/capabilities` returns 200. Set `AETHER_SIDECAR_HEALTH_URL` to point the check somewhere else. `/health` is not this check; this sidecar returns 404 there. On failure the script runs `git checkout master` and `git reset --hard "$PREV"` in that checkout, reloads `aether` again, and re-checks. It never reloads or deletes any other pm2 app.
 
 A launcher outside this repo, such as `/opt/aether/sidecar-only.ts`, should call `prepareSidecar()` from `src/lib/trueforge/sidecar-bootstrap.ts` before it starts TrueForge. That applies the package patch and starts sandbox pruning. `npm run trueforge` and `npm run dev` already call it.
 
-Open port `8790` only to the HTTPS proxy, not to the public internet. `GET /health` is unauthenticated and reports whether TrueForge is up. Every other request needs `Authorization: Bearer <AETHER_TRUEFORGE_TOKEN>`.
+Open port `8790` only to the HTTPS proxy, not to the public internet. On the VM, `GET /api/v1/capabilities` is the unauthenticated ready check and returns 200. Every other request needs `Authorization: Bearer <AETHER_TRUEFORGE_TOKEN>`.
 
 Put HTTPS in front before Vercel calls it. Caddy: reverse-proxy `localhost:8790` and let it get a certificate. Or run `cloudflared tunnel` to that port. Do not terminate TLS inside this container.
 
