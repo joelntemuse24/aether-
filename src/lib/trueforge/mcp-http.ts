@@ -173,7 +173,7 @@ export function toolResultJson(value: unknown, limit = TOOL_RESULT_JSON_LIMIT): 
   if (typeof value === "string") {
     return JSON.stringify(trimText(value, Math.max(2, limit - 2)));
   }
-  let current: unknown = JSON.parse(full) as unknown;
+  const current: unknown = JSON.parse(full) as unknown;
   for (let pass = 0; pass < 16; pass++) {
     const encoded = safeStringify(current);
     if (encoded.length <= limit) return encoded;
