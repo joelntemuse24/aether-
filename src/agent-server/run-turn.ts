@@ -121,6 +121,7 @@ export async function runNativeTurn(
     unavailableGroups: unavailableGroups(tools),
     depth: body.depth,
     timeMinutes: body.timeMinutes,
+    timeZone: body.timeZone,
     approvalMode: body.approvalMode,
     abortSignal: signal,
     onChunk: deps.onChunk,

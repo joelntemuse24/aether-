@@ -22,6 +22,7 @@ import {
 } from "@/lib/citations";
 
 const CitationSources = createContext<SourceCitation[]>([]);
+import { renderChatMath } from "@/lib/render-math";
 import { sanitizeVisibleAssistantText } from "@/lib/visible-chat-text";
 
 const ARTIFACT_LANGS = new Set([
@@ -71,7 +72,7 @@ const MarkdownTextImpl = () => {
         remarkPlugins={plugins}
         className="aui-md prose-aether"
         components={defaultComponents}
-        preprocess={(text) => sanitizeVisibleAssistantText(text)}
+        preprocess={(text) => renderChatMath(sanitizeVisibleAssistantText(text))}
         defer
       />
     </CitationSources.Provider>
