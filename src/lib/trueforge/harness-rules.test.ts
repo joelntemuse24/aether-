@@ -131,9 +131,12 @@ describe("harness rules", () => {
     const fetchUrl = read("src/lib/connectors/web-and-drive.ts");
     assert.match(browse, /assertPublicHttpUrl/);
     assert.match(browse, /fetchWithPublicRedirects/);
+    assert.match(browse, /export async function fetchUrlText/);
     assert.match(browser, /assertPublicHttpUrl/);
     assert.match(browser, /fetchWithPublicRedirects/);
-    assert.match(fetchUrl, /browsePage\(/);
+    assert.match(fetchUrl, /export \{ fetchUrlText \} from "@\/lib\/connectors\/browse-page"/);
+    const nativeWeb = read("src/lib/agent/web-exec.ts");
+    assert.match(nativeWeb, /from "@\/lib\/connectors\/browse-page"/);
     const mcp = read("src/lib/trueforge/mcp-http.ts");
     assert.match(mcp, /fetchUrlText\(/);
     assert.match(mcp, /browsePage\(/);

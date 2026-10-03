@@ -9,6 +9,7 @@ import type { UIMessage } from "ai";
 import type { HarnessDepth } from "@/lib/harness/types";
 import type { ToolApprovalMode } from "@/lib/hermes/tool-approval";
 import type { UiChunk } from "@/lib/trueforge/ui-chunks";
+import { aetherPublicOrigin } from "@/lib/trueforge/mcp-register";
 import { readAgentEngineFlag } from "./engine";
 import { mintTurnToken } from "./turn-token";
 
@@ -46,6 +47,7 @@ export type ProxyNativeChatInput = {
   depth: HarnessDepth;
   timeMinutes: number | null;
   tools?: readonly string[];
+  projectId?: string | null;
   abortSignal?: AbortSignal;
   openRouterKey?: string | null;
   requestId?: string;
@@ -91,6 +93,7 @@ export async function proxyNativeAgentChat(input: ProxyNativeChatInput): Promise
       tools,
       approvalMode: input.approvalMode,
       requestId,
+      projectId: input.projectId || undefined,
     },
     secret,
   );
@@ -137,6 +140,7 @@ export async function proxyNativeAgentChat(input: ProxyNativeChatInput): Promise
         tools,
         depth: input.depth,
         timeMinutes: input.timeMinutes,
+        callbackOrigin: aetherPublicOrigin(env),
       }),
       signal: upstreamAbort.signal,
     });

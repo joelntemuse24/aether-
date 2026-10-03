@@ -65,7 +65,9 @@ const UNAVAILABLE_GROUP_LINE: Record<AgentToolGroup, string> = {
 };
 
 export function agentToolGroup(name: string): AgentToolGroup | null {
-  if (name === "web_search" || name === "fetch_url" || name === "browse_page") return "web";
+  if (name === "web_search" || name === "fetch_url" || name === "browse_page" || name === "current_time") {
+    return "web";
+  }
   if (name === "sandbox_exec" || name === "sandbox_files") return "sandbox";
   if (
     name === "create_artifact" ||

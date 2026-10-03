@@ -19,12 +19,12 @@ export function resetAetherMcpRegisterState(): void {
  * production domain). `VERCEL_URL` is a deployment URL and Deployment
  * Protection answers it with 401, so it is not a fallback.
  */
-export function aetherPublicOrigin(): string | null {
-  const explicit = (process.env.AETHER_APP_URL || process.env.AUTH_URL || "")
-    .trim()
-    .replace(/\/$/, "");
+export function aetherPublicOrigin(
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  const explicit = (env.AETHER_APP_URL || env.AUTH_URL || "").trim().replace(/\/$/, "");
   if (explicit) return explicit;
-  if (process.env.NODE_ENV !== "production") return "http://127.0.0.1:3000";
+  if (env.NODE_ENV !== "production") return "http://127.0.0.1:3000";
   if (!loggedMissingOrigin) {
     loggedMissingOrigin = true;
     console.error(

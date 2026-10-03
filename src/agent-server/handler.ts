@@ -2,8 +2,8 @@
  * VM agent HTTP handler. Plain Node. No Next imports.
  * GET /health is open. Every other route requires the shared bearer.
  * The turn JWT is checked as well: expired, wrong user, or a tool outside
- * the allow-list is rejected. Tool execution is a later change; this process
- * runs the loop and streams UiChunk events.
+ * the allow-list is rejected. Web tools run in this process. Account tools
+ * call back to Vercel with the turn token.
  */
 
 import { randomUUID } from "node:crypto";
@@ -32,6 +32,8 @@ export type AgentTurnRequest = {
   depth: HarnessDepth;
   timeMinutes: number | null;
   openRouterKey: string | null;
+  turnToken: string;
+  callbackOrigin: string | null;
 };
 
 export type AgentTurnRunner = (
@@ -100,6 +102,13 @@ function toolList(value: unknown): string[] | null {
 function depthOf(value: unknown): HarnessDepth {
   if (value === "shallow" || value === "standard" || value === "deep") return value;
   return "standard";
+}
+
+function callbackOriginOf(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const origin = value.trim().replace(/\/+$/, "");
+  if (!origin || origin.length > 300) return null;
+  return origin;
 }
 
 function minutesOf(value: unknown): number | null {
@@ -238,6 +247,8 @@ export function createAgentServer(options: {
           depth: depthOf(record.depth),
           timeMinutes: minutesOf(record.timeMinutes),
           openRouterKey: typeof headerKey === "string" && headerKey.trim() ? headerKey.trim() : null,
+          turnToken,
+          callbackOrigin: callbackOriginOf(record.callbackOrigin),
         },
         live.controller.signal,
         writeChunk,
