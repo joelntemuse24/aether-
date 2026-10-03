@@ -26,6 +26,19 @@ function asText(text: unknown): string {
   return typeof text === "string" ? text : "";
 }
 
+const THINKING_BLOCK = /<thinking\b[^>]*>[\s\S]*?<\/thinking\s*>/gi;
+const THINKING_OPEN = /<thinking\b[^>]*>/i;
+const THINKING_TAIL = /<thinking\b[^>]*>[\s\S]*$/i;
+const SANDBOX_CLOSE_LINE = /^\s*`{0,3}\s*\[\/sandbox_artifacts\]\s*`{0,3}\s*$/;
+const GLUED_BOLD = /\*\*\*\*/g;
+
+/** Model thinking tags are never part of the answer. A dangling opener runs to the end. */
+export function stripThinkingText(text: string): string {
+  let next = text.replace(THINKING_BLOCK, "");
+  if (THINKING_OPEN.test(next)) next = next.replace(THINKING_TAIL, "");
+  return next;
+}
+
 export function looksLikeRawToolMarkup(text: unknown): boolean {
   const value = asText(text);
   if (!value) return false;
@@ -64,17 +77,30 @@ export function recoverToolCallsFromMarkup(text: unknown): RecoveredToolCall[] {
   return found;
 }
 
+/** Two bold runs glued as `**A****B**` ran together. Separate them. */
+export function separateGluedBoldRuns(text: string): string {
+  return text.includes("****") ? text.replace(GLUED_BOLD, "**\n\n**") : text;
+}
+
 /** Prose only — raw DSML / tool XML removed. Ordinary markdown is left intact. */
 export function sanitizeVisibleAssistantText(text: unknown): string {
   const value = asText(text);
   if (!value) return "";
-  if (!looksLikeRawToolMarkup(value)) return value.trim() ? value : "";
-  let next = value.replace(DSML_BLOCK, " ");
-  next = next.replace(DSML_TAG, " ");
-  next = next.replace(TOOL_XML_BLOCK, " ");
-  next = next.replace(/<\s*\|\s*\/?\s*DSML[\s\S]*/gi, " ");
-  next = next.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-  return next;
+  let next = stripThinkingText(value);
+  next = next
+    .split("\n")
+    .filter((line) => !SANDBOX_CLOSE_LINE.test(line))
+    .join("\n");
+  next = separateGluedBoldRuns(next);
+  if (looksLikeRawToolMarkup(next)) {
+    next = next.replace(DSML_BLOCK, " ");
+    next = next.replace(DSML_TAG, " ");
+    next = next.replace(TOOL_XML_BLOCK, " ");
+    next = next.replace(/<\s*\|\s*\/?\s*DSML[\s\S]*/gi, " ");
+    return next.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  if (next !== value) return next.replace(/\n{3,}/g, "\n\n").trim();
+  return value.trim() ? value : "";
 }
 
 export function isHiddenToolMarkup(text: unknown): boolean {
@@ -159,8 +185,7 @@ function stripToolJsonBlobs(value: string): string {
   return out;
 }
 
-/**
- * Reasoning shown inside the collapsed disclosure.
+/** Reasoning shown inside the collapsed disclosure.
  * Reuses the visible-text strip, then drops system lines and tool JSON.
  */
 export function sanitizeReasoningText(text: unknown): string {
@@ -175,4 +200,32 @@ export function sanitizeReasoningText(text: unknown): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   return value;
+}
+
+function utf8ToBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
+/**
+ * A bare top-level `<svg>…</svg>` outside a code block shows as raw text.
+ * Render it as an inline image instead.
+ */
+export function inlineTopLevelSvg(text: string): string {
+  if (!text || !/<svg\b/i.test(text)) return text;
+  const pieces = text.split(/(```[\s\S]*?```|`[^`\n]+`)/g);
+  return pieces
+    .map((piece, index) =>
+      index % 2 === 1
+        ? piece
+        : piece.replace(
+            /<svg\b[\s\S]*?<\/svg\s*>/gi,
+            (svg: string) => `![chart](data:image/svg+xml;base64,${utf8ToBase64(svg)})`,
+          ),
+    )
+    .join("");
 }

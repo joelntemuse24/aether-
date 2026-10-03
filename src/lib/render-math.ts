@@ -43,6 +43,7 @@ function toScript(value: string, digits: string, plus: string, minus: string): s
 function renderMathInner(src: string): string {
   let text = src;
   text = text.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "$1/$2");
+  text = text.replace(/\\text\s*\{([^{}]*)\}/g, "$1");
   text = text.replace(/\\([a-zA-Z]+)/g, (full, name: string) => COMMANDS[name] ?? full);
   text = text.replace(/\\%/g, "%");
   text = text.replace(/\\\$/g, "$");
@@ -70,6 +71,7 @@ function replaceDelimited(text: string): string {
 
 function renderProseMath(text: string): string {
   let next = replaceDelimited(text);
+  next = next.replace(/\\text\s*\{([^{}]*)\}/g, "$1");
   next = next.replace(/\\([a-zA-Z]+)/g, (full, name: string) => COMMANDS[name] ?? full);
   next = next.replace(/\{,\}/g, ",");
   return next;

@@ -1,5 +1,7 @@
 /** Browser text-to-speech for assistant answers. No hosted vendor. */
 
+import { stripThinkingText } from "@/lib/visible-chat-text";
+
 export const PLAYBACK_UNAVAILABLE_MESSAGE =
   "Playback isn’t available in this browser.";
 
@@ -43,7 +45,7 @@ export function plainTextFromMessage(message: {
 
 export function plainTextForSpeech(raw: string): string {
   if (!raw) return "";
-  let text = raw;
+  let text = stripThinkingText(raw);
   text = text.replace(/```[\s\S]*?```/g, " ");
   text = text.replace(/`([^`]+)`/g, "$1");
   text = text.replace(/\[(\d+)\]\([^)]+\)/g, "");

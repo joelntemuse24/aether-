@@ -30,4 +30,14 @@ describe("render chat math", () => {
     assert.match(rendered, /0\.48 \\times 2/);
     assert.match(rendered, /Fee is 0\.48 × 2%/);
   });
+
+  it("renders the Sol \\text{¢} leftover instead of raw LaTeX", () => {
+    const rendered = renderChatMath(
+      "Each way costs \\text{¢}0.48 plus \\(\\text{€}0.20\\) per slide.",
+    );
+    assert.match(rendered, /costs ¢0\.48/);
+    assert.match(rendered, /plus €0\.20/);
+    assert.equal(rendered.includes("\\text"), false);
+    assert.equal(rendered.includes("{¢}"), false);
+  });
 });

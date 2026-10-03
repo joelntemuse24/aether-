@@ -42,6 +42,27 @@ export function sandboxFileName(filePath: string): string {
   return clean || "download";
 }
 
+/** A `sandbox:`-scheme target names the sandbox; the rest of it is a path. */
+export function stripSandboxScheme(target: string): string {
+  return target.replace(/^sandbox:\/\//i, "").replace(/^sandbox:/i, "");
+}
+
+/** Model thinking tags are not part of the answer. Pairs drop; a dangling opener holds. */
+export function stripThinkingBlocks(text: string, flush = false): string {
+  let next = text.replace(/<thinking\b[^>]*>[\s\S]*?<\/thinking\s*>/gi, "");
+  if (flush) next = next.replace(/<thinking\b[^>]*>[\s\S]*$/i, "");
+  return next;
+}
+
+/** Index of a thinking opener that never closed, or -1. */
+function lastUnclosedThinking(text: string): number {
+  const openers = [...text.matchAll(/<thinking\b[^>]*>/gi)];
+  const last = openers[openers.length - 1];
+  if (!last) return -1;
+  const rest = text.slice(last.index + last[0].length);
+  return /<\/thinking\s*>/i.test(rest) ? -1 : last.index;
+}
+
 function isFenceFile(filePath: string): boolean {
   const clean = filePath.split("?")[0] ?? filePath;
   if (!PUBLISH_EXT.test(clean)) return false;
@@ -75,7 +96,7 @@ function collectPaths(body: string, refs: SandboxFileRef[], fence: boolean) {
   const link = new RegExp(LINK_RE.source, "g");
   let match: RegExpExecArray | null;
   while ((match = link.exec(body))) {
-    const target = linkTarget(match);
+    const target = stripSandboxScheme(linkTarget(match));
     if (fence || isPublishableSandboxPath(target)) remember(refs, match[1] ?? "", target, fence);
   }
   const bare = /\/(?:home\/|\.local\/share\/)[^\s)\]"'<>]+/g;
@@ -93,6 +114,11 @@ export function isSandboxHeaderLine(line: string): boolean {
     trimmed === "[sandbox_artifacts]" ||
     trimmed === "[sandbox_artifacts]:"
   );
+}
+
+/** A stray `[/sandbox_artifacts]` closing line is residue from an emitted block. */
+export function isSandboxCloseLine(line: string): boolean {
+  return /^`{0,3}\s*\[\/sandbox_artifacts\]\s*`{0,3}[ \t]*$/.test(line.trim());
 }
 
 /**
@@ -121,6 +147,7 @@ function stripUnfencedSandboxBlock(text: string, refs: SandboxFileRef[]): string
       inBlock = true;
       continue;
     }
+    if (isSandboxCloseLine(line)) continue;
     const blank = line.trim() === "";
     if (!inBlock || blank) {
       if (blank) inBlock = false;
@@ -130,7 +157,9 @@ function stripUnfencedSandboxBlock(text: string, refs: SandboxFileRef[]): string
     const kept = line.replace(
       new RegExp(LINK_RE.source, "g"),
       (all: string, label: string, angle?: string, plain?: string) => {
-        const target = ((angle ?? "").trim() || (plain ?? "").trim()) as string;
+        const target = stripSandboxScheme(
+          ((angle ?? "").trim() || (plain ?? "").trim()) as string,
+        );
         if (!target) return all;
         if (isPublishableSandboxPath(target) || isFenceFile(target)) {
           remember(refs, label, target, true);
@@ -160,6 +189,8 @@ function holdIndex(text: string): number {
     const openLabel = !tail.includes("]") && tail.length < 80;
     if (!completeCitation && !completeLink && (fileish || openLabel) && tail.length < 500) {
       points.push(linkStart);
+      // An image link `![alt](path)` holds the `!` too, or the opener is lost across chunks.
+      if (linkStart > 0 && text[linkStart - 1] === "!") points.push(linkStart - 1);
     }
   }
 
@@ -170,6 +201,9 @@ function holdIndex(text: string): number {
 
   const openHeader = openSandboxHeaderIndex(text);
   if (openHeader >= 0) points.push(openHeader);
+
+  const openThinking = lastUnclosedThinking(text);
+  if (openThinking >= 0) points.push(openThinking);
 
   if (points.length === 0) return text.length;
   return Math.min(...points);
@@ -199,18 +233,42 @@ export function redactSandboxText(
     });
   }
   visible = stripUnfencedSandboxBlock(visible, refs);
-  visible = visible.replace(new RegExp(LINK_RE.source, "g"), (all, label: string, angle?: string, plain?: string) => {
-    const target = ((angle ?? "").trim() || (plain ?? "").trim()) as string;
-    if (!target || !isPublishableSandboxPath(target)) return all;
-    remember(refs, label, target);
-    return label;
-  });
+  visible = visible.replace(
+    new RegExp(LINK_RE.source, "g"),
+    (
+      all: string,
+      label: string,
+      angle?: string,
+      plain?: string,
+      offset?: number,
+      subject?: string,
+    ) => {
+      const raw = ((angle ?? "").trim() || (plain ?? "").trim()) as string;
+      if (!raw) return all;
+      const target = stripSandboxScheme(raw);
+      const source = subject ?? "";
+      const isImage =
+        typeof offset === "number" &&
+        offset > 0 &&
+        source[offset - 1] === "!" &&
+        source[offset - 2] !== "\\";
+      const eligible = isPublishableSandboxPath(target) || isFenceFile(target);
+      if (!eligible) return all;
+      remember(refs, label, target, true);
+      return isImage ? "" : label;
+    },
+  );
+  visible = stripThinkingBlocks(visible, flush);
   visible = visible.replace(/\/(?:home\/|\.local\/share\/)[^\s)\]"'<>]+/g, (path: string) => {
     if (!isHiddenSandboxPath(path)) return path;
     if (isPublishableSandboxPath(path)) remember(refs, sandboxFileName(path), path);
     return isPublishableSandboxPath(path) ? sandboxFileName(path) : "";
   });
-  visible = visible.replace(/\n{3,}/g, "\n\n");
+  visible = visible
+    .split("\n")
+    .filter((line) => !isSandboxCloseLine(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
   return { visible, held, refs };
 }
 
