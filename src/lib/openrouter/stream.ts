@@ -12,11 +12,56 @@ export function shouldBackupBuzzWithOpenRouter(input: {
   return input.failedBeforeOutput && !input.userAborted && input.hasKey;
 }
 
+export type OpenRouterChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+/** Text turns from the UI transcript, including earlier user and assistant messages. */
+export function textHistoryFromUiMessages(
+  messages: Array<{ role: string; parts?: Array<{ type?: string; text?: string }> }>,
+): { role: "user" | "assistant"; content: string }[] {
+  const rows: { role: "user" | "assistant"; content: string }[] = [];
+  for (const message of messages) {
+    if (message.role !== "user" && message.role !== "assistant") continue;
+    const text = (message.parts ?? [])
+      .filter((part) => part.type === "text" && typeof part.text === "string")
+      .map((part) => part.text?.trim() ?? "")
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+    if (!text) continue;
+    rows.push({ role: message.role, content: text });
+  }
+  return rows;
+}
+
+/** Keep the recent transcript. The backup hop must not see only the last line. */
+export function boundedOpenRouterMessages(input: {
+  system?: string;
+  history?: { role: string; content: string }[];
+  userText?: string;
+  limit?: number;
+}): OpenRouterChatMessage[] {
+  const limit = input.limit ?? 24;
+  const history = (input.history ?? [])
+    .filter((row) => (row.role === "user" || row.role === "assistant") && row.content.trim())
+    .slice(-limit)
+    .map((row) => ({
+      role: row.role as "user" | "assistant",
+      content: row.content,
+    }));
+  if (!history.length && input.userText?.trim()) {
+    history.push({ role: "user", content: input.userText });
+  }
+  return input.system?.trim()
+    ? [{ role: "system", content: input.system }, ...history]
+    : history;
+}
+
 export async function writeOpenRouterAnswer(input: {
   apiKey: string;
   model: string;
   system: string;
   userText: string;
+  history?: { role: string; content: string }[];
   write: (chunk: UiChunk) => void;
   abortSignal?: AbortSignal;
   statusLine?: string;
@@ -37,10 +82,11 @@ export async function writeOpenRouterAnswer(input: {
       body: JSON.stringify({
         model: input.model,
         stream: true,
-        messages: [
-          ...(input.system ? [{ role: "system", content: input.system }] : []),
-          { role: "user", content: input.userText },
-        ],
+        messages: boundedOpenRouterMessages({
+          system: input.system,
+          history: input.history,
+          userText: input.userText,
+        }),
       }),
       signal: input.abortSignal,
     });
@@ -89,6 +135,7 @@ export function openRouterChatResponse(input: {
   model: string;
   system: string;
   userText: string;
+  history?: { role: string; content: string }[];
   abortSignal?: AbortSignal;
   statusLine?: string;
 }): Response {

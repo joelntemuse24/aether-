@@ -44,9 +44,13 @@ export async function driveTrueForgeTurn(input: {
     if (CONTENT_TYPES.has(String(chunk.type))) sawContent = true;
     if (chunk.type === "error") {
       failed = true;
-      errorText = hostedTurnErrorCopy(String(chunk.errorText ?? errorText), input.modelId ?? "");
+      const raw = String(chunk.errorText ?? "");
+      if (raw) errorText = raw;
       if (!sawContent) return;
-      input.write({ ...chunk, errorText });
+      input.write({
+        ...chunk,
+        errorText: hostedTurnErrorCopy(raw || errorText, input.modelId ?? ""),
+      });
       return;
     }
     input.write(chunk);
@@ -77,24 +81,42 @@ export async function driveTrueForgeTurn(input: {
   } catch (error) {
     const message = error instanceof Error ? error.message : "The harness turn failed.";
     if (!sawContent) return { failedBeforeOutput: true, wroteError: false, errorText: message };
-    const errorText = hostedTurnErrorCopy(message, input.modelId ?? "");
-    input.write({ type: "error", errorText });
+    input.write({ type: "error", errorText: hostedTurnErrorCopy(message, input.modelId ?? "") });
     for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
-    return { failedBeforeOutput: false, wroteError: true, errorText };
+    return { failedBeforeOutput: false, wroteError: true, errorText: message };
   }
   if (failed && !sawContent) return { failedBeforeOutput: true, wroteError: false, errorText };
   for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
   return { failedBeforeOutput: false, wroteError: failed, errorText };
 }
 
+/** Retry forks from the failed turn's parent. `none` would start a new root and drop history. */
+export function retryPreviousTurnId(
+  created: { previousTurnId: string | null } | null,
+): "auto" | "none" | string {
+  if (!created) return "auto";
+  return created.previousTurnId ?? "none";
+}
+
+function turnParentId(event: TurnEvent): string | null {
+  const value = event.previousTurnId ?? event.previous_turn_id;
+  return typeof value === "string" && value ? value : null;
+}
+
 async function runTurn(input: {
   sessionId: string;
   content: ReturnType<typeof buildTrueForgeUserContent>;
   abortSignal?: AbortSignal;
-  previousTurnId?: "auto" | "none";
+  previousTurnId?: "auto" | "none" | string;
   write: (chunk: UiChunk) => void;
   modelId?: string;
-}): Promise<{ failedBeforeOutput: boolean; wroteError: boolean; errorText: string }> {
+}): Promise<{
+  failedBeforeOutput: boolean;
+  wroteError: boolean;
+  errorText: string;
+  retryFrom: "auto" | "none" | string;
+}> {
+  let created: { previousTurnId: string | null } | null = null;
   try {
     const turn = await trueforgeClient().sessions.createTurnStream(
       input.sessionId,
@@ -104,15 +126,24 @@ async function runTurn(input: {
       },
       { abortSignal: input.abortSignal },
     );
-    return driveTrueForgeTurn({
-      events: turn as AsyncIterable<TurnEvent>,
+    async function* tagged() {
+      for await (const event of turn as AsyncIterable<TurnEvent>) {
+        if (event.type === "turn.created") {
+          created = { previousTurnId: turnParentId(event) };
+        }
+        yield event;
+      }
+    }
+    const outcome = await driveTrueForgeTurn({
+      events: tagged(),
       write: input.write,
       sessionId: input.sessionId,
       modelId: input.modelId,
     });
+    return { ...outcome, retryFrom: retryPreviousTurnId(created) };
   } catch (error) {
     const errorText = error instanceof Error ? error.message : "The model didn't respond.";
-    return { failedBeforeOutput: true, wroteError: false, errorText };
+    return { failedBeforeOutput: true, wroteError: false, errorText, retryFrom: retryPreviousTurnId(created) };
   }
 }
 
@@ -162,6 +193,7 @@ export async function streamTrueForgeHostedChat(input: {
   toolContext?: Omit<TrueForgeToolContext, "exp"> | null;
   modelId?: string | null;
   openRouterKey?: string | null;
+  history?: { role: "user" | "assistant"; content: string }[];
 }): Promise<Response> {
   const conversationId = input.conversationId || `guest-${crypto.randomUUID()}`;
   const instructions = trueforgeInstructions(input.system);
@@ -184,6 +216,11 @@ export async function streamTrueForgeHostedChat(input: {
         wroteError: false,
         errorText: "",
       };
+      let retryFrom: "auto" | "none" | string = "auto";
+      const onClientStop = () => {
+        void cancelSidecarTurn(session.id);
+      };
+      input.abortSignal?.addEventListener("abort", onClientStop);
       for (let attempt = 0; attempt < 2; attempt++) {
         if (input.abortSignal?.aborted) break;
         const controller = new AbortController();
@@ -199,14 +236,16 @@ export async function streamTrueForgeHostedChat(input: {
           write(chunk);
         };
         try {
-          outcome = await runTurn({
+          const result = await runTurn({
             sessionId: session.id,
             content,
             abortSignal: controller.signal,
-            previousTurnId: attempt === 0 ? "auto" : "none",
+            previousTurnId: attempt === 0 ? "auto" : retryFrom,
             write: guardedWrite,
             modelId,
           });
+          outcome = result;
+          if (attempt === 0) retryFrom = result.retryFrom;
         } finally {
           clearTimeout(timer);
           input.abortSignal?.removeEventListener("abort", onUserAbort);
@@ -225,6 +264,7 @@ export async function streamTrueForgeHostedChat(input: {
         }
         await cancelSidecarTurn(session.id);
       }
+      input.abortSignal?.removeEventListener("abort", onClientStop);
       const openRouterKey = input.openRouterKey?.trim() ?? "";
       if (
         shouldBackupBuzzWithOpenRouter({
@@ -238,6 +278,7 @@ export async function streamTrueForgeHostedChat(input: {
           model: openRouterFallbackModel(modelId),
           system: input.system,
           userText: input.userText,
+          history: input.history,
           write,
           abortSignal: input.abortSignal,
           statusLine: "Buzz failed, answering via OpenRouter.",

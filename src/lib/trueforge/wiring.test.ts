@@ -26,5 +26,7 @@ describe("TrueForge harness wiring", () => {
     assert.match(route, /trueforgeSidecarReachable/);
     assert.match(route, /system,/);
     assert.match(route, /attachments,/);
+    assert.match(route, /textHistoryFromUiMessages/);
+    assert.match(route, /history,/);
   });
 });
