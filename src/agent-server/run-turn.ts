@@ -6,11 +6,13 @@
 import { AGENT_MODEL_UNAVAILABLE, buildAgentLanguageModels, type AgentModelBuild } from "@/lib/agent/models";
 import { runAgentLoop, type AgentLoopResult } from "@/lib/agent/loop";
 import type { AgentEvent } from "@/lib/agent/events";
+import type { UiChunk } from "@/lib/trueforge/ui-chunks";
 import type { AgentTurnRequest } from "./handler";
 
 export type NativeTurnDeps = {
   env?: Record<string, string | undefined>;
   models?: (body: AgentTurnRequest) => AgentModelBuild | Promise<AgentModelBuild>;
+  onChunk?: (chunk: UiChunk) => void;
 };
 
 function unavailableEvents(): AgentEvent[] {
@@ -52,6 +54,7 @@ export async function runNativeTurn(
     timeMinutes: body.timeMinutes,
     approvalMode: body.approvalMode,
     abortSignal: signal,
+    onChunk: deps.onChunk,
   });
   return result.events;
 }

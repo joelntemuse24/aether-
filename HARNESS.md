@@ -57,6 +57,7 @@ The chat shell stays the cream Aether UI. TrueForge events become AI SDK UI chun
 | `legacy` does not select the TrueForge sidecar. | deterministic | `src/lib/agent/engine.test.ts` |
 | A native prompt names only the tools attached to that turn. | deterministic | `src/lib/agent/registry.test.ts` |
 | Claude is not sent a reasoning effort when the allowed list is empty. | deterministic | `src/lib/agent/profiles.test.ts` |
+| A streamed native attempt forwards text and tool chunks as they are produced. Control chunks stay held until that progress exists, so a transient failure before the first token still retries. After text or tools are forwarded, a transient failure emits an `error` chunk and does not append another attempt. | deterministic | `src/lib/agent/loop.test.ts`, `src/agent-server/handler.test.ts` |
 | The agent server sources do not import Next, and the proxy forwards chunk objects unchanged. | deterministic | `src/lib/trueforge/harness-rules.test.ts`, `src/lib/agent/proxy.test.ts` |
 
 ## How to run the checks

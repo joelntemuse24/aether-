@@ -47,6 +47,8 @@ export const AGENT_FINAL_ERROR = "The model stopped before it could finish. Plea
 export const AGENT_EMPTY_ANSWER = "I couldn't finish that answer. Please try again.";
 export const AGENT_MARKUP_ANSWER =
   "I hit a formatting error and couldn't finish that answer. Please try again.";
+/** Shown when a chunk already reached the client and the attempt cannot continue. */
+export const AGENT_VISIBLE_FAILURE = "The model hit a temporary error. Please try again.";
 
 export type AgentLoopStatus =
   | "completed"
@@ -83,6 +85,14 @@ export type RunAgentLoopInput = {
   abortSignal?: AbortSignal;
   now?: Date;
   log?: (entry: AgentTurnLog) => void;
+  /**
+   * Called as each UI chunk is produced. Without it, chunks stay buffered
+   * until the attempt is committed (failed partials are discarded).
+   * With it, text and tool chunks go out immediately. Error, finish, and
+   * other control chunks stay held until that attempt has shown text or a
+   * tool, because the client treats the first error chunk as a failed chat.
+   */
+  onChunk?: (chunk: UiChunk) => void;
 };
 
 export type AgentLoopResult = {
@@ -137,6 +147,17 @@ function defaultLog(entry: AgentTurnLog) {
   });
 }
 
+function isVisibleProgressChunk(chunk: UiChunk): boolean {
+  const type = typeof chunk.type === "string" ? chunk.type : "";
+  return (
+    type.startsWith("text-") ||
+    type.startsWith("reasoning-") ||
+    type.startsWith("tool-") ||
+    type.startsWith("source-") ||
+    type === "file"
+  );
+}
+
 function rawText(chunks: readonly UiChunk[]): string {
   let text = "";
   for (const chunk of chunks) {
@@ -154,10 +175,16 @@ type Attempt = {
   aborted: boolean;
 };
 
-async function readUiChunks(stream: AsyncIterable<unknown>): Promise<UiChunk[]> {
+async function readUiChunks(
+  stream: AsyncIterable<unknown>,
+  onChunk?: (chunk: UiChunk) => void,
+): Promise<UiChunk[]> {
   const chunks: UiChunk[] = [];
   for await (const chunk of stream) {
-    if (chunk && typeof chunk === "object") chunks.push(chunk as UiChunk);
+    if (!chunk || typeof chunk !== "object") continue;
+    const uiChunk = chunk as UiChunk;
+    chunks.push(uiChunk);
+    onChunk?.(uiChunk);
   }
   return chunks;
 }
@@ -178,9 +205,44 @@ export async function runAgentLoop(input: RunAgentLoopInput): Promise<AgentLoopR
     (async () => ({ ok: false, error: "Tool is not available.", retryable: false }));
   const pending: PendingApproval[] = [];
   const log = input.log ?? defaultLog;
+  const liveChunks: UiChunk[] = [];
+  const held: UiChunk[] = [];
+  let forwardedVisible = false;
+  const emitLive = (chunk: UiChunk) => {
+    if (!input.onChunk) return;
+    liveChunks.push(chunk);
+    input.onChunk(chunk);
+  };
+  const forwardChunk = (chunk: UiChunk) => {
+    if (!input.onChunk) return;
+    if (!isVisibleProgressChunk(chunk)) {
+      if (!forwardedVisible) {
+        held.push(chunk);
+        return;
+      }
+      emitLive(chunk);
+      return;
+    }
+    if (!forwardedVisible) {
+      forwardedVisible = true;
+      for (const earlier of held) {
+        if (earlier.type === "error" || earlier.type === "finish" || earlier.type === "abort") continue;
+        emitLive(earlier);
+      }
+      held.length = 0;
+    }
+    emitLive(chunk);
+  };
 
   const finish = (status: AgentLoopStatus, chunks: UiChunk[], steps: number, modelId: string): AgentLoopResult => {
     const published = publishEvents(chunks, userText, status);
+    if (input.onChunk && liveChunks.length === 0) {
+      for (const event of published.events) emitLive(event.chunk);
+    } else if (input.onChunk && !visibleTextFromChunks(liveChunks) && published.text) {
+      emitLive({ type: "text-start", id: "agent-final" });
+      emitLive({ type: "text-delta", id: "agent-final", delta: published.text });
+      emitLive({ type: "text-end", id: "agent-final" });
+    }
     log({ engine: AGENT_ENGINE, modelId, conversationId, status, steps });
     return {
       engine: AGENT_ENGINE,
@@ -222,6 +284,7 @@ export async function runAgentLoop(input: RunAgentLoopInput): Promise<AgentLoopR
         concurrency: input.concurrency,
         abortSignal: input.abortSignal,
         onApproval: (item) => pending.push(item),
+        onChunk: input.onChunk ? forwardChunk : undefined,
       });
       lastSteps = outcome.steps;
       lastModelId = modelId;
@@ -229,6 +292,17 @@ export async function runAgentLoop(input: RunAgentLoopInput): Promise<AgentLoopR
       if (pending.length > 0) {
         return finish("awaiting_approval", outcome.chunks, outcome.steps, modelId);
       }
+      // Text or tool chunks already on the wire cannot be removed. `start`
+      // does not clear parts. An `error` chunk fails the chat, and assistant-ui
+      // shows Retry. Hold that error until this attempt has shown progress so
+      // a failure before the first token can still retry.
+      if (outcome.transient && input.onChunk && forwardedVisible) {
+        if (!liveChunks.some((chunk) => chunk.type === "error")) {
+          emitLive({ type: "error", errorText: AGENT_VISIBLE_FAILURE });
+        }
+        return finish("error", outcome.chunks, outcome.steps, modelId);
+      }
+      if (outcome.transient) held.length = 0;
       if (!outcome.transient) {
         const visible = visibleTextFromChunks(sanitizeUiChunks(outcome.chunks));
         const status: AgentLoopStatus =
@@ -258,6 +332,7 @@ async function runAttempt(input: {
   concurrency?: number;
   abortSignal?: AbortSignal;
   onApproval: (pending: PendingApproval) => void;
+  onChunk?: (chunk: UiChunk) => void;
 }): Promise<Attempt> {
   const profile = agentModelProfile(input.modelId);
   const selected = selectAgentTools(input.definitions, profile);
@@ -324,6 +399,7 @@ async function runAttempt(input: {
         sendReasoning: true,
         onError: () => AGENT_FINAL_ERROR,
       }),
+      input.onChunk,
     );
   } catch (error) {
     if (isAbortError(error, input.abortSignal)) aborted = true;
