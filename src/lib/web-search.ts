@@ -12,7 +12,7 @@
  */
 
 import type { WebSearchOutput, WebSearchResult } from "@/lib/tools";
-import { fetchUrlText } from "@/lib/connectors/web-and-drive";
+import { fetchUrlText } from "@/lib/connectors/browse-page";
 import { runApiSearchProviders } from "@/lib/search/providers";
 import { assignCitationIds } from "@/lib/citations";
 

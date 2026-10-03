@@ -9,6 +9,7 @@ import { isCloudDbConfigured } from "@/lib/db";
 import { ensureConfirmationRepository } from "@/lib/harness/confirmation-store";
 import { resolveToolCallbackAuth } from "@/lib/trigger/tool-callback-auth";
 import { driveAccessFromAgentContext } from "@/lib/trigger/connector-from-context";
+import { executeTurnAccountTool } from "@/lib/agent/account-on-vercel";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -20,11 +21,6 @@ export const maxDuration = 300;
  */
 export async function POST(req: Request) {
   ensureConfirmationRepository();
-  const authz = await resolveToolCallbackAuth(req.headers);
-  if (!authz.ok) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
   const body = (await req.json().catch(() => ({}))) as {
     name?: string;
     tool?: string;
@@ -39,6 +35,26 @@ export async function POST(req: Request) {
       { error: "Unknown Aether tool." },
       { status: 400 },
     );
+  }
+
+  const authz = await resolveToolCallbackAuth(req.headers);
+  if (!authz.ok) {
+    const secret = (process.env.AETHER_TRUEFORGE_TOKEN ?? "").trim();
+    const turn = secret
+      ? await executeTurnAccountTool({
+          authorization: req.headers.get("authorization"),
+          secret,
+          name,
+          args: body.arguments ?? body.args ?? {},
+        })
+      : { kind: "not-turn" as const };
+    if (turn.kind === "not-turn") {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+    if (turn.kind === "denied") {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 403 });
+    }
+    return NextResponse.json(turn.body);
   }
 
   if (authz.kind === "jwt") {

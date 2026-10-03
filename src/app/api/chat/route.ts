@@ -354,20 +354,51 @@ export async function POST(req: Request) {
         });
       }
       const forwardedKey = openRouterKey || (!hosted && provider === "openrouter" ? apiKey : "");
+      const { nativeToolNames } = await import("@/lib/agent/catalog");
+      const { aetherPublicOrigin } = await import("@/lib/trueforge/mcp-register");
+      const { assertPublicHttpUrl } = await import("@/lib/connectors/url-safety");
+      const callbackOrigin = aetherPublicOrigin();
+      const accountReady =
+        toolsEnabled &&
+        !!callbackOrigin &&
+        (await assertPublicHttpUrl(callbackOrigin)).ok &&
+        !!((userId && isCloudDbConfigured()) || hasDriveEarly || hasGitHubEarly || projectId);
+      const nativeSystem = composeChatSystem({
+        toolsEnabled: false,
+        hermesLive: false,
+        userText,
+        harnessDepth: parsedDepth,
+        harnessIntent,
+        harnessClarifications,
+        harnessPlanSteps,
+        timeBudget,
+        continueSegment,
+        userSystem,
+        memoryForPrompt,
+        projectBlock,
+        hasDrive: hasDriveEarly,
+        hasGitHub: hasGitHubEarly,
+        hasBrowserless,
+        signedIn: !!userId,
+        hasMemory: !!(userId && isCloudDbConfigured()),
+        canPersistArtifacts: !!(userId && isCloudDbConfigured()),
+        approvalMode,
+      }).system;
       return withGuestCookie(
         proxyNativeAgentChat({
           env: process.env,
           conversationId: conversationId ?? "",
           userId: userId || guest.id,
           messages: enrichedMessages,
-          system,
+          system: nativeSystem,
           modelId,
           approvalMode,
           depth: harnessDepth,
           timeMinutes: timeBudget?.minutes ?? null,
           abortSignal: req.signal,
           openRouterKey: forwardedKey || null,
-          tools: [],
+          tools: nativeToolNames(accountReady),
+          projectId: projectId ?? null,
         }),
         guest.setCookie,
       );

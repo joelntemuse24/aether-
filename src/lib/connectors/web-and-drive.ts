@@ -1,5 +1,6 @@
 import { getValidDriveAccessToken } from "@/lib/drive-session";
-import { browsePage } from "@/lib/connectors/browse-page";
+
+export { fetchUrlText } from "@/lib/connectors/browse-page";
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
@@ -108,38 +109,4 @@ export async function driveReadTextForUser(
   }
   const text = (await res.text()).slice(0, 120_000);
   return { ok: true, name, text };
-}
-
-/** Compat alias — same SSRF path as browse_page, flattened for older callers. */
-export async function fetchUrlText(url: string, options?: { hasGitHub?: boolean }): Promise<{
-  ok: boolean;
-  error?: string;
-  title?: string;
-  text?: string;
-  url: string;
-  id?: string;
-  warning?: string;
-  paywalled?: boolean;
-  contentType?: string;
-  headings?: { level: number; text: string }[];
-  excerpts?: string[];
-  links?: { text: string; href: string }[];
-  focused?: string;
-}> {
-  const page = await browsePage({ url, hasGitHub: options?.hasGitHub });
-  return {
-    ok: page.ok,
-    error: page.error,
-    title: page.title,
-    text: page.text || undefined,
-    url: page.url,
-    id: page.id,
-    warning: page.warning,
-    paywalled: page.paywalled,
-    contentType: page.contentType,
-    headings: page.headings,
-    excerpts: page.excerpts,
-    links: page.links,
-    focused: page.focused,
-  };
 }

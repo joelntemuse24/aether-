@@ -1,7 +1,8 @@
 /**
  * Short-lived turn token. Vercel mints it; the VM agent server verifies it.
- * Claims are user, conversation, allowed tool names, approval mode, and request id.
- * No OAuth tokens and no API keys. The HMAC key is SHA-256 of the shared bearer
+ * Claims are user, conversation, allowed tool names, approval mode, optional
+ * project id, and request id. No OAuth tokens and no API keys. The HMAC key
+ * is SHA-256 of the shared bearer
  * so any non-empty AETHER_TRUEFORGE_TOKEN works. The raw bearer is still the
  * HTTP Authorization header; it is not this JWT.
  */
@@ -19,7 +20,15 @@ export type TurnClaims = {
   tools: string[];
   approvalMode: ToolApprovalMode;
   requestId: string;
+  projectId?: string;
 };
+
+function cleanProjectId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 80) return null;
+  return trimmed;
+}
 
 function signingKey(secret: string): Uint8Array {
   return createHash("sha256").update(secret, "utf8").digest();
@@ -38,11 +47,13 @@ export async function mintTurnToken(
   }
   const now = options?.now ?? new Date();
   const exp = options?.expiresAt ?? new Date(now.getTime() + TURN_TOKEN_TTL_SECONDS * 1000);
+  const projectId = cleanProjectId(claims.projectId);
   return new SignJWT({
     purpose: TURN_TOKEN_PURPOSE,
     conversationId: claims.conversationId,
     tools: [...claims.tools],
     approvalMode: claims.approvalMode,
+    ...(projectId ? { projectId } : {}),
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(claims.sub)
@@ -70,12 +81,14 @@ export async function verifyTurnToken(token: string, secret: string): Promise<Tu
     if (!Array.isArray(payload.tools) || payload.tools.some((name) => typeof name !== "string")) {
       return null;
     }
+    const projectId = cleanProjectId(payload.projectId);
     return {
       sub: payload.sub,
       conversationId: payload.conversationId,
       tools: payload.tools as string[],
       approvalMode: payload.approvalMode,
       requestId: payload.jti,
+      ...(projectId ? { projectId } : {}),
     };
   } catch {
     return null;

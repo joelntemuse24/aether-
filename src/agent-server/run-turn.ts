@@ -1,11 +1,17 @@
 /**
- * One native turn on the VM. Tools are not executed here.
- * The per-turn OpenRouter header is only passed into the model client.
+ * One native turn on the VM. Web tools run here. Account tools call back
+ * to Vercel with the turn token. The per-turn OpenRouter header is only
+ * passed into the model client.
  */
 
-import { AGENT_MODEL_UNAVAILABLE, buildAgentLanguageModels, type AgentModelBuild } from "@/lib/agent/models";
-import { runAgentLoop, type AgentLoopResult } from "@/lib/agent/loop";
+import { definitionsForAllowList } from "@/lib/agent/catalog";
+import { executeNativeTool } from "@/lib/agent/execute-native";
 import type { AgentEvent } from "@/lib/agent/events";
+import { runAgentLoop, type AgentLoopResult } from "@/lib/agent/loop";
+import { AGENT_MODEL_UNAVAILABLE, buildAgentLanguageModels, type AgentModelBuild } from "@/lib/agent/models";
+import { agentToolGroup, type AgentToolExecute, type AgentToolGroup } from "@/lib/agent/registry";
+import type { WebExecDeps } from "@/lib/agent/web-exec";
+import { assertPublicHttpUrl } from "@/lib/connectors/url-safety";
 import type { UiChunk } from "@/lib/trueforge/ui-chunks";
 import type { AgentTurnRequest } from "./handler";
 
@@ -13,7 +19,27 @@ export type NativeTurnDeps = {
   env?: Record<string, string | undefined>;
   models?: (body: AgentTurnRequest) => AgentModelBuild | Promise<AgentModelBuild>;
   onChunk?: (chunk: UiChunk) => void;
+  executeTool?: AgentToolExecute;
+  fetchImpl?: typeof fetch;
+  /** Test hook. Production checks the callback origin with the public-URL rule. */
+  allowCallback?: boolean;
+  web?: WebExecDeps;
 };
+
+function unavailableGroups(definitions: readonly { name: string }[]): AgentToolGroup[] {
+  const present = new Set(
+    definitions
+      .map((definition) => agentToolGroup(definition.name))
+      .filter((group): group is AgentToolGroup => group != null),
+  );
+  return (["web", "account", "sandbox"] as const).filter((group) => !present.has(group));
+}
+
+async function callbackOriginAllowed(origin: string | null, allowCallback: boolean): Promise<boolean> {
+  if (!origin) return false;
+  if (allowCallback) return true;
+  return (await assertPublicHttpUrl(origin)).ok;
+}
 
 function unavailableEvents(): AgentEvent[] {
   const text = AGENT_MODEL_UNAVAILABLE;
@@ -42,6 +68,9 @@ export async function runNativeTurn(
       openRouterKey: turn.openRouterKey,
     })))(body);
   if (!built.ok) return unavailableEvents();
+  const callbackOk = await callbackOriginAllowed(body.callbackOrigin, deps.allowCallback === true);
+  const listed = definitionsForAllowList(body.tools);
+  const tools = callbackOk ? listed : listed.filter((definition) => definition.runsOn === "vm");
   const result: AgentLoopResult = await runAgentLoop({
     model: built.model,
     fallbackModels: built.fallbacks,
@@ -49,7 +78,21 @@ export async function runNativeTurn(
     conversationId: body.conversationId || null,
     incoming: body.messages,
     instructions: body.system,
-    tools: [],
+    tools,
+    executeTool:
+      deps.executeTool ??
+      ((call) =>
+        executeNativeTool({
+          name: call.name,
+          args: call.input,
+          abortSignal: call.abortSignal,
+          turnToken: body.turnToken,
+          callbackOrigin: callbackOk ? body.callbackOrigin : null,
+          fetchImpl: deps.fetchImpl,
+          checkOrigin: deps.allowCallback ? async () => true : undefined,
+          web: deps.web,
+        })),
+    unavailableGroups: unavailableGroups(tools),
     depth: body.depth,
     timeMinutes: body.timeMinutes,
     approvalMode: body.approvalMode,

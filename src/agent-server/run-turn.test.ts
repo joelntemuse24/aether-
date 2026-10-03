@@ -24,6 +24,8 @@ describe("runNativeTurn", () => {
       depth: "standard",
       timeMinutes: null,
       openRouterKey: "sk-or-secret",
+      turnToken: "turn-token",
+      callbackOrigin: null,
     };
     try {
       const events = await runNativeTurn(body, new AbortController().signal, {
@@ -43,5 +45,48 @@ describe("runNativeTurn", () => {
     } finally {
       console.info = original;
     }
+  });
+
+  it("calls Vercel with the turn token for an account tool and keeps the token out of the body", async () => {
+    let auth = "";
+    let body = "";
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      auth = new Headers(init?.headers).get("authorization") ?? "";
+      body = String(init?.body ?? "");
+      return new Response(JSON.stringify({ ok: true, results: [{ title: "tea" }] }), { status: 200 });
+    };
+    const turn: AgentTurnRequest = {
+      modelId: "gpt-5.6-luna",
+      messages: [{ id: "m1", role: "user", parts: [{ type: "text", text: "Remember tea" }] }] as UIMessage[],
+      system: "Be brief.",
+      conversationId: "c1",
+      userId: "user-1",
+      approvalMode: "ask",
+      tools: ["memory_search"],
+      depth: "standard",
+      timeMinutes: null,
+      openRouterKey: null,
+      turnToken: "header-turn-token",
+      callbackOrigin: "https://app.example",
+    };
+    const events = await runNativeTurn(turn, new AbortController().signal, {
+      allowCallback: true,
+      fetchImpl,
+      models: () => ({
+        ok: true,
+        model: scriptedMockModel({
+          modelId: "gpt-5.6-luna",
+          steps: [
+            { kind: "tools", calls: [{ name: "memory_search", input: '{"query":"tea"}' }] },
+            { kind: "text", text: "You like tea." },
+          ],
+        }),
+        fallbacks: [],
+      }),
+    });
+    assert.equal(auth, "Bearer header-turn-token");
+    assert.match(body, /memory_search/);
+    assert.equal(body.includes("header-turn-token"), false);
+    assert.match(visibleTextFromEvents(events), /You like tea/);
   });
 });
