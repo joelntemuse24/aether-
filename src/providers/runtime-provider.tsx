@@ -190,9 +190,17 @@ function useChatThreadRuntime() {
     const memoryContext = localMemoryContextForChat();
     const continueSegment = continueSegmentRef.current;
 
+    let timeZone: string | undefined;
+    try {
+      timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+    } catch {
+      timeZone = undefined;
+    }
+
     return {
       model:
         loadSettings().accessMode === "hosted" ? readStoredBuzzModel() : activeModel,
+      timeZone,
       attachments: fileAttachments,
       textPrefix: textPrefix || undefined,
       system: resolveVoicePrompt(voiceRef.current),

@@ -46,6 +46,7 @@ export type ProxyNativeChatInput = {
   approvalMode: ToolApprovalMode;
   depth: HarnessDepth;
   timeMinutes: number | null;
+  timeZone?: string | null;
   tools?: readonly string[];
   projectId?: string | null;
   abortSignal?: AbortSignal;
@@ -140,6 +141,7 @@ export async function proxyNativeAgentChat(input: ProxyNativeChatInput): Promise
         tools,
         depth: input.depth,
         timeMinutes: input.timeMinutes,
+        timeZone: input.timeZone ?? null,
         callbackOrigin: aetherPublicOrigin(env),
       }),
       signal: upstreamAbort.signal,

@@ -922,6 +922,62 @@ describe("deriveAgentActivity — honesty", () => {
   });
 });
 
+describe("one step per tool call", () => {
+  it("collapses a duplicated search and page into the single disclosure", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-web_search",
+              toolName: "web_search",
+              toolCallId: "search-1",
+              state: "input-available",
+              input: { query: "events in Dublin this weekend" },
+            },
+            {
+              type: "tool-web_search",
+              toolName: "web_search",
+              toolCallId: "search-1",
+              state: "output-available",
+              input: { query: "events in Dublin this weekend" },
+              output: { ok: true, results: [{ title: "Eventbrite", url: "https://www.eventbrite.ie/d/ireland--dublin/events/" }] },
+            },
+            {
+              type: "tool-browse_page",
+              toolName: "browse_page",
+              toolCallId: "page-1",
+              state: "output-available",
+              input: { url: "https://www.eventbrite.ie/d/ireland--dublin/events/" },
+              output: { ok: true, title: "Dublin events", url: "https://www.eventbrite.ie/d/ireland--dublin/events/" },
+            },
+            {
+              type: "tool-call",
+              toolName: "browse_page",
+              toolCallId: "page-1",
+              args: { url: "https://www.eventbrite.ie/d/ireland--dublin/events/" },
+              result: { ok: true, title: "Dublin events", url: "https://www.eventbrite.ie/d/ireland--dublin/events/" },
+              status: { type: "complete" },
+            },
+            { type: "text", text: "Saturday 3 and Sunday 4 October." },
+          ],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 12,
+    });
+
+    assert.equal(view.mode, "collapsed");
+    assert.equal(view.steps.filter((step) => step.toolName === "web_search").length, 1);
+    assert.equal(view.steps.filter((step) => step.toolName === "browse_page").length, 1);
+    assert.equal(view.steps.length, 2);
+    assert.equal(view.summaryLabel?.includes("\n"), false);
+    assert.match(view.summaryLabel ?? "", /Searched the web/);
+    assert.match(view.summaryLabel ?? "", /eventbrite\.ie/);
+  });
+});
+
 describe("formatActivityElapsed", () => {
   it("uses seconds and minute form without inventing work", () => {
     assert.equal(formatActivityElapsed(4), "4s");
