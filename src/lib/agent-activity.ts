@@ -803,15 +803,19 @@ export function activityClockShouldRun(input: {
   continuePhase?: ContinuePhase;
   messages: ActivityMessage[];
 }): boolean {
-  if (input.isRunning) return true;
   if (input.continuePhase === "continuing") return true;
   // Truly paused — freeze the clock. Open tools without pause still tick
   // because the durable worker may still own the turn after Head Start ends.
-  if (input.continuePhase === "needs-continue") return false;
+  if (input.continuePhase === "needs-continue" && !input.isRunning) return false;
   const assistant = latestAssistant(input.messages);
-  return collectActivitySteps(assistant?.parts, false).some(
+  const toolLive = collectActivitySteps(assistant?.parts, input.isRunning).some(
     (step) => step.state === "running",
   );
+  // First answer token collapses the line. Freeze thinking/tool time there
+  // so "Thought for Ns" does not keep counting while the reply streams.
+  if (assistantHasVisibleProse(assistant) && !toolLive) return false;
+  if (input.isRunning) return true;
+  return toolLive;
 }
 
 export function syncActivityClock(isRunning: boolean): number {

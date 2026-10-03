@@ -1329,6 +1329,11 @@ const MessageError: FC = () => {
 const AssistantMessage: FC = () => {
   // Animate only while this message is actively generating — not on rehydrate.
   const isLive = useAuiState((s) => s.message?.status?.type === "running");
+  const isLast = useAuiState((s) => {
+    const messages = s.thread.messages;
+    const last = messages[messages.length - 1];
+    return !!last && last.id === s.message.id;
+  });
   return (
     <MessagePrimitive.Root
       data-role="assistant"
@@ -1378,7 +1383,14 @@ const AssistantMessage: FC = () => {
         </ChatRenderErrorBoundary>
       </div>
 
-      <div className="mt-1.5 flex min-h-8 items-center gap-1 opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover/message:opacity-100 md:focus-within:opacity-100 data-[running=true]:opacity-0">
+      <div
+        data-running={isLive ? "true" : undefined}
+        className={cn(
+          "mt-1.5 flex min-h-8 items-center gap-1 opacity-100 transition-opacity duration-150 data-[running=true]:opacity-0",
+          !isLast &&
+            "md:opacity-0 md:group-hover/message:opacity-100 md:focus-within:opacity-100",
+        )}
+      >
         <BranchPicker />
         <AssistantActionBar />
       </div>

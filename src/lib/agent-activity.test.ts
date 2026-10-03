@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import {
   activityClockShouldRun,
   closeActivityClock,
@@ -513,6 +513,112 @@ describe("deriveAgentActivity — honesty", () => {
       }),
       true,
     );
+  });
+
+  it("freezes the clock when the answer's first text token arrives", () => {
+    const prose = [
+      {
+        role: "assistant" as const,
+        id: "asst-answer",
+        parts: [
+          {
+            type: "tool-web_search",
+            args: { query: "central bank rate" },
+            state: "output-available",
+            result: { ok: true, results: [] },
+          },
+          { type: "text", text: "The rate is 2%." },
+        ],
+      },
+    ];
+    assert.equal(
+      activityClockShouldRun({ isRunning: true, messages: prose }),
+      false,
+    );
+    assert.equal(
+      activityClockShouldRun({
+        isRunning: true,
+        messages: [
+          {
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-web_search",
+                args: { query: "central bank rate" },
+                state: "input-available",
+              },
+              { type: "text", text: "The rate is 2%." },
+            ],
+          },
+        ],
+      }),
+      true,
+    );
+    assert.equal(
+      activityClockShouldRun({
+        isRunning: true,
+        messages: [
+          {
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-web_search",
+                args: { query: "central bank rate" },
+                state: "input-available",
+              },
+            ],
+          },
+        ],
+      }),
+      true,
+    );
+    assert.equal(
+      activityClockShouldRun({
+        isRunning: true,
+        messages: [
+          {
+            role: "assistant",
+            parts: [
+              {
+                type: "text",
+                text: '<|DSML| tool_search query="time"><|/DSML| tool_search>',
+              },
+            ],
+          },
+        ],
+      }),
+      true,
+    );
+
+    resetActivityClock();
+    mock.timers.enable({ apis: ["Date"], now: 1_700_000_000_000 });
+    try {
+      syncActivityClock(true);
+      mock.timers.tick(12_000);
+      assert.equal(syncActivityClock(true), 12);
+      assert.equal(
+        activityClockShouldRun({ isRunning: true, messages: prose }),
+        false,
+      );
+      const frozen = closeActivityClock("asst-answer");
+      assert.equal(frozen, 12);
+      mock.timers.tick(3_000);
+      assert.equal(recalledActivityElapsed("asst-answer"), 12);
+      assert.equal(syncActivityClock(false), 12);
+      const view = deriveAgentActivity({
+        messages: prose,
+        isRunning: true,
+        elapsedSeconds: recalledActivityElapsed("asst-answer"),
+      });
+      assert.equal(view.mode, "collapsed");
+      assert.equal(
+        view.summaryLabel,
+        "Thought for 12s · Searched the web",
+      );
+    } finally {
+      mock.timers.reset();
+      resetActivityClock();
+    }
   });
 
   it("names a web search in natural language and keeps the query off the live line", () => {
@@ -1076,6 +1182,24 @@ describe("thread / composer copy stays honest", () => {
     assert.match(strip, /step\.site/);
     assert.match(strip, /step\.code/);
     assert.match(thread, /type === "reasoning"/);
+    const assistantMessage = thread.slice(
+      thread.indexOf("const AssistantMessage"),
+      thread.indexOf("const AssistantActionBar"),
+    );
+    assert.match(assistantMessage, /isLast/);
+    assert.match(assistantMessage, /md:group-hover\/message:opacity-100/);
+    assert.doesNotMatch(
+      assistantMessage,
+      /opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover\/message:opacity-100/,
+    );
+    const userMessage = thread.slice(
+      thread.indexOf("const UserMessage"),
+      thread.indexOf("const UserActionBar"),
+    );
+    assert.match(
+      userMessage,
+      /md:opacity-0 md:group-hover\/message:opacity-100/,
+    );
     assert.match(strip, /activityClockShouldRun/);
     assert.match(strip, /shouldShowComposerActivity/);
     assert.match(strip, /sourceChipLabel/);
