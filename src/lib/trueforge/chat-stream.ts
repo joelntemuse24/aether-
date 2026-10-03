@@ -217,6 +217,8 @@ export async function streamTrueForgeHostedChat(input: {
         errorText: "",
       };
       let retryFrom: "auto" | "none" | string = "auto";
+      // Closing the SSE stream does not freeze the turn. The next send then
+      // hits PreviousTurnRunningError until sessions.cancel runs.
       const onClientStop = () => {
         void cancelSidecarTurn(session.id);
       };

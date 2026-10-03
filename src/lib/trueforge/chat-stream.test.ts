@@ -84,7 +84,45 @@ describe("TrueForge Buzz retry", () => {
     assert.equal(String(error?.errorText).includes("525"), false);
   });
 
-  it("retries from the failed turn's parent instead of a new root", () => {
+  it("retries 502, ECONNRESET, and Cloudflare 525 from the raw turn.done error", async () => {
+    for (const message of ["502 Bad Gateway", "read ECONNRESET", "Cloudflare 525"]) {
+      const writes: UiChunk[] = [];
+      async function* events() {
+        yield { type: "turn.done", state: { status: "error", message } };
+      }
+      const outcome = await driveTrueForgeTurn({
+        events: events(),
+        write: (chunk) => writes.push(chunk),
+        sessionId: "ses",
+        modelId: "gpt-5.6-luna",
+      });
+      assert.equal(outcome.errorText, message);
+      assert.equal(
+        shouldRetryBuzzTurn({
+          failedBeforeOutput: outcome.failedBeforeOutput,
+          errorText: outcome.errorText,
+          userAborted: false,
+          attempt: 0,
+        }),
+        true,
+        message,
+      );
+    }
+    for (const message of ["model_not_found", "The model is not enabled for group"]) {
+      assert.equal(
+        shouldRetryBuzzTurn({
+          failedBeforeOutput: true,
+          errorText: message,
+          userAborted: false,
+          attempt: 0,
+        }),
+        false,
+        message,
+      );
+    }
+  });
+
+  it("cancels the sidecar turn on Stop because a disconnect leaves it running", () => {
     assert.equal(retryPreviousTurnId(null), "auto");
     assert.equal(retryPreviousTurnId({ previousTurnId: "turn_parent" }), "turn_parent");
     assert.equal(retryPreviousTurnId({ previousTurnId: null }), "none");
