@@ -25,7 +25,7 @@ export function startAgentServer(): void {
   const host = (process.env.AETHER_AGENT_HOST ?? "").trim() || "127.0.0.1";
   const server = createAgentServer({
     token,
-    runTurn: (body, signal) => runNativeTurn(body, signal),
+    runTurn: (body, signal, onChunk) => runNativeTurn(body, signal, { onChunk }),
   });
   server.listen(port, host, () => {
     console.info(`[agent-server] listening on ${host}:${port}`);

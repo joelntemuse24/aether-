@@ -14,6 +14,7 @@ export {
   AGENT_ENGINE,
   AGENT_FINAL_ERROR,
   AGENT_MARKUP_ANSWER,
+  AGENT_VISIBLE_FAILURE,
   agentStepLimit,
   isTransientProviderError,
   runAgentLoop,

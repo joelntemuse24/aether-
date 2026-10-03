@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { z } from "zod";
 import type { UIMessage } from "ai";
-import { agentStepLimit, runAgentLoop } from "./loop";
+import { MockLanguageModelV3 } from "ai/test";
+import { AGENT_VISIBLE_FAILURE, agentStepLimit, runAgentLoop } from "./loop";
 import { scriptedMockModel } from "./mock-provider";
 import type { AgentToolDefinition } from "./registry";
 
@@ -202,6 +204,116 @@ describe("agent loop", () => {
     assert.equal(result.modelId, "claude-sonnet-5");
     const claudeOptions = JSON.stringify(fallback.doStreamCalls[0]?.providerOptions ?? {});
     assert.equal(claudeOptions.includes("reasoningEffort"), false);
+  });
+
+  it("streams text before the attempt finishes", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const usage = {
+      inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 1, text: 1, reasoning: 0 },
+    };
+    const model = new MockLanguageModelV3({
+      provider: "mock",
+      modelId: "gpt-5.6-luna",
+      doStream: async () => ({
+        stream: new ReadableStream<LanguageModelV3StreamPart>({
+          async start(controller) {
+            controller.enqueue({ type: "stream-start", warnings: [] });
+            controller.enqueue({ type: "text-start", id: "t1" });
+            controller.enqueue({ type: "text-delta", id: "t1", delta: "hello" });
+            await gate;
+            controller.enqueue({ type: "text-end", id: "t1" });
+            controller.enqueue({
+              type: "finish",
+              finishReason: { unified: "stop", raw: "stop" },
+              usage,
+            });
+            controller.close();
+          },
+        }),
+      }),
+    });
+    let sawHello = false;
+    const pending = runAgentLoop(
+      quiet({
+        model,
+        incoming: user,
+        onChunk: (chunk) => {
+          if (chunk.type === "text-delta" && chunk.delta === "hello") sawHello = true;
+        },
+      }),
+    );
+    for (let i = 0; i < 50 && !sawHello; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(sawHello, true);
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(settled, false);
+    release();
+    const result = await pending;
+    assert.match(result.text, /hello/);
+  });
+
+  it("stops after a visible failure instead of appending the fallback", async () => {
+    const primary = scriptedMockModel({
+      modelId: "gpt-5.6-luna",
+      steps: [{ kind: "midstream-error", statusCode: 502, text: "partial" }],
+    });
+    const fallback = scriptedMockModel({
+      modelId: "claude-sonnet-5",
+      steps: [{ kind: "text", text: "Recovered from the fallback." }],
+    });
+    const seen: string[] = [];
+    const result = await runAgentLoop(
+      quiet({
+        model: primary,
+        fallbackModels: [fallback],
+        incoming: user,
+        onChunk: (chunk) => {
+          if (chunk.type === "text-delta" && typeof chunk.delta === "string") seen.push(chunk.delta);
+          if (chunk.type === "error" && typeof chunk.errorText === "string") seen.push(chunk.errorText);
+        },
+      }),
+    );
+    assert.equal(fallback.doStreamCalls.length, 0);
+    assert.equal(seen.includes("partial"), true);
+    assert.equal(seen.includes("Recovered from the fallback."), false);
+    assert.equal(seen.some((line) => line === AGENT_VISIBLE_FAILURE || line === "The model stopped before it could finish. Please try again."), true);
+    assert.equal(result.text.includes("Recovered from the fallback."), false);
+    assert.equal(JSON.stringify(seen).includes("502"), false);
+  });
+
+  it("still retries before any text or tool chunk is forwarded", async () => {
+    const primary = scriptedMockModel({
+      modelId: "gpt-5.6-luna",
+      steps: [{ kind: "throw", statusCode: 502 }],
+    });
+    const fallback = scriptedMockModel({
+      modelId: "claude-sonnet-5",
+      steps: [{ kind: "text", text: "Recovered from the fallback." }],
+    });
+    const seen: string[] = [];
+    const result = await runAgentLoop(
+      quiet({
+        model: primary,
+        fallbackModels: [fallback],
+        incoming: user,
+        onChunk: (chunk) => {
+          if (chunk.type === "text-delta" && typeof chunk.delta === "string") seen.push(chunk.delta);
+          if (chunk.type === "error") seen.push("error");
+        },
+      }),
+    );
+    assert.equal(fallback.doStreamCalls.length, 1);
+    assert.deepEqual(seen.filter((line) => line !== "error"), ["Recovered from the fallback."]);
+    assert.equal(result.text, "Recovered from the fallback.");
   });
 
   it("does not leak a provider error when every model fails", async () => {

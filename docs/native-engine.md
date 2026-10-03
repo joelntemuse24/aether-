@@ -6,6 +6,8 @@ The browser still posts `/api/chat` and still reads an AI SDK UI message stream.
 
 `AETHER_AGENT_TRANSPORT=direct` is rejected. The browser does not connect to the VM yet.
 
+A normal attempt writes text and tool chunks as the model produces them, so those rows show up during the turn. Error, finish, and other control chunks stay held until that attempt has shown text or a tool. The AI SDK client treats the first `error` chunk as a failed chat and stops reading, so forwarding it early would make a silent retry invisible. A failure before any text or tool chunk still retries with the original history and then streams the next attempt. After text or tools have been forwarded, a transient failure writes `{ "type": "error", "errorText" }` and stops. The thread already shows that with Retry. There is no stream part that clears parts already applied (`start` only sets the message id), so this path does not append a second answer onto the partial. Callers that omit `onChunk` still buffer until the attempt is committed.
+
 This process does not execute tools and does not start a sandbox. Those are later changes. It also does not change `/opt/aether/sidecar-only.ts`.
 
 ## Env

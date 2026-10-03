@@ -232,6 +232,54 @@ describe("agent server", () => {
     }
   });
 
+  it("writes a chunk before the turn function returns", { timeout: 5_000 }, async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const server = createAgentServer({
+      token: secret,
+      runTurn: async (_turn, _signal, onChunk) => {
+        onChunk?.({ type: "text-delta", id: "t1", delta: "live" });
+        await gate;
+        return [{ id: "late", chunk: { type: "text-delta", id: "t1", delta: "late" } }];
+      },
+    });
+    const origin = await listen(server);
+    try {
+      const token = await tokenFor();
+      const response = await fetch(`${origin}/v1/turns`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${secret}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ ...body(), turnToken: token }),
+      });
+      const reader = response.body?.getReader();
+      assert.ok(reader);
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (!buf.includes("\n")) {
+        const next = await reader.read();
+        if (next.done) break;
+        buf += decoder.decode(next.value, { stream: true });
+      }
+      assert.match(buf, /live/);
+      assert.equal(buf.includes("late"), false);
+      release();
+      let rest = "";
+      while (true) {
+        const next = await reader.read();
+        if (next.done) break;
+        rest += decoder.decode(next.value, { stream: true });
+      }
+      assert.equal(rest.includes("late"), false);
+    } finally {
+      await close(server);
+    }
+  });
+
   it("does not echo a thrown provider error", async () => {
     const server = createAgentServer({
       token: secret,

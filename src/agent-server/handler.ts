@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import http from "node:http";
 import type { UIMessage } from "ai";
 import { AGENT_FINAL_ERROR } from "@/lib/agent/loop";
+import type { UiChunk } from "@/lib/trueforge/ui-chunks";
 import { createAgentEventLog, type AgentEvent } from "@/lib/agent/events";
 import { verifyTurnToken, type TurnClaims } from "@/lib/agent/turn-token";
 import type { HarnessDepth } from "@/lib/harness/types";
@@ -36,6 +37,7 @@ export type AgentTurnRequest = {
 export type AgentTurnRunner = (
   body: AgentTurnRequest,
   signal: AbortSignal,
+  onChunk?: (chunk: UiChunk) => void,
 ) => Promise<AgentEvent[]>;
 
 type LiveTurn = {
@@ -217,6 +219,13 @@ export function createAgentServer(options: {
     const openRouterKey = req.headers["x-openrouter-key"];
     const headerKey = Array.isArray(openRouterKey) ? openRouterKey[0] : openRouterKey;
     try {
+      let streamed = false;
+      const writeChunk = (chunk: UiChunk) => {
+        streamed = true;
+        if (live.controller.signal.aborted || res.writableEnded) return;
+        const stored = live.log.push(chunk);
+        res.write(`${JSON.stringify(stored)}\n`);
+      };
       const events = await options.runTurn(
         {
           modelId,
@@ -231,11 +240,14 @@ export function createAgentServer(options: {
           openRouterKey: typeof headerKey === "string" && headerKey.trim() ? headerKey.trim() : null,
         },
         live.controller.signal,
+        writeChunk,
       );
-      for (const event of events) {
-        if (live.controller.signal.aborted || res.writableEnded) break;
-        const stored = live.log.push(event.chunk);
-        res.write(`${JSON.stringify(stored)}\n`);
+      if (!streamed) {
+        for (const event of events) {
+          if (live.controller.signal.aborted || res.writableEnded) break;
+          const stored = live.log.push(event.chunk);
+          res.write(`${JSON.stringify(stored)}\n`);
+        }
       }
     } catch {
       if (!live.controller.signal.aborted && !res.writableEnded) {
