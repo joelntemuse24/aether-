@@ -113,6 +113,15 @@ const EXEC_TIMEOUT_TO = "var DEFAULT_TIMEOUT_SECONDS = 45;";
 const VENV_FROM = '["-m", "venv", venvDir]';
 const VENV_TO = '["-m", "venv", "--system-site-packages", venvDir]';
 
+/** pandas imports pytz, which reads the tz database. The jail must see /usr/share/zoneinfo. */
+const ZONEINFO_FROM = `        "/proc",
+        "/sys",
+        SRT_VENDOR`;
+const ZONEINFO_TO = `        "/proc",
+        "/sys",
+        "/usr/share/zoneinfo",
+        SRT_VENDOR`;
+
 const RELATIVE_FILES = [
   "node_modules/@truefoundry/trueforge-core/dist/core/runtime/DeferredTool.js",
   "node_modules/@truefoundry/trueforge-core/dist/core/runtime/DeferredTool.mjs",
@@ -137,6 +146,19 @@ function patchVenv(source: string): { text: string; changed: boolean } {
   return { text: source.replace(VENV_FROM, VENV_TO), changed: true };
 }
 
+function patchZoneinfo(source: string): { text: string; changed: boolean } {
+  if (source.includes(ZONEINFO_TO)) return { text: source, changed: false };
+  if (!source.includes(ZONEINFO_FROM)) return { text: source, changed: false };
+  return { text: source.replace(ZONEINFO_FROM, ZONEINFO_TO), changed: true };
+}
+
+/** main.js carries the venv flag and the linux jail read list. */
+function patchMain(source: string): { text: string; changed: boolean } {
+  const venv = patchVenv(source);
+  const zoneinfo = patchZoneinfo(venv.text);
+  return { text: zoneinfo.text, changed: venv.changed || zoneinfo.changed };
+}
+
 function alreadyPatched(
   source: string,
   kind: "deferred" | "sandbox" | "clock" | "exec-timeout" | "venv",
@@ -144,7 +166,7 @@ function alreadyPatched(
   if (kind === "deferred") return source.includes("!server.preload");
   if (kind === "clock") return source.includes(CLOCK_OFF);
   if (kind === "exec-timeout") return source.includes(EXEC_TIMEOUT_TO);
-  if (kind === "venv") return source.includes(VENV_TO);
+  if (kind === "venv") return source.includes(VENV_TO) && source.includes(ZONEINFO_TO);
   return (
     source.includes("exec can reach these MCP servers") &&
     source.includes("buildSchemaSection(builder) {\n    return;")
@@ -173,7 +195,7 @@ export function applyTrueForgeSidecarPatches(root = process.cwd()): string[] {
         : kind === "exec-timeout"
           ? patchExecTimeout(source)
           : kind === "venv"
-            ? patchVenv(source)
+            ? patchMain(source)
             : patchText(source, kind);
     if (next.changed) {
       fs.writeFileSync(file, next.text);
