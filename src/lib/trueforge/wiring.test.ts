@@ -20,8 +20,8 @@ describe("TrueForge harness wiring", () => {
       new URL("../../app/api/chat/route.ts", import.meta.url),
       "utf8",
     );
-    const forge = route.indexOf("return streamTrueForgeHostedChat");
-    const legacy = route.indexOf("return streamLegacyLocalChat");
+    const forge = route.indexOf("streamTrueForgeHostedChat({");
+    const legacy = route.indexOf("streamLegacyLocalChat({");
     assert.ok(forge > 0 && legacy > forge);
     assert.match(route, /trueforgeSidecarReachable/);
     assert.match(route, /system,/);

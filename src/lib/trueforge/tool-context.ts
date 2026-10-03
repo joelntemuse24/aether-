@@ -21,6 +21,18 @@ function keyFromSecret(secret: string): Buffer {
   return createHash("sha256").update(secret).digest();
 }
 
+/**
+ * Context encryption key. Production must set `AETHER_TOOL_CONTEXT_KEY`.
+ * It is not the VM transport token. Dev falls back to that token so local
+ * chat still seals context.
+ */
+export function toolContextKey(env: NodeJS.ProcessEnv = process.env): string {
+  const dedicated = (env.AETHER_TOOL_CONTEXT_KEY ?? "").trim();
+  if (dedicated) return dedicated;
+  if (env.NODE_ENV === "production") return "";
+  return (env.AETHER_TRUEFORGE_TOKEN ?? "").trim();
+}
+
 /** AES-GCM blob. The sidecar stores this header and must not see tokens. */
 export function signTrueForgeToolContext(
   input: Omit<TrueForgeToolContext, "exp">,

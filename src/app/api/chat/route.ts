@@ -39,6 +39,15 @@ import {
   resolveTurnTimeBudget,
   type IncomingAttachment,
 } from "@/lib/chat-turn";
+import {
+  browserSafeChatError,
+  checkHostedTurn,
+  clientIp,
+  hostedSessionOwner,
+  readOrCreateGuestId,
+  redactLoggedError,
+  withGuestCookie,
+} from "@/lib/trueforge/hosted-limit";
 
 /**
  * Only applies on Vercel serverless. Railway / `next start` has no function
@@ -122,6 +131,25 @@ export async function POST(req: Request) {
     ensureConfirmationRepository();
     const session = await auth();
     const userId = session?.user?.id || session?.user?.email || null;
+    const guest = readOrCreateGuestId(req.headers.get("cookie"));
+    const owner = hostedSessionOwner({ userId, guestId: guest.id });
+    if (hosted) {
+      const limited = checkHostedTurn({
+        ip: clientIp(req),
+        sessionKey: owner + "\n" + (conversationId || "new"),
+        anonymous: !userId,
+        hasOpenRouterKey: !!openRouterKey,
+      });
+      if (!limited.ok) {
+        return withGuestCookie(
+          new Response(JSON.stringify({ error: limited.error, requestId: limited.requestId }), {
+            status: limited.status,
+            headers: { "Content-Type": "application/json" },
+          }),
+          guest.setCookie,
+        );
+      }
+    }
 
     let storedMessages: UIMessage[] = [];
     if (conversationId && userId && isCloudDbConfigured()) {
@@ -287,14 +315,14 @@ export async function POST(req: Request) {
         );
       }
       console.info("[api/chat] engine", { engine: "openrouter", conversationId });
-      return openRouterChatResponse({
+      return withGuestCookie(openRouterChatResponse({
         apiKey: openRouterKey,
         model: incomingModel,
         system,
         userText: lastUserText(enrichedMessages) || lastUserText(messages),
         history,
         abortSignal: req.signal,
-      });
+      }), guest.setCookie);
     }
 
     const { trueforgeSidecarReachable } = await import("@/lib/trueforge/config");
@@ -307,8 +335,9 @@ export async function POST(req: Request) {
         models: await listBuzzChatModels(),
       });
       console.info("[api/chat] engine", { engine: "trueforge", conversationId });
-      return streamTrueForgeHostedChat({
+      return withGuestCookie(streamTrueForgeHostedChat({
         conversationId,
+        owner,
         userText: lastUserText(enrichedMessages) || lastUserText(messages),
         history,
         system,
@@ -326,7 +355,7 @@ export async function POST(req: Request) {
           hasDrive: hasDriveEarly,
           hasGitHub: hasGitHubEarly,
         },
-      });
+      }), guest.setCookie);
     }
 
     // Hermes owns the hosted tool loop. BYOK (and hosted without Hermes)
@@ -359,7 +388,7 @@ export async function POST(req: Request) {
         githubAccessToken: githubToken?.accessToken,
       });
       console.info("[api/chat] engine", { engine: "hermes", conversationId });
-      return proxyChatToHermes({
+      return withGuestCookie(proxyChatToHermes({
         messages: enrichedMessages,
         system,
         model: requestedModel,
@@ -398,7 +427,8 @@ export async function POST(req: Request) {
           }
         },
         onError: (error) => {
-          console.error("[api/chat] hermes", error);
+          const detail = error instanceof Error ? error.message : "error";
+          console.error("[api/chat] hermes", redactLoggedError(detail));
           if (harnessRunId && userId) {
             void updateAgentRunStatus({
               id: harnessRunId,
@@ -406,17 +436,17 @@ export async function POST(req: Request) {
               status: "done",
               eventType: "chat_error",
               eventPayload: {
-                error: error instanceof Error ? error.message : "error",
+                error: redactLoggedError(detail),
                 engine: "hermes",
               },
             });
           }
         },
-      });
+      }), guest.setCookie);
     }
 
     console.info("[api/chat] engine", { engine: "legacy", conversationId });
-    return streamLegacyLocalChat({
+    return withGuestCookie(streamLegacyLocalChat({
       hosted,
       requestedModel,
       speedTier,
@@ -440,12 +470,10 @@ export async function POST(req: Request) {
       maxWebSearches: timeBudget?.maxSearches ?? null,
       abortSignal: req.signal,
       approvalMode,
-    });
+    }), guest.setCookie);
   } catch (error) {
-    console.error("[api/chat]", error);
-    const message =
-      error instanceof Error ? error.message : "Request failed";
-    return new Response(JSON.stringify({ error: message }), {
+    const safe = browserSafeChatError(error);
+    return new Response(JSON.stringify(safe), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });

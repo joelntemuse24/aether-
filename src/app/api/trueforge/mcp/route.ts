@@ -1,7 +1,7 @@
 import { bearerMatches } from "@/lib/trueforge/auth";
 import { trueforgeToken } from "@/lib/trueforge/config";
 import { handleTrueForgeMcpRpc } from "@/lib/trueforge/mcp-http";
-import { readTrueForgeToolContext } from "@/lib/trueforge/tool-context";
+import { readTrueForgeToolContext, toolContextKey } from "@/lib/trueforge/tool-context";
 
 export const maxDuration = 300;
 
@@ -12,7 +12,10 @@ export async function POST(req: Request) {
   if (!token || !bearerMatches(req.headers.get("authorization") ?? undefined, token)) {
     return Response.json({ error: "Unauthorized." }, { status: 401 });
   }
-  const ctx = readTrueForgeToolContext(req.headers.get("x-aether-tool-context"), token);
+  const contextSecret = toolContextKey();
+  const ctx = contextSecret
+    ? readTrueForgeToolContext(req.headers.get("x-aether-tool-context"), contextSecret)
+    : null;
   let body: unknown;
   try {
     body = await req.json();

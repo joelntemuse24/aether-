@@ -2,6 +2,7 @@ import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import type { IncomingAttachment } from "@/lib/chat-turn";
 import { buzzModelFqn, buzzModelUnavailableCopy, isBuzzModelUnavailableError } from "@/lib/buzz/models";
 import { encodeTrueForgeApproval } from "./approvals";
+import { browserSafeChatError } from "./hosted-limit";
 import { TOOLS_UNAVAILABLE_NOTICE, trueforgeInstructions } from "./instructions";
 import { trueforgeClient, trueforgeSessionId } from "./sessions";
 import type { TrueForgeToolContext } from "./tool-context";
@@ -186,6 +187,7 @@ async function cancelSidecarTurn(sessionId: string): Promise<void> {
 
 export async function streamTrueForgeHostedChat(input: {
   conversationId: string | null;
+  owner: string;
   userText: string;
   system: string;
   attachments?: IncomingAttachment[];
@@ -207,6 +209,7 @@ export async function streamTrueForgeHostedChat(input: {
       writer.write({ type: "start" });
       const session = await trueforgeSessionId({
         conversationId,
+        owner: input.owner,
         modelName: buzzModelFqn(modelId),
         instructions,
         toolContext: input.toolContext,
@@ -304,8 +307,7 @@ export async function streamTrueForgeHostedChat(input: {
         finishReason: outcome.wroteError || outcome.failedBeforeOutput ? "error" : "stop",
       });
     },
-    onError: (error) =>
-      error instanceof Error ? error.message : "The harness turn failed.",
+    onError: (error) => browserSafeChatError(error).error,
   });
   return createUIMessageStreamResponse({ stream });
 }

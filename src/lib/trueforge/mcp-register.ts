@@ -1,7 +1,7 @@
 import type { TrueForge } from "@truefoundry/trueforge-sdk";
 import { trueforgeOrigin, trueforgeToken } from "./config";
 import { AETHER_MCP_DEFERRED, AETHER_MCP_DIRECT } from "./mcp-http";
-import { signTrueForgeToolContext, type TrueForgeToolContext } from "./tool-context";
+import { signTrueForgeToolContext, toolContextKey, type TrueForgeToolContext } from "./tool-context";
 
 const signedTokens = new Map<string, { token: string; key: string; exp: number }>();
 export const MAX_SIGNED_TOOL_TOKENS = 200;
@@ -180,12 +180,13 @@ export async function ensureAetherMcpServer(input: {
   conversationId: string;
   context: Omit<TrueForgeToolContext, "exp">;
 }): Promise<{ direct: string; includeAccountTools: boolean; token: string } | null> {
-  const secret = trueforgeToken();
+  const transport = trueforgeToken();
+  const contextSecret = toolContextKey();
   const origin = aetherPublicOrigin();
-  if (!secret || !origin) return null;
+  if (!transport || !contextSecret || !origin) return null;
   const names = aetherMcpServerNames(input.conversationId);
   const includeAccountTools = needsDeferredAetherTools(input.context);
-  const token = cachedToolContextToken(input.conversationId, input.context, secret);
+  const token = cachedToolContextToken(input.conversationId, input.context, contextSecret);
   try {
     await upsertMcp({
       client: input.client,
@@ -194,7 +195,7 @@ export async function ensureAetherMcpServer(input: {
         ? "Aether web, clock, memory, artifacts, Drive, and GitHub."
         : "Aether web search, fetch, browse, and clock.",
       origin,
-      secret,
+      secret: transport,
       token,
     });
     return { direct: names.direct, includeAccountTools, token };
