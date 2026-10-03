@@ -109,6 +109,24 @@ const CLOCK_OFF = "const capabilities = [];";
 const EXEC_TIMEOUT_FROM = "var DEFAULT_TIMEOUT_SECONDS = 60;";
 const EXEC_TIMEOUT_TO = "var DEFAULT_TIMEOUT_SECONDS = 45;";
 
+/** Sub-agent threads drop the parent guard so the session user-instructions section reaches them. */
+const SUBAGENT_USER_INSTRUCTIONS_FROM = "    if (!this.parent && userInstruction?.trim()) {";
+const SUBAGENT_USER_INSTRUCTIONS_TO = "    if (userInstruction?.trim()) {";
+
+/** The delegated sub-agent prompt gets the parent's clock line (date and timezone). */
+const SUBAGENT_INSTRUCTION_FROM = `        // The delegated task goes in as the initial user message; the sub-agent
+        // system prompt is SUB_AGENT_IDENTITY (added by AgentThread.buildInstruction).
+        instruction: void 0,`;
+const SUBAGENT_INSTRUCTION_TO = `        // The delegated task goes in as the initial user message; the sub-agent
+        // system prompt is SUB_AGENT_IDENTITY (added by AgentThread.buildInstruction).
+        instruction: (params.parentDefinition.instruction ?? "").split("\\n").find((line) => line.startsWith("Today's date")) ?? void 0,`;
+
+/** The delegated task input tells the sub-agent the date and timezone it cannot see. */
+const SUBAGENT_TASK_NOTE_FROM =
+  "      `The sub-agent has NO access to the prior conversation or the user's original message. The Agent must provide a clear, self-contained instruction that includes all necessary context, the exact task to perform, any constraints, what outputs are expected, and what work has already been completed so effort is not duplicated.`";
+const SUBAGENT_TASK_NOTE_TO = `${SUBAGENT_TASK_NOTE_FROM},
+      \`Include today's date and the user's timezone in the instruction so the sub-agent does not guess them.\``;
+
 /** The VM installs pandas, numpy, openpyxl, and python-pptx system-wide. The sandbox venv must see them. */
 const VENV_FROM = '["-m", "venv", venvDir]';
 const VENV_TO = '["-m", "venv", "--system-site-packages", venvDir]';
@@ -131,6 +149,12 @@ const RELATIVE_FILES = [
   "node_modules/@truefoundry/trueforge-core/dist/core/sandbox/provider/TFYSandboxProvider.mjs",
   "node_modules/@truefoundry/trueforge-core/dist/agent-session/builtinsFromSpec.js",
   "node_modules/@truefoundry/trueforge-core/dist/agent-session/builtinsFromSpec.mjs",
+  "node_modules/@truefoundry/trueforge-core/dist/core/runtime/AgentThread.js",
+  "node_modules/@truefoundry/trueforge-core/dist/core/runtime/AgentThread.mjs",
+  "node_modules/@truefoundry/trueforge-core/dist/agent-session/SessionHandle.js",
+  "node_modules/@truefoundry/trueforge-core/dist/agent-session/SessionHandle.mjs",
+  "node_modules/@truefoundry/trueforge-core/dist/core/capabilities/builtins/DynamicSubAgents.js",
+  "node_modules/@truefoundry/trueforge-core/dist/core/capabilities/builtins/DynamicSubAgents.mjs",
   "node_modules/@truefoundry/trueforge/dist/main.js",
 ];
 
@@ -152,6 +176,30 @@ function patchZoneinfo(source: string): { text: string; changed: boolean } {
   return { text: source.replace(ZONEINFO_FROM, ZONEINFO_TO), changed: true };
 }
 
+function patchAgentThread(source: string): { text: string; changed: boolean } {
+  if (source.includes(SUBAGENT_USER_INSTRUCTIONS_FROM)) {
+    return {
+      text: source.replace(SUBAGENT_USER_INSTRUCTIONS_FROM, SUBAGENT_USER_INSTRUCTIONS_TO),
+      changed: true,
+    };
+  }
+  return { text: source, changed: false };
+}
+
+function patchSessionHandle(source: string): { text: string; changed: boolean } {
+  if (source.includes(SUBAGENT_INSTRUCTION_FROM)) {
+    return { text: source.replace(SUBAGENT_INSTRUCTION_FROM, SUBAGENT_INSTRUCTION_TO), changed: true };
+  }
+  return { text: source, changed: false };
+}
+
+function patchSubAgents(source: string): { text: string; changed: boolean } {
+  if (source.includes(SUBAGENT_TASK_NOTE_FROM) && !source.includes("Include today's date")) {
+    return { text: source.replace(SUBAGENT_TASK_NOTE_FROM, SUBAGENT_TASK_NOTE_TO), changed: true };
+  }
+  return { text: source, changed: false };
+}
+
 /** main.js carries the venv flag and the linux jail read list. */
 function patchMain(source: string): { text: string; changed: boolean } {
   const venv = patchVenv(source);
@@ -161,12 +209,19 @@ function patchMain(source: string): { text: string; changed: boolean } {
 
 function alreadyPatched(
   source: string,
-  kind: "deferred" | "sandbox" | "clock" | "exec-timeout" | "venv",
+  kind: "deferred" | "sandbox" | "clock" | "exec-timeout" | "venv" | "agent-thread" | "session-handle" | "sub-agents",
 ): boolean {
   if (kind === "deferred") return source.includes("!server.preload");
   if (kind === "clock") return source.includes(CLOCK_OFF);
   if (kind === "exec-timeout") return source.includes(EXEC_TIMEOUT_TO);
   if (kind === "venv") return source.includes(VENV_TO) && source.includes(ZONEINFO_TO);
+  if (kind === "agent-thread") return source.includes(SUBAGENT_USER_INSTRUCTIONS_TO);
+  if (kind === "session-handle") {
+    return source.includes(`line.startsWith("Today's date")`);
+  }
+  if (kind === "sub-agents") {
+    return source.includes("Include today's date and the user's timezone");
+  }
   return (
     source.includes("exec can reach these MCP servers") &&
     source.includes("buildSchemaSection(builder) {\n    return;")
@@ -188,7 +243,13 @@ export function applyTrueForgeSidecarPatches(root = process.cwd()): string[] {
           ? "exec-timeout"
           : relative.includes("trueforge/dist/main")
             ? "venv"
-            : "sandbox";
+            : relative.includes("AgentThread")
+              ? "agent-thread"
+              : relative.includes("SessionHandle")
+                ? "session-handle"
+                : relative.includes("DynamicSubAgents")
+                  ? "sub-agents"
+                  : "sandbox";
     const next =
       kind === "clock"
         ? patchClock(source)
@@ -196,7 +257,13 @@ export function applyTrueForgeSidecarPatches(root = process.cwd()): string[] {
           ? patchExecTimeout(source)
           : kind === "venv"
             ? patchMain(source)
-            : patchText(source, kind);
+            : kind === "agent-thread"
+              ? patchAgentThread(source)
+              : kind === "session-handle"
+                ? patchSessionHandle(source)
+                : kind === "sub-agents"
+                  ? patchSubAgents(source)
+                  : patchText(source, kind);
     if (next.changed) {
       fs.writeFileSync(file, next.text);
       patched.push(relative);

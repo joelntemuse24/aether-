@@ -132,6 +132,41 @@ describe("TrueForge sidecar patch", () => {
     assert.deepEqual(applyTrueForgeSidecarPatches(root), []);
   });
 
+  it("gives sub-agent and task prompts the parent's date and timezone lines", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tf-subagent-"));
+    const files = [
+      "node_modules/@truefoundry/trueforge-core/dist/core/runtime/AgentThread.js",
+      "node_modules/@truefoundry/trueforge-core/dist/core/runtime/AgentThread.mjs",
+      "node_modules/@truefoundry/trueforge-core/dist/agent-session/SessionHandle.js",
+      "node_modules/@truefoundry/trueforge-core/dist/agent-session/SessionHandle.mjs",
+      "node_modules/@truefoundry/trueforge-core/dist/core/capabilities/builtins/DynamicSubAgents.js",
+      "node_modules/@truefoundry/trueforge-core/dist/core/capabilities/builtins/DynamicSubAgents.mjs",
+    ];
+    for (const relative of files) {
+      const from = path.join(process.cwd(), relative);
+      const to = path.join(root, relative);
+      fs.mkdirSync(path.dirname(to), { recursive: true });
+      fs.copyFileSync(from, to);
+    }
+    const patched = applyTrueForgeSidecarPatches(root);
+    assert.deepEqual(patched.sort(), [...files].sort());
+    for (const relative of files.filter((file) => file.includes("AgentThread"))) {
+      const text = fs.readFileSync(path.join(root, relative), "utf8");
+      assert.match(text, /if \(userInstruction\?\.trim\(\)\) \{/);
+      assert.doesNotMatch(text, /!this\.parent && userInstruction/);
+    }
+    for (const relative of files.filter((file) => file.includes("SessionHandle"))) {
+      const text = fs.readFileSync(path.join(root, relative), "utf8");
+      assert.match(text, /line\.startsWith\("Today's date"\)/);
+      assert.doesNotMatch(text, /instruction: void 0,/);
+    }
+    for (const relative of files.filter((file) => file.includes("DynamicSubAgents"))) {
+      const text = fs.readFileSync(path.join(root, relative), "utf8");
+      assert.match(text, /Include today's date and the user's timezone in the instruction/);
+    }
+    assert.deepEqual(applyTrueForgeSidecarPatches(root), []);
+  });
+
   it("warns when a present file does not contain the expected patch text", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "tf-patch-miss-"));
     const relative = "node_modules/@truefoundry/trueforge-core/dist/core/runtime/DeferredTool.js";

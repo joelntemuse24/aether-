@@ -171,6 +171,9 @@ describe("harness rules", () => {
       "node_modules/@truefoundry/trueforge-core/dist/core/sandbox/Sandbox.js",
       "node_modules/@truefoundry/trueforge-core/dist/agent-session/builtinsFromSpec.mjs",
       "node_modules/@truefoundry/trueforge/dist/main.js",
+      "node_modules/@truefoundry/trueforge-core/dist/core/runtime/AgentThread.js",
+      "node_modules/@truefoundry/trueforge-core/dist/agent-session/SessionHandle.mjs",
+      "node_modules/@truefoundry/trueforge-core/dist/core/capabilities/builtins/DynamicSubAgents.mjs",
     ];
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-patch-"));
     for (const relative of files) {
@@ -186,6 +189,12 @@ describe("harness rules", () => {
       false,
     );
     assert.match(fs.readFileSync(path.join(temp, files[3]!), "utf8"), /--system-site-packages/);
+    assert.match(fs.readFileSync(path.join(temp, files[4]!), "utf8"), /if \(userInstruction\?\.trim\(\)\) \{/);
+    assert.match(fs.readFileSync(path.join(temp, files[5]!), "utf8"), /line\.startsWith\("Today's date"\)/);
+    assert.match(
+      fs.readFileSync(path.join(temp, files[6]!), "utf8"),
+      /Include today's date and the user's timezone in the instruction/,
+    );
   });
 
   it("does not return raw error.message from API routes", () => {
