@@ -479,6 +479,31 @@ export function SettingsDialog() {
                   </button>
                 </div>
 
+                {settings.accessMode === "hosted" && (
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="openrouter-key"
+                      className="text-[11px] font-medium uppercase tracking-wider text-[var(--muted-soft)]"
+                    >
+                      OpenRouter key
+                    </label>
+                    <p className="text-[12px] leading-relaxed text-[var(--muted-soft)]">
+                      Optional. Adds OpenRouter models and a backup if the hosted model fails.
+                      The key stays in this browser and is sent only with your chat request.
+                    </p>
+                    <input
+                      id="openrouter-key"
+                      type="password"
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder="sk-or-..."
+                      value={settings.openrouterKey}
+                      onChange={(e) => updateSettings({ openrouterKey: e.target.value })}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)] focus:border-[var(--accent)]/40"
+                    />
+                  </div>
+                )}
+
                 {settings.accessMode === "byok" && (
                   <div className="space-y-3">
                     <div className="space-y-1.5">

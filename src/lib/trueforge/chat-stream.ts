@@ -12,6 +12,8 @@ import {
   type UiChunk,
 } from "./ui-chunks";
 import { buildTrueForgeUserContent } from "./user-content";
+import { openRouterFallbackModel, redactSecret } from "@/lib/openrouter/models";
+import { shouldBackupBuzzWithOpenRouter, writeOpenRouterAnswer } from "@/lib/openrouter/stream";
 
 export function shouldRetryBuzzTurn(input: {
   failedBeforeOutput: boolean;
@@ -159,6 +161,7 @@ export async function streamTrueForgeHostedChat(input: {
   abortSignal?: AbortSignal;
   toolContext?: Omit<TrueForgeToolContext, "exp"> | null;
   modelId?: string | null;
+  openRouterKey?: string | null;
 }): Promise<Response> {
   const conversationId = input.conversationId || `guest-${crypto.randomUUID()}`;
   const instructions = trueforgeInstructions(input.system);
@@ -222,7 +225,30 @@ export async function streamTrueForgeHostedChat(input: {
         }
         await cancelSidecarTurn(session.id);
       }
-      if (outcome.failedBeforeOutput && !input.abortSignal?.aborted) {
+      const openRouterKey = input.openRouterKey?.trim() ?? "";
+      if (
+        shouldBackupBuzzWithOpenRouter({
+          failedBeforeOutput: outcome.failedBeforeOutput,
+          userAborted: !!input.abortSignal?.aborted,
+          hasKey: !!openRouterKey,
+        })
+      ) {
+        const backup = await writeOpenRouterAnswer({
+          apiKey: openRouterKey,
+          model: openRouterFallbackModel(modelId),
+          system: input.system,
+          userText: input.userText,
+          write,
+          abortSignal: input.abortSignal,
+          statusLine: "Buzz failed, answering via OpenRouter.",
+        });
+        if (!backup.ok) {
+          write({
+            type: "error",
+            errorText: hostedTurnErrorCopy(redactSecret(backup.errorText, openRouterKey), modelId),
+          });
+        }
+      } else if (outcome.failedBeforeOutput && !input.abortSignal?.aborted) {
         write({ type: "error", errorText: hostedTurnErrorCopy(outcome.errorText, modelId) });
       }
       writer.write({

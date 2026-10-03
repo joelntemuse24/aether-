@@ -161,6 +161,9 @@ export function buildChatHeaders(settings: AppSettings): Record<string, string> 
       "x-speed-tier": "expert",
       "x-tools": settings.enableTools ? "1" : "0",
       "x-tool-approval-mode": parseToolApprovalMode(settings.toolApprovalMode),
+      ...(settings.openrouterKey.trim()
+        ? { "x-openrouter-key": settings.openrouterKey.trim() }
+        : {}),
     };
   }
   const key = resolveApiKey(settings);

@@ -61,6 +61,7 @@ export async function POST(req: Request) {
     const provider = (getHeader(req, "x-provider") || "openrouter") as ProviderId;
     const baseURL = getHeader(req, "x-base-url");
     const headerModel = getHeader(req, "x-model");
+    const openRouterKey = getHeader(req, "x-openrouter-key");
     const hosted = accessMode === "hosted";
 
     if (hosted) {
@@ -275,6 +276,24 @@ export async function POST(req: Request) {
 
     // TrueForge runs hosted Expert turns when the sidecar is up. Otherwise the
     // existing in-process / Hermes path handles the turn (Vercel has no sidecar).
+    const { isOpenRouterModelId } = await import("@/lib/openrouter/models");
+    const { openRouterChatResponse } = await import("@/lib/openrouter/stream");
+    if (hosted && isOpenRouterModelId(incomingModel || "")) {
+      if (!openRouterKey) {
+        return new Response(
+          JSON.stringify({ error: "Add an OpenRouter key in Settings to use that model." }),
+          { status: 401, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return openRouterChatResponse({
+        apiKey: openRouterKey,
+        model: incomingModel,
+        system,
+        userText: lastUserText(enrichedMessages) || lastUserText(messages),
+        abortSignal: req.signal,
+      });
+    }
+
     const { trueforgeSidecarReachable } = await import("@/lib/trueforge/config");
     if (hosted && (await trueforgeSidecarReachable())) {
       const { streamTrueForgeHostedChat } = await import("@/lib/trueforge/chat-stream");
@@ -293,6 +312,7 @@ export async function POST(req: Request) {
         attachments,
         abortSignal: req.signal,
         modelId: buzzModelId,
+        openRouterKey: openRouterKey || null,
         toolContext: {
           userId,
           conversationId,

@@ -10,7 +10,11 @@ import {
   knownBuzzChatModels,
   type BuzzChatModel,
 } from "@/lib/buzz/models";
+import { OPENROUTER_CURATED_MODELS } from "@/lib/openrouter/models";
+import { loadSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
+
+type PickerModel = { id: string; label: string; group: "OpenAI" | "Anthropic" | "OpenRouter" };
 
 function readStoredModel(): string {
   if (typeof window === "undefined") return DEFAULT_BUZZ_MODEL;
@@ -35,7 +39,8 @@ function rememberUnavailable(id: string) {
 
 export function BuzzModelPicker() {
   const [open, setOpen] = useState(false);
-  const [models, setModels] = useState<BuzzChatModel[]>(knownBuzzChatModels);
+  const [models, setModels] = useState<PickerModel[]>(knownBuzzChatModels);
+  const [openRouterModels, setOpenRouterModels] = useState<PickerModel[]>([]);
   const [selected, setSelected] = useState(DEFAULT_BUZZ_MODEL);
   const [unavailable, setUnavailable] = useState<string[]>([]);
   const [active, setActive] = useState(0);
@@ -53,6 +58,24 @@ export function BuzzModelPicker() {
         setModels(body.models);
       })
       .catch(() => undefined);
+    const openRouterKey = loadSettings().openrouterKey.trim();
+    if (openRouterKey) {
+      fetch("/api/openrouter/models", { headers: { "x-openrouter-key": openRouterKey } })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((body: { models?: { id: string; label: string }[] } | null) => {
+          const rows = body?.models?.length ? body.models : OPENROUTER_CURATED_MODELS;
+          if (!cancelled) {
+            setOpenRouterModels(rows.map((model) => ({ ...model, group: "OpenRouter" as const })));
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setOpenRouterModels(
+              OPENROUTER_CURATED_MODELS.map((model) => ({ ...model, group: "OpenRouter" as const })),
+            );
+          }
+        });
+    }
     return () => {
       cancelled = true;
     };
@@ -88,10 +111,11 @@ export function BuzzModelPicker() {
   const ordered = [
     ...models.filter((model) => model.group === "OpenAI"),
     ...models.filter((model) => model.group === "Anthropic"),
+    ...openRouterModels,
   ];
   const current = ordered.find((model) => model.id === selected) ?? ordered[0];
   const label = current?.label ?? buzzModelLabel(selected);
-  const groups = ["OpenAI", "Anthropic"] as const;
+  const groups = ["OpenAI", "Anthropic", "OpenRouter"] as const;
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (!open && (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ")) {
