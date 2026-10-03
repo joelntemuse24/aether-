@@ -123,12 +123,22 @@ export async function refreshGoogleAccessToken(
  */
 export async function getValidDriveAccessToken(
   userId: string,
-): Promise<{ accessToken: string; email?: string } | null> {
+): Promise<{
+  accessToken: string;
+  email?: string;
+  refreshToken: string;
+  expiresAt: number;
+} | null> {
   const stored = await readDriveCookie();
   if (!stored || stored.userId !== userId) return null;
 
   if (stored.accessToken && Date.now() < stored.expiresAt) {
-    return { accessToken: stored.accessToken, email: stored.email };
+    return {
+      accessToken: stored.accessToken,
+      email: stored.email,
+      refreshToken: stored.refreshToken,
+      expiresAt: stored.expiresAt,
+    };
   }
 
   const refreshed = await refreshGoogleAccessToken(stored.refreshToken);
@@ -143,5 +153,10 @@ export async function getValidDriveAccessToken(
     expiresAt: refreshed.expiresAt,
   });
 
-  return { accessToken: refreshed.accessToken, email: stored.email };
+  return {
+    accessToken: refreshed.accessToken,
+    email: stored.email,
+    refreshToken: stored.refreshToken,
+    expiresAt: refreshed.expiresAt,
+  };
 }

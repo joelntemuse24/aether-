@@ -2,7 +2,7 @@ import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import type { IncomingAttachment } from "@/lib/chat-turn";
 import { buzzModelFqn, buzzModelUnavailableCopy, isBuzzModelUnavailableError } from "@/lib/buzz/models";
 import { encodeTrueForgeApproval } from "./approvals";
-import { trueforgeInstructions } from "./instructions";
+import { TOOLS_UNAVAILABLE_NOTICE, trueforgeInstructions } from "./instructions";
 import { trueforgeClient, trueforgeSessionId } from "./sessions";
 import type { TrueForgeToolContext } from "./tool-context";
 import {
@@ -211,6 +211,11 @@ export async function streamTrueForgeHostedChat(input: {
         instructions,
         toolContext: input.toolContext,
       });
+      if (session.toolsAttached === false) {
+        write({ type: "text-start", id: "tf-no-tools" });
+        write({ type: "text-delta", id: "tf-no-tools", delta: TOOLS_UNAVAILABLE_NOTICE });
+        write({ type: "text-end", id: "tf-no-tools" });
+      }
       let outcome = {
         failedBeforeOutput: true,
         wroteError: false,

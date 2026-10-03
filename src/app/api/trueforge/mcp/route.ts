@@ -3,7 +3,7 @@ import { trueforgeToken } from "@/lib/trueforge/config";
 import { handleTrueForgeMcpRpc } from "@/lib/trueforge/mcp-http";
 import { readTrueForgeToolContext } from "@/lib/trueforge/tool-context";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 type Rpc = { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
 

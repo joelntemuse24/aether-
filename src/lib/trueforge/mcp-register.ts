@@ -1,29 +1,68 @@
 import type { TrueForge } from "@truefoundry/trueforge-sdk";
-import { trueforgeToken } from "./config";
+import { trueforgeOrigin, trueforgeToken } from "./config";
 import { AETHER_MCP_DEFERRED, AETHER_MCP_DIRECT } from "./mcp-http";
 import { signTrueForgeToolContext, type TrueForgeToolContext } from "./tool-context";
 
 const signedTokens = new Map<string, { token: string; key: string; exp: number }>();
+export const MAX_SIGNED_TOOL_TOKENS = 200;
+let loggedMissingOrigin = false;
+let mcpDeleteUnsupported = false;
 
+export function resetAetherMcpRegisterState(): void {
+  signedTokens.clear();
+  loggedMissingOrigin = false;
+  mcpDeleteUnsupported = false;
+}
+
+/**
+ * Origin the VM sidecar calls back to. Prefer `AETHER_APP_URL` (the public
+ * production domain). `VERCEL_URL` is a deployment URL and Deployment
+ * Protection answers it with 401, so it is not a fallback.
+ */
 export function aetherPublicOrigin(): string | null {
   const explicit = (process.env.AETHER_APP_URL || process.env.AUTH_URL || "")
     .trim()
     .replace(/\/$/, "");
   if (explicit) return explicit;
-  const vercel = (process.env.VERCEL_URL ?? "").trim().replace(/^https?:\/\//, "");
-  if (vercel) return `https://${vercel}`;
-  if (process.env.NODE_ENV === "production") return null;
-  return "http://127.0.0.1:3000";
+  if (process.env.NODE_ENV !== "production") return "http://127.0.0.1:3000";
+  if (!loggedMissingOrigin) {
+    loggedMissingOrigin = true;
+    console.error(
+      "[trueforge] AETHER_APP_URL is not set. Tool registration is skipped. VERCEL_URL is not used because Deployment Protection rejects VM callbacks.",
+    );
+  }
+  return null;
 }
 
 export function aetherMcpServerName(conversationId: string): string {
   return aetherMcpServerNames(conversationId).direct;
 }
 
+/**
+ * One server per conversation. Standalone TrueForge does not forward per-turn
+ * headers to MCP (`gatewayTurnHeaders` is empty unless TrueFoundry gateway
+ * mode is on), so a single shared server would reuse one user's context.
+ */
 export function aetherMcpServerNames(conversationId: string): { direct: string; deferred: string } {
   const clean = conversationId.toLowerCase().replace(/[^a-z0-9]/g, "");
   const suffix = (clean || "chat").slice(0, 32);
   return { direct: `aether-${suffix}`, deferred: `aetherx-${suffix}` };
+}
+
+/** Fields safe to seal. Connector tokens are resolved on the tool call. */
+export function sealableToolContext(
+  input: Omit<TrueForgeToolContext, "exp">,
+): Omit<TrueForgeToolContext, "exp"> {
+  return {
+    userId: input.userId,
+    conversationId: input.conversationId,
+    projectId: input.projectId,
+    runId: input.runId,
+    approvalMode: input.approvalMode,
+    hasMemory: input.hasMemory,
+    hasDrive: input.hasDrive,
+    hasGitHub: input.hasGitHub,
+  };
 }
 
 /** Memory, Drive, GitHub, and project search are the only tools beyond the preloaded web set. */
@@ -38,6 +77,56 @@ function contextKey(input: Omit<TrueForgeToolContext, "exp">): string {
   return JSON.stringify(input);
 }
 
+export function signedToolTokenCount(): number {
+  return signedTokens.size;
+}
+
+/** Drop expired signed contexts, then the oldest entries past the cap. */
+export function evictSignedToolTokens(now = Date.now()): string[] {
+  const dropped: string[] = [];
+  for (const [id, row] of signedTokens) {
+    if (row.exp <= now) {
+      signedTokens.delete(id);
+      dropped.push(id);
+    }
+  }
+  while (signedTokens.size > MAX_SIGNED_TOOL_TOKENS) {
+    const oldest = signedTokens.keys().next().value;
+    if (!oldest) break;
+    signedTokens.delete(oldest);
+    dropped.push(oldest);
+  }
+  return dropped;
+}
+
+/**
+ * TrueForge 0.2.1 has no MCP delete method. Try DELETE once; a 405 means this
+ * sidecar cannot remove the row, so later evictions only drop the local cache.
+ */
+export async function removeAetherMcpServer(name: string): Promise<boolean> {
+  if (mcpDeleteUnsupported || !name) return false;
+  const token = trueforgeToken();
+  if (!token) return false;
+  try {
+    const response = await fetch(
+      `${trueforgeOrigin()}/api/v1/settings/mcp-servers/${encodeURIComponent(name)}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(2_000),
+      },
+    );
+    if (response.status === 405 || response.status === 501) {
+      mcpDeleteUnsupported = true;
+      console.warn("[trueforge] Sidecar cannot delete MCP servers (HTTP " + response.status + ").");
+      return false;
+    }
+    return response.ok || response.status === 404;
+  } catch {
+    return false;
+  }
+}
+
 /** Reuse a signed context until it is close to expiry so later turns skip the upsert. */
 export function cachedToolContextToken(
   conversationId: string,
@@ -45,11 +134,19 @@ export function cachedToolContextToken(
   secret: string,
   now = Date.now(),
 ): string {
-  const key = contextKey(input);
+  evictSignedToolTokens(now);
+  const safe = sealableToolContext(input);
+  const key = contextKey(safe);
   const hit = signedTokens.get(conversationId);
-  if (hit && hit.key === key && hit.exp - now > 30 * 60 * 1000) return hit.token;
-  const token = signTrueForgeToolContext(input, secret, now);
+  if (hit && hit.key === key && hit.exp - now > 30 * 60 * 1000) {
+    signedTokens.delete(conversationId);
+    signedTokens.set(conversationId, hit);
+    return hit.token;
+  }
+  const token = signTrueForgeToolContext(safe, secret, now);
+  signedTokens.delete(conversationId);
   signedTokens.set(conversationId, { token, key, exp: now + 2 * 60 * 60 * 1000 });
+  evictSignedToolTokens(now);
   return token;
 }
 

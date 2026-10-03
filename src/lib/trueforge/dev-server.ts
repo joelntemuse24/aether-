@@ -7,8 +7,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  TRUEFORGE_PORT,
   trueforgeOrigin,
+  trueforgePort,
   trueforgeRemoteUrl,
   trueforgeSidecarEnabled,
 } from "./config";
@@ -56,12 +56,13 @@ async function ensureSidecar(): Promise<ChildProcess | null> {
   if (!fs.existsSync(cli)) {
     throw new Error(`TrueForge CLI missing at ${cli}.`);
   }
-  const child = spawn(process.execPath, [cli, "--port", String(TRUEFORGE_PORT)], {
+  const port = trueforgePort();
+  const child = spawn(process.execPath, [cli, "--port", String(port)], {
     env: {
       ...process.env,
       STANDALONE: "true",
       HOST: "127.0.0.1",
-      PORT: String(TRUEFORGE_PORT),
+      PORT: String(port),
       APP_DATA_DIR_SUFFIX: process.env.APP_DATA_DIR_SUFFIX || "aether",
       OUTBOUND_URL_ALLOWED_HOSTS: withLocalMcpHosts(process.env.OUTBOUND_URL_ALLOWED_HOSTS),
     },

@@ -4,6 +4,7 @@ import { fetchUrlText } from "@/lib/connectors/web-and-drive";
 import { resolveCurrentTime } from "@/lib/current-time";
 import { TOOL_NAMES } from "@/lib/tools";
 import { runWebSearch } from "@/lib/web-search";
+import { connectorTokensForToolCall } from "./connector-tokens";
 import type { TrueForgeToolContext } from "./tool-context";
 
 type Json = Record<string, unknown>;
@@ -162,14 +163,139 @@ export const AETHER_MCP_DEFERRED = AETHER_MCP_TOOL_NAMES.filter(
   (name) => !AETHER_MCP_DIRECT.includes(name) && name !== TOOL_NAMES.currentTime,
 );
 
+export const TOOL_RESULT_JSON_LIMIT = 24_000;
+const TRUNCATED = "[truncated]";
+
+/** Shorten string fields until the JSON fits. Never slice the encoded string itself. */
+export function toolResultJson(value: unknown, limit = TOOL_RESULT_JSON_LIMIT): string {
+  const full = safeStringify(value);
+  if (full.length <= limit) return full;
+  if (typeof value === "string") {
+    return JSON.stringify(trimText(value, Math.max(2, limit - 2)));
+  }
+  const current: unknown = JSON.parse(full) as unknown;
+  for (let pass = 0; pass < 16; pass++) {
+    const encoded = safeStringify(current);
+    if (encoded.length <= limit) return encoded;
+    if (!shortenLongestString(current, encoded.length - limit)) break;
+  }
+  const encoded = safeStringify(current);
+  if (encoded.length <= limit) return encoded;
+  return JSON.stringify({ ok: false, truncated: true, error: TRUNCATED });
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? "null";
+  } catch {
+    return JSON.stringify({ ok: false, error: "Tool result could not be encoded." });
+  }
+}
+
+function trimText(value: string, budget: number): string {
+  if (value.length + 2 <= budget) return value;
+  const room = Math.max(0, budget - TRUNCATED.length);
+  return value.slice(0, room) + TRUNCATED;
+}
+
+function shortenLongestString(node: unknown, overflow: number): boolean {
+  const found: {
+    parent?: Record<string, unknown> | unknown[];
+    key?: string | number;
+    length: number;
+  } = { length: 0 };
+  const visit = (current: unknown) => {
+    if (!current || typeof current !== "object") return;
+    if (Array.isArray(current)) {
+      current.forEach((item, index) => {
+        if (typeof item === "string" && item.length > found.length) {
+          found.parent = current;
+          found.key = index;
+          found.length = item.length;
+        } else visit(item);
+      });
+      return;
+    }
+    for (const [key, item] of Object.entries(current as Record<string, unknown>)) {
+      if (typeof item === "string" && item.length > found.length) {
+        found.parent = current as Record<string, unknown>;
+        found.key = key;
+        found.length = item.length;
+      } else visit(item);
+    }
+  };
+  visit(node);
+  if (!found.parent || found.key === undefined || found.length <= TRUNCATED.length) return false;
+  const parent = found.parent as Record<string | number, unknown>;
+  const current = String(parent[found.key]);
+  const room = Math.max(TRUNCATED.length, current.length - overflow - 8);
+  const next = current.slice(0, Math.max(0, room - TRUNCATED.length)) + TRUNCATED;
+  if (next === current) return false;
+  parent[found.key] = next;
+  return true;
+}
+
 function textResult(value: unknown, isError = false) {
   return {
-    content: [{ type: "text", text: JSON.stringify(value).slice(0, 24_000) }],
+    content: [{ type: "text", text: toolResultJson(value) }],
     ...(isError ? { isError: true } : {}),
   };
 }
 
+export function toolDeadlineMs(name: string): number {
+  if (name === TOOL_NAMES.browsePage) return 90_000;
+  if (name === TOOL_NAMES.webSearch) return 30_000;
+  if (name === TOOL_NAMES.fetchUrl) return 25_000;
+  return 20_000;
+}
+
+export class ToolDeadlineError extends Error {
+  constructor() {
+    super("This tool took too long and was stopped. Try a narrower request.");
+    this.name = "ToolDeadlineError";
+  }
+}
+
+export async function withToolDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new ToolDeadlineError()), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function liveContext(ctx: TrueForgeToolContext): Promise<TrueForgeToolContext> {
+  const tokens = await connectorTokensForToolCall({
+    userId: ctx.userId,
+    hasDrive: ctx.hasDrive,
+    hasGitHub: ctx.hasGitHub,
+    readDrive: async (userId) => {
+      const { getValidDriveAccessToken } = await import("@/lib/drive-session");
+      return getValidDriveAccessToken(userId);
+    },
+    readGitHub: async (userId) => {
+      const { getValidGitHubAccessToken } = await import("@/lib/github-session");
+      return getValidGitHubAccessToken(userId);
+    },
+  });
+  return {
+    ...ctx,
+    driveAccessToken: tokens.driveAccessToken,
+    githubAccessToken: tokens.githubAccessToken,
+  };
+}
+
 async function callTool(name: string, args: Json, ctx: TrueForgeToolContext | null) {
+  return withToolDeadline(runTool(name, args, ctx), toolDeadlineMs(name));
+}
+
+async function runTool(name: string, args: Json, ctx: TrueForgeToolContext | null) {
   if (name === TOOL_NAMES.webSearch) {
     const query = typeof args.query === "string" ? args.query : "";
     if (!query.trim()) return textResult({ ok: false, error: "query is required." }, true);
@@ -189,10 +315,29 @@ async function callTool(name: string, args: Json, ctx: TrueForgeToolContext | nu
     return textResult(resolveCurrentTime({ timeZone }));
   }
   if (!ctx) return textResult({ ok: false, error: "This tool needs a signed-in chat." }, true);
+  const live = await liveContext(ctx);
+  if (ctx.hasDrive && !live.driveAccessToken) {
+    return textResult({ ok: false, error: "Google Drive needs to be connected again." }, true);
+  }
+  if (ctx.hasGitHub && name.startsWith("github_") && !live.githubAccessToken) {
+    return textResult({ ok: false, error: "GitHub needs to be connected again." }, true);
+  }
   const result = await executeAetherTool({
     name,
     args,
-    ctx: { ...ctx, skipGate: false },
+    ctx: {
+      userId: live.userId,
+      conversationId: live.conversationId,
+      projectId: live.projectId,
+      runId: live.runId,
+      approvalMode: live.approvalMode,
+      hasMemory: live.hasMemory,
+      hasDrive: live.hasDrive,
+      hasGitHub: live.hasGitHub,
+      driveAccessToken: live.driveAccessToken,
+      githubAccessToken: live.githubAccessToken,
+      skipGate: false,
+    },
   });
   return textResult(result, result.ok === false);
 }
