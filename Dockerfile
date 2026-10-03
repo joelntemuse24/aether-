@@ -1,7 +1,7 @@
-# Aether chat — long-lived Next.js (`next start`).
-# Optional Hermes gateway image: deploy/hermes/Dockerfile
+# Deprecated. Production is Vercel plus the Contabo sidecar, not this image.
+# Kept so an old Railway checkout still builds. Node matches the repo engines field.
 
-FROM node:20-bookworm-slim
+FROM node:22.14.0-bookworm-slim
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 

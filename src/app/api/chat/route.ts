@@ -285,6 +285,7 @@ export async function POST(req: Request) {
           { status: 401, headers: { "Content-Type": "application/json" } },
         );
       }
+      console.info("[api/chat] engine", { engine: "openrouter", conversationId });
       return openRouterChatResponse({
         apiKey: openRouterKey,
         model: incomingModel,
@@ -305,6 +306,7 @@ export async function POST(req: Request) {
         headerModel,
         models: await listBuzzChatModels(),
       });
+      console.info("[api/chat] engine", { engine: "trueforge", conversationId });
       return streamTrueForgeHostedChat({
         conversationId,
         userText: lastUserText(enrichedMessages) || lastUserText(messages),
@@ -357,6 +359,7 @@ export async function POST(req: Request) {
         driveAccessToken: driveToken?.accessToken,
         githubAccessToken: githubToken?.accessToken,
       });
+      console.info("[api/chat] engine", { engine: "hermes", conversationId });
       return proxyChatToHermes({
         messages: enrichedMessages,
         system,
@@ -413,6 +416,7 @@ export async function POST(req: Request) {
       });
     }
 
+    console.info("[api/chat] engine", { engine: "legacy", conversationId });
     return streamLegacyLocalChat({
       hosted,
       requestedModel,

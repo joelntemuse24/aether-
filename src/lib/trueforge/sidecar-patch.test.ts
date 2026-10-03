@@ -80,4 +80,26 @@ describe("TrueForge sidecar patch", () => {
     assert.equal(fs.readFileSync(file, "utf8").includes("currentDateTime({ tracing })"), false);
     assert.deepEqual(applyTrueForgeSidecarPatches(root), []);
   });
+
+  it("warns when a present file does not contain the expected patch text", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tf-patch-miss-"));
+    const relative = "node_modules/@truefoundry/trueforge-core/dist/core/runtime/DeferredTool.js";
+    const file = path.join(root, relative);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "function unrelated() { return 1; }\n");
+    const warnings: string[] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      assert.deepEqual(applyTrueForgeSidecarPatches(root), []);
+      assert.equal(
+        warnings.some((line) => line.includes(relative) && line.includes("expected text")),
+        true,
+      );
+    } finally {
+      console.warn = original;
+    }
+  });
 });

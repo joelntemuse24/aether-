@@ -76,7 +76,7 @@ function resolveAuth(): ProbeAuth {
   };
 }
 
-function resolveTiers(opts: ProbeCliOptions, _smoke: boolean): SpeedTier[] {
+function resolveTiers(opts: ProbeCliOptions): SpeedTier[] {
   const requested = (() => {
     if (opts.tiers?.length) return [...new Set(opts.tiers)];
     const env = process.env.AETHER_PROBE_TIERS?.trim();
@@ -119,7 +119,7 @@ export async function runProbe(opts: ProbeCliOptions = {}): Promise<ProbeReport>
     ids: opts.ids,
     categories: opts.categories,
   });
-  const tiers = resolveTiers(opts, smoke);
+  const tiers = resolveTiers(opts);
   const cases = expandCases(prompts, tiers);
   const baseUrl = resolveBaseUrl(opts);
   const wantLive = opts.live === true || (Boolean(baseUrl) && opts.offline !== true);

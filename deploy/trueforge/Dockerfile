@@ -1,5 +1,5 @@
 # Always-on TrueForge sidecar. TLS stays in front (Caddy or a Cloudflare tunnel).
-FROM node:22-bookworm-slim
+FROM node:22.14.0-bookworm-slim
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./

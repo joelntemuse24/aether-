@@ -195,42 +195,6 @@ function decodeDdgHref(href: string): string {
   }
 }
 
-async function searchBrave(
-  query: string,
-  signal: AbortSignal,
-): Promise<WebSearchResult[]> {
-  const key = process.env.BRAVE_SEARCH_API_KEY?.trim();
-  if (!key) return [];
-
-  const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(
-    query,
-  )}&count=6`;
-  const res = await fetch(url, {
-    signal,
-    headers: {
-      Accept: "application/json",
-      "X-Subscription-Token": key,
-    },
-  });
-  if (!res.ok) return [];
-
-  const parsed = await readJsonObject(res);
-  if (!parsed.ok) return [];
-
-  const web = parsed.data.web as
-    | { results?: Array<{ title?: string; description?: string; url?: string }> }
-    | undefined;
-
-  return (web?.results ?? [])
-    .filter((r) => r.title && (r.description || r.url))
-    .map((r) => ({
-      title: r.title!,
-      snippet: (r.description || "").slice(0, 600),
-      url: r.url,
-    }))
-    .slice(0, 6);
-}
-
 /**
  * Keyless DuckDuckGo HTML results — the Instant Answer API is usually empty
  * for financial / current queries; the HTML endpoint still returns real links.

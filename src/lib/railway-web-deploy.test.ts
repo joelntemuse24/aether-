@@ -9,7 +9,7 @@ function read(rel: string): string {
   return readFileSync(join(root, rel), "utf8");
 }
 
-describe("Railway Next.js product deploy", () => {
+describe("deprecated Railway files", () => {
   const railwayToml = read("railway.toml");
   const dockerfile = read("Dockerfile");
   const readme = read("README.md");
@@ -30,10 +30,10 @@ describe("Railway Next.js product deploy", () => {
     assert.match(railwayToml, /restartPolicyType = "ON_FAILURE"/);
   });
 
-  it("documents Railway as the product deploy and Hermes as optional", () => {
-    assert.match(readme, /Railway/);
-    assert.match(readme, /next start/);
-    assert.match(readme, /deprecated|optional/i);
+  it("marks the Railway files deprecated and Hermes as optional", () => {
+    assert.match(readme, /Vercel/);
+    assert.match(readme, /railway\.toml` are \*\*deprecated\*\*/);
+    assert.match(railwayToml, /Deprecated/);
     assert.match(envExample, /HERMES_ENABLED=1/);
     assert.match(envExample, /deprecated|optional|not the default/i);
     assert.match(envExample, /OPENROUTER_API_KEY/);

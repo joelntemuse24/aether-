@@ -110,7 +110,16 @@ const RELATIVE_FILES = [
   "node_modules/@truefoundry/trueforge-core/dist/agent-session/builtinsFromSpec.mjs",
 ];
 
-/** Patch the installed sidecar package. Missing files are skipped. */
+function alreadyPatched(source: string, kind: "deferred" | "sandbox" | "clock"): boolean {
+  if (kind === "deferred") return source.includes("!server.preload");
+  if (kind === "clock") return source.includes(CLOCK_OFF);
+  return (
+    source.includes("exec can reach these MCP servers") &&
+    source.includes("buildSchemaSection(builder) {\n    return;")
+  );
+}
+
+/** Patch the installed sidecar package. Missing files are skipped. A file that is present but does not contain the expected text is warned. */
 export function applyTrueForgeSidecarPatches(root = process.cwd()): string[] {
   const patched: string[] = [];
   for (const relative of RELATIVE_FILES) {
@@ -123,9 +132,14 @@ export function applyTrueForgeSidecarPatches(root = process.cwd()): string[] {
         ? "clock"
         : "sandbox";
     const next = kind === "clock" ? patchClock(source) : patchText(source, kind);
-    if (!next.changed) continue;
-    fs.writeFileSync(file, next.text);
-    patched.push(relative);
+    if (next.changed) {
+      fs.writeFileSync(file, next.text);
+      patched.push(relative);
+      continue;
+    }
+    if (!alreadyPatched(source, kind)) {
+      console.warn(`[trueforge] sidecar patch skipped ${relative}: expected text was not found`);
+    }
   }
   return patched;
 }

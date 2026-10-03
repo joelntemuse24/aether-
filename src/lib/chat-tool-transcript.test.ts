@@ -82,8 +82,15 @@ function assistantWithArtifact(id: string): UIMessage {
 
 function installLocalStorage() {
   const map = new Map<string, string>();
-  const localStorage = {
+  const localStorage: Storage = {
+    get length() {
+      return map.size;
+    },
+    clear() {
+      map.clear();
+    },
     getItem: (key: string) => map.get(key) ?? null,
+    key: (index: number) => [...map.keys()][index] ?? null,
     setItem: (key: string, value: string) => {
       map.set(key, value);
     },
@@ -91,8 +98,8 @@ function installLocalStorage() {
       map.delete(key);
     },
   };
-  const globalWithWindow = globalThis as typeof globalThis & {
-    window?: { localStorage: typeof localStorage; dispatchEvent: (event?: Event) => boolean };
+  const globalWithWindow = globalThis as {
+    window?: { localStorage: Storage; dispatchEvent: (event?: Event) => boolean };
   };
   const previous = globalWithWindow.window;
   globalWithWindow.window = {
@@ -101,7 +108,7 @@ function installLocalStorage() {
   };
   return () => {
     if (previous === undefined) {
-      delete globalWithWindow.window;
+      Reflect.deleteProperty(globalWithWindow, "window");
     } else {
       globalWithWindow.window = previous;
     }

@@ -145,7 +145,6 @@ const storage = {
 
 const threadsKey = `${PREFIX}threads`;
 const messagesKey = (id: string) => `${PREFIX}messages:${id}`;
-const AI_SDK_FORMAT = "ai-sdk/v6";
 
 export function listLocalThreads(): StoredThread[] {
   return loadThreads();
