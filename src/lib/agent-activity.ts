@@ -715,7 +715,7 @@ export type ActivitySearchHit = {
   snippet?: string;
 };
 
-/** Completed web_search + fetch_url hits — rendered as cards after the answer. */
+/** Completed web_search + fetch_url hits for the pages pill and results sheet. */
 export function collectWebSearchHits(
   parts: readonly ActivityPart[] | undefined,
 ): ActivitySearchHit[] {
@@ -723,7 +723,13 @@ export function collectWebSearchHits(
     id: source.id,
     title: source.title,
     url: source.url,
+    snippet: source.snippet,
   }));
+}
+
+export function sourcePagesLabel(count: number): string {
+  const n = Math.max(0, Math.floor(count));
+  return n === 1 ? "1 page" : `${n} pages`;
 }
 
 const MAX_RENDERED_SOURCES = 8;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FC } from "react";
+import { XIcon } from "lucide-react";
 import { ChevronDownIcon } from "lucide-react";
 import { useAuiState } from "@assistant-ui/react";
 import { useHarness } from "@/providers/harness-provider";
@@ -17,6 +18,7 @@ import {
   shouldRevealActivityElapsed,
   shouldShowComposerActivity,
   sourceChipLabel,
+  sourcePagesLabel,
   syncActivityClock,
   type ActivityMessage,
   type ActivityView,
@@ -279,50 +281,136 @@ function hostLabel(url?: string): string | null {
   }
 }
 
+function faviconSrc(url?: string): string | null {
+  const host = hostLabel(url);
+  if (!host) return null;
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`;
+}
+
+const SourceFavicon: FC<{ url?: string; title: string }> = ({ url, title }) => {
+  const src = faviconSrc(url);
+  const [failed, setFailed] = useState(false);
+  const letter = (hostLabel(url) || title || "?").slice(0, 1).toUpperCase();
+  if (!src || failed) {
+    return <span className="aether-pages-pill__letter">{letter}</span>;
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      className="aether-pages-pill__favicon"
+      onError={() => setFailed(true)}
+    />
+  );
+};
+
 export const MessageSourceCards: FC = () => {
   const parts = useAuiState((s) => s.message?.parts);
   const hits = collectWebSearchHits(parts);
+  const [open, setOpen] = useState(false);
+  const titleId = useId();
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    closeRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   if (hits.length === 0) return null;
+  const faces = hits.slice(0, 3);
 
   return (
     <section className="aether-source-tray" aria-label="Sources">
-      <span className="aether-source-tray__count">
-        {hits.length} {hits.length === 1 ? "source" : "sources"}
-      </span>
-      <ul className="aether-source-tray__hosts aether-inline-sources">
-        {hits.map((hit, i) => {
-          const host = hostLabel(hit.url);
-          const chip = sourceChipLabel(hit);
-          const inner = (
-            <>
-              <span className="aether-inline-source__title">{hit.title}</span>
-              {chip ? (
-                <span className="aether-source-tray__pill">{chip}</span>
-              ) : host ? (
-                <span className="aether-inline-source__host">{host}</span>
-              ) : null}
-            </>
-          );
-          return (
-            <li key={`${hit.url ?? hit.title}:${i}`}>
-              {hit.url ? (
-                <a
-                  href={hit.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="aether-inline-source aether-source-card"
-                >
-                  {inner}
-                </a>
-              ) : (
-                <span className="aether-inline-source aether-source-card">
-                  {inner}
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      <button
+        type="button"
+        className="aether-pages-pill aether-source-tray__pill"
+        aria-expanded={open}
+        aria-controls={titleId}
+        onClick={() => setOpen(true)}
+      >
+        <span className="aether-pages-pill__faces" aria-hidden>
+          {faces.map((hit, i) => (
+            <SourceFavicon
+              key={`${hit.url ?? hit.title}:${i}`}
+              url={hit.url}
+              title={hit.title}
+            />
+          ))}
+        </span>
+        {sourcePagesLabel(hits.length)}
+      </button>
+      {open ? (
+        <div className="aether-web-results__layer">
+          <button
+            type="button"
+            className="aether-web-results__backdrop"
+            aria-label="Close web results"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            className="aether-web-results"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+          >
+            <header className="aether-web-results__header">
+              <h2 id={titleId} className="aether-web-results__title">
+                Web results
+              </h2>
+              <button
+                ref={closeRef}
+                type="button"
+                className="aether-web-results__close"
+                aria-label="Close"
+                onClick={() => setOpen(false)}
+              >
+                <XIcon className="size-4" />
+              </button>
+            </header>
+            <ul className="aether-source-tray__hosts aether-inline-sources">
+              {hits.map((hit, i) => {
+                const host = sourceChipLabel(hit) || hostLabel(hit.url);
+                const body = (
+                  <>
+                    <span className="aether-inline-source__title">{hit.title}</span>
+                    {hit.snippet ? (
+                      <span className="aether-web-result__snippet">{hit.snippet}</span>
+                    ) : null}
+                    <span className="aether-web-result__meta">
+                      <SourceFavicon url={hit.url} title={hit.title} />
+                      {host ? (
+                        <span className="aether-inline-source__host">{host}</span>
+                      ) : null}
+                    </span>
+                  </>
+                );
+                return (
+                  <li key={`${hit.url ?? hit.title}:${i}`}>
+                    {hit.url ? (
+                      <a
+                        href={hit.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="aether-inline-source aether-web-result"
+                      >
+                        {body}
+                      </a>
+                    ) : (
+                      <span className="aether-inline-source aether-web-result">{body}</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 };

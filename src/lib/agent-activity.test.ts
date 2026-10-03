@@ -672,6 +672,7 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(hits.length, 1);
     assert.equal(hits[0]?.title, "Time in Dublin");
     assert.equal(hits[0]?.url, "https://example.com/dublin");
+    assert.equal(hits[0]?.snippet, "Ireland uses IST in summer.");
     assert.equal(hits[0]?.id, "1");
     const fetched = collectWebSearchHits([
       {
@@ -1254,8 +1255,13 @@ describe("thread / composer copy stays honest", () => {
       sidebar.indexOf("Recent"),
     );
     assert.doesNotMatch(recent, /uppercase/);
-    assert.match(strip, /aether-source-card/);
-    assert.match(css, /aether-source-card/);
+    assert.match(strip, /aether-pages-pill/);
+    assert.match(strip, /Web results/);
+    assert.match(strip, /sourcePagesLabel/);
+    assert.match(readFileSync(new URL("./agent-activity.ts", import.meta.url), "utf8"), /pages/);
+    assert.doesNotMatch(strip, /aether-source-card/);
+    assert.match(css, /aether-pages-pill/);
+    assert.match(css, /aether-web-results/);
     assert.match(markdown, /aether-cite/);
     assert.match(markdown, /title=/);
   });
