@@ -127,6 +127,7 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
     assert.equal(on.spec.model.params?.reasoningEffort, "none");
     assert.equal(on.spec.config.sandbox.enabled, true);
     assert.equal(on.spec.config.ask_user_questions.enabled, false);
+    assert.equal(on.spec.config.generative_ui.enabled, false);
     assert.equal("skills" in on.spec, false);
     assert.equal(on.spec.mcpServers?.length, 1);
     const off = buildTrueForgeAgentSpec({
@@ -145,6 +146,7 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
     });
     assert.equal(claude.spec.model.params, undefined);
     assert.equal(claude.spec.config.ask_user_questions.enabled, false);
+    assert.equal(claude.spec.config.generative_ui.enabled, false);
     const astra = buildTrueForgeAgentSpec({
       modelName: "buzz/gpt-6-astra",
       instructions: "Answer.",
@@ -153,6 +155,7 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
     });
     assert.equal(astra.spec.model.params?.reasoningEffort, "low");
     assert.equal(astra.spec.config.ask_user_questions.enabled, false);
+    assert.equal(astra.spec.config.generative_ui.enabled, false);
   });
 
   it("tells every attached tool set to assume instead of asking the user to choose", () => {
@@ -161,6 +164,23 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
     assert.match(trueforgeToolNote(["web_search", "memory_search"]), assume);
     assert.match(TRUEFORGE_NO_TOOLS_NOTE, assume);
     assert.match(trueforgeInstructions(`${TOOLS_SYSTEM_PROMPT}\n\nMemory: likes tea`), assume);
+  });
+
+  it("teaches charts as artifact cards that open Preview and Code", () => {
+    const guest = trueforgeToolNote(["web_search", "fetch_url", "browse_page"]);
+    assert.match(guest, /fenced svg, html, or react/);
+    assert.match(guest, /artifact card that opens Preview and Code/);
+    assert.match(guest, /Do not emit an openui block/);
+    assert.equal(guest.includes("get_openui_instructions"), false);
+    assert.equal(guest.includes("create_artifact"), false);
+    const withArtifact = trueforgeToolNote([
+      "web_search",
+      "fetch_url",
+      "browse_page",
+      "create_artifact",
+    ]);
+    assert.match(withArtifact, /create_artifact using kind svg, html, react, or image/);
+    assert.match(TRUEFORGE_NO_TOOLS_NOTE, /artifact card that opens Preview and Code/);
   });
 
   it("upserts one preloaded server and skips aetherx", async () => {

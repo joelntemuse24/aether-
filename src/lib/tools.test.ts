@@ -26,6 +26,9 @@ describe("tool system prompt requires a grounded final answer", () => {
     const { TOOLS_SYSTEM_PROMPT } = await import("./tools");
     assert.match(TOOLS_SYSTEM_PROMPT, /Always end the turn with a clear, user-visible answer/);
     assert.match(TOOLS_SYSTEM_PROMPT, /make a reasonable assumption and state it/);
+    assert.match(TOOLS_SYSTEM_PROMPT, /"svg" or "image" for charts/);
+    assert.match(TOOLS_SYSTEM_PROMPT, /artifact card that opens Preview and Code/);
+    assert.equal(TOOLS_SYSTEM_PROMPT.includes("get_openui_instructions"), false);
     assert.match(TOOLS_SYSTEM_PROMPT, /numeric estimate|grounded estimate/i);
     assert.match(TOOLS_SYSTEM_PROMPT, /caveat/i);
   });

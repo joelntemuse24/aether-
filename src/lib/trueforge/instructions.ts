@@ -6,12 +6,14 @@ Use web_search for live facts (weather, news, prices), then fetch_url or browse_
 memory_search, project_knowledge_search, drive_search, drive_read, and github_* read the signed-in user's data when those accounts are connected.
 memory_write and create_artifact wait on the user's approval card before they save.
 Cite web sources as [1], [2]. End every turn with a clear answer. Do not invent tools you were not given.
-If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.`;
+If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.
+For a chart or interactive view, write a fenced svg, html, or react block, or a png image. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.`;
 
 export const TRUEFORGE_NO_TOOLS_NOTE = `You are Aether. Tools are not connected for this turn.
 Answer from the conversation. If the user needs a live lookup, say you cannot reach it right now.
 Do not invent tool results.
-If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.`;
+If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.
+For a chart or interactive view, write a fenced svg, html, or react block, or a png image. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.`;
 
 export const TOOLS_UNAVAILABLE_NOTICE = "Tools are not connected for this turn.";
 
@@ -39,6 +41,14 @@ export function trueforgeToolNote(attached: readonly string[]): string {
   lines.push(
     "If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.",
   );
+  lines.push(
+    "For a chart or interactive view, write a fenced svg, html, or react block, or a png image. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.",
+  );
+  if (attached.includes("create_artifact")) {
+    lines.push(
+      "Save that chart or interactive view with create_artifact using kind svg, html, react, or image.",
+    );
+  }
   return lines.join("\n");
 }
 
