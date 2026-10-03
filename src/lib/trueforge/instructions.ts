@@ -4,6 +4,24 @@ import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
 export const SANDBOX_FILE_LINE =
   "For a downloadable deck, spreadsheet, document, PDF, or image, write the file in the sandbox (pptx, xlsx, docx, pdf, or png). List each file once in a sandbox_artifacts block as [label](path). Do not paste /home paths or sandbox paths in the answer. A file card is added for each file.";
 
+/** Facts about the sandbox every model kept guessing wrong (probe re-run). */
+export function sandboxFactsLine(attached: readonly string[]): string {
+  const web = ["web_search", "fetch_url", "browse_page"].filter((name) => attached.includes(name));
+  const fetchHow = web.length
+    ? `fetch live data with ${web.join(" or ")} and paste it into the script`
+    : "fetch live data before the turn and paste it into the script";
+  return [
+    "Sandbox: your current folder is the workspace, so use relative paths and do not guess absolute ones.",
+    `The sandbox network reaches only pypi.org and github.com, so ${fetchHow}.`,
+    "Each exec call stops after 45 seconds.",
+    "Run simulations with exec; do not estimate them.",
+    "pandas, numpy, openpyxl, and python-pptx are already installed.",
+  ].join(" ");
+}
+
+const CHART_LINE =
+  "For a chart, calculator, or interactive view, write a fenced svg, html, or react block, or a png image. Never save a chart or interactive calculator as a sandbox file. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.";
+
 /** Short tool note. The full Aether catalog describes tools this harness does not run. */
 export const TRUEFORGE_TOOL_NOTE = `You are Aether. Tools execute on Aether's servers.
 Use web_search for live facts (weather, news, prices), then fetch_url or browse_page on the best links. Use the sandbox for computation and files, not for fetching the web.
@@ -11,15 +29,16 @@ memory_search, project_knowledge_search, drive_search, drive_read, and github_* 
 memory_write and create_artifact wait on the user's approval card before they save.
 Cite web sources as [1], [2]. End every turn with a clear answer. Do not invent tools you were not given.
 If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.
-For a chart or interactive view, write a fenced svg, html, or react block, or a png image. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.
+${CHART_LINE}
 ${SANDBOX_FILE_LINE}
+${sandboxFactsLine(["web_search", "fetch_url", "browse_page"])}
 If a command times out, answer with what you already have. Do not start another long command.`;
 
 export const TRUEFORGE_NO_TOOLS_NOTE = `You are Aether. Tools are not connected for this turn.
 Answer from the conversation. If the user needs a live lookup, say you cannot reach it right now.
 Do not invent tool results.
 If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.
-For a chart or interactive view, write a fenced svg, html, or react block, or a png image. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.
+${CHART_LINE}
 ${SANDBOX_FILE_LINE}
 If a command times out, answer with what you already have. Do not start another long command.`;
 
@@ -49,15 +68,14 @@ export function trueforgeToolNote(attached: readonly string[]): string {
   lines.push(
     "If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.",
   );
-  lines.push(
-    "For a chart or interactive view, write a fenced svg, html, or react block, or a png image. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.",
-  );
+  lines.push(CHART_LINE);
   if (attached.includes("create_artifact")) {
     lines.push(
       "Save that chart or interactive view with create_artifact using kind svg, html, react, or image.",
     );
   }
   lines.push(SANDBOX_FILE_LINE);
+  lines.push(sandboxFactsLine(attached));
   lines.push(
     "If a command times out, answer with what you already have. Do not start another long command.",
   );
@@ -104,12 +122,75 @@ export function alignHostedFileInstructions(text: string, attached: readonly str
   return next;
 }
 
+const GUIDE_SECTIONS = ["## Playbooks (this turn)", "## Session skills (available this turn)"];
+
+/** Tool ids that only some turns attach and the guide sections like to name. */
+const UNATTACHED_GUIDE_NAMES = [
+  ...Object.keys(OFFICE_TOOL_REPLACEMENTS),
+  "browser_navigate",
+  "browser_act",
+  "browser_snapshot",
+  "request_confirmation",
+  "schedule_create",
+  "skill_downloader",
+];
+
+function guideLineNamesUnattached(line: string, attached: readonly string[]): boolean {
+  if (/SKILL\.md|\bskills\/[a-z0-9_.-]+/i.test(line)) return true;
+  return UNATTACHED_GUIDE_NAMES.some(
+    (name) => !attached.includes(name) && new RegExp(`\\b${name}\\b`).test(line),
+  );
+}
+
+/**
+ * Playbooks and session-skill lines describe tools this turn did not attach
+ * (create_presentation, skills, gated browser actions). Drop them so the
+ * prompt describes only what the model actually has.
+ */
+export function dropUnattachedGuideSections(
+  text: string,
+  attached: readonly string[],
+): { text: string; dropped: boolean } {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let dropped = false;
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i] ?? "";
+    if (!GUIDE_SECTIONS.some((header) => line.startsWith(header))) {
+      out.push(line);
+      i += 1;
+      continue;
+    }
+    let j = i + 1;
+    const kept: string[] = [];
+    while (j < lines.length && !(lines[j] ?? "").startsWith("## ")) {
+      const bullet = lines[j] ?? "";
+      if (guideLineNamesUnattached(bullet, attached)) dropped = true;
+      else kept.push(bullet);
+      j += 1;
+    }
+    if (kept.some((keptLine) => keptLine.trim().startsWith("-"))) {
+      out.push(line, ...kept);
+    } else {
+      dropped = true;
+    }
+    i = j;
+  }
+  return { text: out.join("\n").replace(/\n{3,}/g, "\n\n"), dropped };
+}
+
 export function instructionsForAttachedTools(instructions: string, attached: readonly string[]): string {
   const note = attached.length ? trueforgeToolNote(attached) : TRUEFORGE_NO_TOOLS_NOTE;
   const swapped = instructions.includes(TRUEFORGE_TOOL_NOTE)
     ? instructions.replace(TRUEFORGE_TOOL_NOTE, note)
     : instructions;
-  return alignHostedFileInstructions(swapped, attached);
+  const pruned = dropUnattachedGuideSections(swapped, attached);
+  const aligned = alignHostedFileInstructions(pruned.text, attached);
+  if (pruned.dropped && !aligned.includes("sandbox_artifacts block")) {
+    return `${aligned.trim()}\n${SANDBOX_FILE_LINE}`;
+  }
+  return aligned;
 }
 
 /** Tool ids that appear in a prompt. `github_*` means every catalog id with that prefix. */

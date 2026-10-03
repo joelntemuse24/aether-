@@ -109,6 +109,10 @@ const CLOCK_OFF = "const capabilities = [];";
 const EXEC_TIMEOUT_FROM = "var DEFAULT_TIMEOUT_SECONDS = 60;";
 const EXEC_TIMEOUT_TO = "var DEFAULT_TIMEOUT_SECONDS = 45;";
 
+/** The VM installs pandas, numpy, openpyxl, and python-pptx system-wide. The sandbox venv must see them. */
+const VENV_FROM = '["-m", "venv", venvDir]';
+const VENV_TO = '["-m", "venv", "--system-site-packages", venvDir]';
+
 const RELATIVE_FILES = [
   "node_modules/@truefoundry/trueforge-core/dist/core/runtime/DeferredTool.js",
   "node_modules/@truefoundry/trueforge-core/dist/core/runtime/DeferredTool.mjs",
@@ -118,6 +122,7 @@ const RELATIVE_FILES = [
   "node_modules/@truefoundry/trueforge-core/dist/core/sandbox/provider/TFYSandboxProvider.mjs",
   "node_modules/@truefoundry/trueforge-core/dist/agent-session/builtinsFromSpec.js",
   "node_modules/@truefoundry/trueforge-core/dist/agent-session/builtinsFromSpec.mjs",
+  "node_modules/@truefoundry/trueforge/dist/main.js",
 ];
 
 function patchExecTimeout(source: string): { text: string; changed: boolean } {
@@ -126,10 +131,20 @@ function patchExecTimeout(source: string): { text: string; changed: boolean } {
   return { text: source.replace(EXEC_TIMEOUT_FROM, EXEC_TIMEOUT_TO), changed: true };
 }
 
-function alreadyPatched(source: string, kind: "deferred" | "sandbox" | "clock" | "exec-timeout"): boolean {
+function patchVenv(source: string): { text: string; changed: boolean } {
+  if (source.includes(VENV_TO)) return { text: source, changed: false };
+  if (!source.includes(VENV_FROM)) return { text: source, changed: false };
+  return { text: source.replace(VENV_FROM, VENV_TO), changed: true };
+}
+
+function alreadyPatched(
+  source: string,
+  kind: "deferred" | "sandbox" | "clock" | "exec-timeout" | "venv",
+): boolean {
   if (kind === "deferred") return source.includes("!server.preload");
   if (kind === "clock") return source.includes(CLOCK_OFF);
   if (kind === "exec-timeout") return source.includes(EXEC_TIMEOUT_TO);
+  if (kind === "venv") return source.includes(VENV_TO);
   return (
     source.includes("exec can reach these MCP servers") &&
     source.includes("buildSchemaSection(builder) {\n    return;")
@@ -149,13 +164,17 @@ export function applyTrueForgeSidecarPatches(root = process.cwd()): string[] {
         ? "clock"
         : relative.includes("TFYSandboxProvider")
           ? "exec-timeout"
-          : "sandbox";
+          : relative.includes("trueforge/dist/main")
+            ? "venv"
+            : "sandbox";
     const next =
       kind === "clock"
         ? patchClock(source)
         : kind === "exec-timeout"
           ? patchExecTimeout(source)
-          : patchText(source, kind);
+          : kind === "venv"
+            ? patchVenv(source)
+            : patchText(source, kind);
     if (next.changed) {
       fs.writeFileSync(file, next.text);
       patched.push(relative);
