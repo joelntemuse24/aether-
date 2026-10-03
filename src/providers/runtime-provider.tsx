@@ -11,10 +11,10 @@ import {
   useAISDKRuntime,
 } from "@assistant-ui/react-ai-sdk";
 import { useChat, type UIMessage } from "@ai-sdk/react";
-import {
-  lastAssistantMessageIsCompleteWithToolCalls,
-  type ChatTransport,
-} from "ai";
+import { type ChatTransport } from "ai";
+import { shouldAutoSendClientTools } from "@/lib/chat-auto-send";
+import { buildChatHeaders, loadSettings } from "@/lib/settings";
+import { readStoredBuzzModel } from "@/lib/buzz/models";
 import { useTriggerChatTransport } from "@trigger.dev/sdk/chat/react";
 import { CHAT_AGENT_TASK_ID } from "@/lib/trigger/config";
 import { buildBrowserChatClientData } from "@/lib/trigger/client-data";
@@ -113,7 +113,7 @@ type AddToolResult = (result: {
 }) => void;
 
 function useChatThreadRuntime() {
-  const { chatHeaders, activeModel, hasKey, settings, chatTransport, hostedLoading } =
+  const { activeModel, hasKey, settings, chatTransport, hostedLoading } =
     useSettings();
   const { attachments, clearAttachments } = useAttachments();
   const { peekChatContext, clearChatContext, armChatContext } = useHarness();
@@ -185,7 +185,8 @@ function useChatThreadRuntime() {
     const continueSegment = continueSegmentRef.current;
 
     return {
-      model: activeModel,
+      model:
+        loadSettings().accessMode === "hosted" ? readStoredBuzzModel() : activeModel,
       attachments: fileAttachments,
       textPrefix: textPrefix || undefined,
       system: resolveVoicePrompt(voiceRef.current),
@@ -201,7 +202,7 @@ function useChatThreadRuntime() {
     () =>
       new AssistantChatTransport({
         api: "/api/chat",
-        headers: () => chatHeaders,
+        headers: () => buildChatHeaders(loadSettings()),
         body: () => buildTurnBody(),
         prepareSendMessagesRequest: async (options) => {
           let remoteId = threadIdRef.current ?? readThreadStorageKey(aui);
@@ -247,7 +248,7 @@ function useChatThreadRuntime() {
           };
         },
       }),
-    [chatHeaders, aui, buildTurnBody],
+    [aui, buildTurnBody],
   );
 
   const buildTurnBodyRef = useRef(buildTurnBody);
@@ -443,7 +444,7 @@ function useChatThreadRuntime() {
     id: chatTransport === "durable" ? durableChatId : undefined,
     messages: seedMessages,
     transport,
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    sendAutomaticallyWhen: shouldAutoSendClientTools,
     onToolCall: async ({ toolCall }) => {
       const add = addToolResultRef.current;
       if (!add) return;

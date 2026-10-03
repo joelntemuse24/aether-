@@ -6,6 +6,7 @@ import {
   loadSettings,
   resolveModel,
 } from "./settings";
+import { BUZZ_MODEL_STORAGE_KEY } from "./buzz/models";
 import { EXPERT_PRIMARY_MODEL } from "./hosted/speed-tiers";
 
 function installLocalStorage() {
@@ -61,6 +62,19 @@ describe("buildChatHeaders", () => {
       toolApprovalMode: "auto",
     });
     assert.equal(auto["x-tool-approval-mode"], "auto");
+  });
+
+  it("reads the Buzz picker at header-build time", () => {
+    const ls = installLocalStorage();
+    try {
+      ls.map.set(BUZZ_MODEL_STORAGE_KEY, "claude-sonnet-5-5");
+      assert.equal(
+        buildChatHeaders({ ...DEFAULT_SETTINGS, accessMode: "hosted" })["x-model"],
+        "claude-sonnet-5-5",
+      );
+    } finally {
+      ls.restore();
+    }
   });
 
   it("hosted resolveModel ignores leftover catalog ids and uses the Expert Cloud route", () => {

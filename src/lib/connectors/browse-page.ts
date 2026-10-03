@@ -143,16 +143,46 @@ function extractPdfTextish(bytes: Uint8Array): string {
   return chunks.join(" ").replace(/\s+/g, " ").trim();
 }
 
-function githubBlocked(url: string): string | null {
+const GITHUB_TOOLS_HINT =
+  "Do not fetch github.com with browse_page or fetch_url. Use github_get_repo, github_list_contents, and github_read_file when GitHub is connected (tool_search for 'github' if those tools are not unlocked yet).";
+
+function githubHost(url: string): string | null {
   try {
-    const host = new URL(url).hostname.replace(/^www\./i, "").toLowerCase();
-    if (host === "github.com" || host === "gist.github.com") {
-      return "Do not fetch github.com with browse_page or fetch_url. Use github_get_repo, github_list_contents, and github_read_file when GitHub is connected (tool_search for 'github' if those tools are not unlocked yet).";
-    }
+    return new URL(url).hostname.replace(/^www\./i, "").toLowerCase();
   } catch {
     return null;
   }
-  return null;
+}
+
+/** Repo home pages become the raw README when GitHub tools are not in the session. */
+export function githubRepoReadmeUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (githubHost(url) !== "github.com") return null;
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    if (parts.length !== 2) return null;
+    const owner = parts[0];
+    const repo = parts[1]?.replace(/\.git$/, "");
+    if (!owner || !repo) return null;
+    return `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/README.md`;
+  } catch {
+    return null;
+  }
+}
+
+export function preparePublicPageFetch(
+  url: string,
+  options?: { hasGitHub?: boolean },
+): { ok: true; url: string } | { ok: false; error: string } {
+  const host = githubHost(url);
+  if (options?.hasGitHub && (host === "github.com" || host === "gist.github.com")) {
+    return { ok: false, error: GITHUB_TOOLS_HINT };
+  }
+  if (!options?.hasGitHub) {
+    const readme = githubRepoReadmeUrl(url);
+    if (readme) return { ok: true, url: readme };
+  }
+  return { ok: true, url };
 }
 
 export function extractStructuredPage(input: {
@@ -242,20 +272,21 @@ export function extractStructuredPage(input: {
 export async function browsePage(input: {
   url: string;
   instructions?: string;
+  hasGitHub?: boolean;
 }): Promise<BrowsePageExtract> {
-  const url = input.url;
-  const gh = githubBlocked(url);
-  if (gh) {
+  const prepared = preparePublicPageFetch(input.url, { hasGitHub: input.hasGitHub });
+  if (!prepared.ok) {
     return {
       ok: false,
-      url,
-      error: gh,
+      url: input.url,
+      error: prepared.error,
       headings: [],
       links: [],
       excerpts: [],
       text: "",
     };
   }
+  const url = prepared.url;
 
   const gate = await assertPublicHttpUrl(url);
   if (!gate.ok) {

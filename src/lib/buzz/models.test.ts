@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  KNOWN_BUZZ_CHAT_MODELS,
   buzzModelFqn,
   buzzModelLabel,
   filterBuzzChatModelIds,
+  hostedBuzzModelChoice,
   resolveBuzzModelId,
   toBuzzChatModel,
 } from "./models";
@@ -23,6 +25,26 @@ describe("Buzz chat models", () => {
     const models = ["gpt-5.6-luna", "claude-sonnet-5"].map(toBuzzChatModel);
     assert.equal(resolveBuzzModelId("nope", models), "gpt-5.6-luna");
     assert.equal(resolveBuzzModelId("claude-sonnet-5", models), "claude-sonnet-5");
+  });
+
+  it("accepts newly listed GPT-6.1 and Sonnet 5.5 ids and rejects unknown ones", () => {
+    assert.equal(KNOWN_BUZZ_CHAT_MODELS.includes("gpt-6.1-sol"), true);
+    assert.equal(KNOWN_BUZZ_CHAT_MODELS.includes("claude-sonnet-5-5"), true);
+    const models = KNOWN_BUZZ_CHAT_MODELS.map(toBuzzChatModel);
+    assert.equal(
+      hostedBuzzModelChoice({ bodyModel: "gpt-6.1-sol", headerModel: "gpt-5.6-luna", models }),
+      "gpt-6.1-sol",
+    );
+    assert.equal(
+      hostedBuzzModelChoice({ bodyModel: "not-a-model", headerModel: "claude-sonnet-5-5", models }),
+      "claude-sonnet-5-5",
+    );
+    assert.equal(
+      hostedBuzzModelChoice({ bodyModel: "nope", headerModel: "also-nope", models }),
+      "gpt-5.6-luna",
+    );
+    assert.equal(buzzModelLabel("gpt-6.1-sol"), "GPT-6.1 Sol");
+    assert.equal(buzzModelLabel("claude-sonnet-5-5"), "Claude Sonnet 5.5");
   });
 
   it("routes Claude through the Anthropic provider name", () => {

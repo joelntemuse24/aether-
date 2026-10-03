@@ -73,6 +73,34 @@ describe("TrueForge UI chunks", () => {
     assert.equal(after[0]?.id, "tf-text-2");
   });
 
+  it("starts a fresh argument buffer when a later round reuses index 0", () => {
+    const state = createTrueForgeUiState();
+    chunksForTrueForgeEvent(
+      {
+        type: "model.message.delta",
+        toolCalls: [{ index: 0, id: "call_search", function: { name: "web_search", arguments: "{\"query\":\"weather\"}" } }],
+      },
+      state,
+    );
+    chunksForTrueForgeEvent(
+      {
+        type: "model.message",
+        toolCalls: [{ index: 0, id: "call_search", function: { name: "web_search", arguments: "{\"query\":\"weather\"}" } }],
+      },
+      state,
+    );
+    const second = chunksForTrueForgeEvent(
+      {
+        type: "model.message",
+        toolCalls: [{ index: 0, id: "call_page", function: { name: "browse_page", arguments: "{\"url\":\"https://example.com\"}" } }],
+      },
+      state,
+    );
+    const tool = second.find((chunk) => chunk.toolCallId === "call_page");
+    assert.deepEqual(tool?.input, { url: "https://example.com" });
+    assert.equal(JSON.stringify(tool?.input).includes("query"), false);
+  });
+
   it("opens the confirm card when a tool result is waiting for approval", () => {
     const state = createTrueForgeUiState();
     const chunks = chunksForTrueForgeEvent(

@@ -34,11 +34,18 @@ describe("visible assistant text never dumps raw tool XML", () => {
 
   it("keeps real prose around markup", () => {
     const mixed = `It is 3pm in Dublin.\n${RAW_DSML}\nHave a good afternoon.`;
-    assert.equal(
-      sanitizeVisibleAssistantText(mixed),
-      "It is 3pm in Dublin. Have a good afternoon.",
-    );
+    const cleaned = sanitizeVisibleAssistantText(mixed);
+    assert.match(cleaned, /It is 3pm in Dublin\./);
+    assert.match(cleaned, /Have a good afternoon\./);
+    assert.equal(cleaned.includes("DSML"), false);
+    assert.equal(cleaned.includes("\n"), true);
     assert.equal(isHiddenToolMarkup(mixed), false);
+  });
+
+  it("keeps lists, blockquotes, and paragraphs", () => {
+    const markdown = "- one\n- two\n\n> a quoted line\n\nFirst paragraph.\n\nSecond paragraph.";
+    assert.equal(looksLikeRawToolMarkup(markdown), false);
+    assert.equal(sanitizeVisibleAssistantText(markdown), markdown);
   });
 
   it("does not treat ordinary answers as markup", () => {

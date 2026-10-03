@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { browsePage, extractStructuredPage } from "./browse-page";
+import { browsePage, extractStructuredPage, githubRepoReadmeUrl, preparePublicPageFetch } from "./browse-page";
 
 const SAMPLE_HTML = `<!doctype html>
 <html>
@@ -69,11 +69,21 @@ describe("browsePage SSRF", () => {
     }
   });
 
-  it("rejects github.com the same way fetch_url does", async () => {
-    const result = await browsePage({
-      url: "https://github.com/joelntemuse24/aether-",
-    });
-    assert.equal(result.ok, false);
-    assert.match(String(result.error), /github/i);
+  it("blocks github.com only when GitHub tools are enabled", () => {
+    const repo = "https://github.com/joelntemuse24/aether-";
+    const blocked = preparePublicPageFetch(repo, { hasGitHub: true });
+    assert.equal(blocked.ok, false);
+    if (!blocked.ok) assert.match(blocked.error, /github_get_repo/);
+    const open = preparePublicPageFetch(repo, { hasGitHub: false });
+    assert.equal(open.ok, true);
+    if (open.ok) {
+      assert.equal(
+        open.url,
+        "https://raw.githubusercontent.com/joelntemuse24/aether-/HEAD/README.md",
+      );
+    }
+    assert.equal(githubRepoReadmeUrl("https://github.com/acme/widgets/blob/main/README.md"), null);
+    const plain = preparePublicPageFetch("https://example.com/a");
+    assert.equal(plain.ok && plain.url, "https://example.com/a");
   });
 });

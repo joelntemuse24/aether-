@@ -28,11 +28,13 @@ export const KNOWN_BUZZ_CHAT_MODELS = [
   "claude-sonnet-4-5-20250929",
   "claude-sonnet-4-6",
   "claude-sonnet-5",
+  "claude-sonnet-5-5",
   "gpt-5.6-luna",
   "gpt-5.6-sol",
   "gpt-5.6-terra",
   "gpt-6-astra",
   "gpt-6-sol",
+  "gpt-6.1-sol",
 ] as const;
 
 let cache: { at: number; models: BuzzChatModel[] } | null = null;
@@ -90,6 +92,26 @@ export function filterBuzzChatModelIds(ids: string[]): string[] {
     out.push(id);
   }
   return out.sort((a, b) => a.localeCompare(b));
+}
+
+/** Picker id stored in the browser. Server renders fall back to Luna. */
+export function readStoredBuzzModel(): string {
+  if (typeof window === "undefined") return DEFAULT_BUZZ_MODEL;
+  const stored = localStorage.getItem(BUZZ_MODEL_STORAGE_KEY)?.trim();
+  return stored || DEFAULT_BUZZ_MODEL;
+}
+
+/** Hosted TrueForge model: requested id if it is in the Buzz catalog, otherwise Luna. */
+export function hostedBuzzModelChoice(input: {
+  bodyModel?: string | null;
+  headerModel?: string | null;
+  models: BuzzChatModel[];
+}): string {
+  const body = (input.bodyModel ?? "").trim();
+  const header = (input.headerModel ?? "").trim();
+  if (body && input.models.some((model) => model.id === body)) return body;
+  if (header && input.models.some((model) => model.id === header)) return header;
+  return resolveBuzzModelId(body || header, input.models);
 }
 
 export function resolveBuzzModelId(requested: string | null | undefined, models: BuzzChatModel[]): string {

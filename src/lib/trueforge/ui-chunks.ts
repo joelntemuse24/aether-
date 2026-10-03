@@ -77,6 +77,7 @@ export function flushPendingTools(state: TrueForgeUiState, chunks: UiChunk[]) {
       toolCallId: tool.id,
       toolName: tool.name,
       input: parseToolInput(tool.args),
+      providerExecuted: true,
     });
   }
 }
@@ -144,7 +145,16 @@ function absorbToolDelta(
       function?: { name?: string; arguments?: string };
     };
     const index = row.index ?? 0;
-    const buf = state.tools.get(index) ?? { args: "" };
+    const existing = state.tools.get(index);
+    if (row.id && existing?.id && existing.id !== row.id) {
+      state.tools.set(index, {
+        id: row.id,
+        name: row.function?.name,
+        args: row.function?.arguments ?? "",
+      });
+      continue;
+    }
+    const buf = existing ?? { args: "" };
     if (row.id) buf.id = row.id;
     if (row.function?.name) buf.name = row.function.name;
     if (row.function?.arguments) buf.args += row.function.arguments;
@@ -198,7 +208,16 @@ export function chunksForTrueForgeEvent(
           id?: string;
           function?: { name?: string; arguments?: string };
         };
-        const buf = state.tools.get(index) ?? { args: "" };
+        const existing = state.tools.get(index);
+        if (row.id && existing?.id && existing.id !== row.id) {
+          state.tools.set(index, {
+            id: row.id,
+            name: row.function?.name,
+            args: row.function?.arguments ?? "",
+          });
+          return;
+        }
+        const buf = existing ?? { args: "" };
         if (row.id) buf.id = row.id;
         if (row.function?.name) buf.name = row.function.name;
         if (row.function?.arguments && !buf.args) buf.args = row.function.arguments;
@@ -224,6 +243,7 @@ export function chunksForTrueForgeEvent(
       type: "tool-output-available",
       toolCallId,
       output,
+      providerExecuted: true,
     });
     const confirm = confirmationPayload(output);
     if (confirm) {
@@ -231,6 +251,7 @@ export function chunksForTrueForgeEvent(
         type: "tool-input-available",
         toolCallId: `confirm-${toolCallId}`,
         toolName: "request_confirmation",
+        providerExecuted: true,
         input: {
           title: confirm.title,
           preview: confirm.preview,
@@ -241,6 +262,7 @@ export function chunksForTrueForgeEvent(
         type: "tool-output-available",
         toolCallId: `confirm-${toolCallId}`,
         output: confirm,
+        providerExecuted: true,
       });
     }
     return chunks;
@@ -268,12 +290,14 @@ export function chunksForTrueForgeEvent(
         type: "tool-output-available",
         toolCallId,
         output: { pending_approval: true },
+        providerExecuted: true,
       });
       if (!confirmationId) continue;
       chunks.push({
         type: "tool-input-available",
         toolCallId: `confirm-${toolCallId}`,
         toolName: "request_confirmation",
+        providerExecuted: true,
         input: {
           title: "Allow this step?",
           preview,
@@ -283,6 +307,7 @@ export function chunksForTrueForgeEvent(
       chunks.push({
         type: "tool-output-available",
         toolCallId: `confirm-${toolCallId}`,
+        providerExecuted: true,
         output: {
           needs_confirmation: true,
           confirmation_id: confirmationId,

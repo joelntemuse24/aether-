@@ -177,12 +177,12 @@ async function callTool(name: string, args: Json, ctx: TrueForgeToolContext | nu
   }
   if (name === TOOL_NAMES.fetchUrl) {
     const url = typeof args.url === "string" ? args.url : "";
-    return textResult(await fetchUrlText(url));
+    return textResult(await fetchUrlText(url, { hasGitHub: ctx?.hasGitHub === true }));
   }
   if (name === TOOL_NAMES.browsePage) {
     const url = typeof args.url === "string" ? args.url : "";
     const instructions = typeof args.instructions === "string" ? args.instructions : undefined;
-    return textResult(await browsePage({ url, instructions }));
+    return textResult(await browsePage({ url, instructions, hasGitHub: ctx?.hasGitHub === true }));
   }
   if (name === TOOL_NAMES.currentTime) {
     const timeZone = typeof args.timeZone === "string" ? args.timeZone : undefined;

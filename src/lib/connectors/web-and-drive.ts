@@ -111,7 +111,7 @@ export async function driveReadTextForUser(
 }
 
 /** Compat alias — same SSRF path as browse_page, flattened for older callers. */
-export async function fetchUrlText(url: string): Promise<{
+export async function fetchUrlText(url: string, options?: { hasGitHub?: boolean }): Promise<{
   ok: boolean;
   error?: string;
   title?: string;
@@ -126,7 +126,7 @@ export async function fetchUrlText(url: string): Promise<{
   links?: { text: string; href: string }[];
   focused?: string;
 }> {
-  const page = await browsePage({ url });
+  const page = await browsePage({ url, hasGitHub: options?.hasGitHub });
   return {
     ok: page.ok,
     error: page.error,
