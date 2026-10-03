@@ -65,7 +65,7 @@ export async function POST(req: Request) {
   const fallback = fallbackConversationTitle(message);
 
   if (!message.trim()) {
-    return NextResponse.json({ title: "New chat", source: "empty" });
+    return NextResponse.json({ title: "New conversation", source: "empty" });
   }
 
   try {

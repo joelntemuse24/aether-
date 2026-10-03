@@ -36,6 +36,7 @@ import {
   WrenchIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { conversationLabel } from "@/lib/conversation-title";
 import { useSettings } from "@/providers/settings-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { listLocalThreads, beginNewChatSession } from "@/lib/local-thread-adapter";
@@ -157,8 +158,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               type="button"
               onClick={goNewChat}
               className="flex size-8 items-center justify-center rounded-lg text-[var(--accent)] transition-colors hover:bg-[var(--accent-muted)]"
-              aria-label="New chat"
-              title="New chat (⌘N)"
+              aria-label="New conversation"
+              title="New conversation (⌘N)"
             >
               <PlusIcon className="size-4" />
             </button>
@@ -726,7 +727,7 @@ const ThreadSearchEmpty: FC = () => {
   if (!query || threadCount === 0) return null;
 
   const hasMatch = listLocalThreads().some((t) =>
-    (t.title || "New chat").toLowerCase().includes(query),
+    conversationLabel(t.title).toLowerCase().includes(query),
   );
   if (hasMatch) return null;
 
@@ -740,7 +741,7 @@ const ThreadSearchEmpty: FC = () => {
 
 const ThreadListItem: FC = () => {
   const aui = useAui();
-  const title = useAuiState((s) => s.threadListItem.title || "New chat");
+  const title = useAuiState((s) => conversationLabel(s.threadListItem.title));
   const query = useContext(ThreadSearchContext);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(title);

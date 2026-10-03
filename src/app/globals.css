@@ -218,6 +218,112 @@ body::before {
   animation: aether-fade-up var(--motion-base) var(--motion-ease) both;
 }
 
+/* Side panel on desktop, bottom sheet on smaller screens. 220ms is under 350ms. */
+.aether-artifact-panel {
+  animation: slideIn 220ms var(--motion-ease) both;
+}
+
+.aether-artifact-panel__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  border: 0;
+  background: color-mix(in oklab, var(--text) 22%, transparent);
+  cursor: pointer;
+}
+
+.aether-artifact-card,
+.aether-file-card {
+  display: flex;
+  width: min(100%, 18rem);
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--elevated);
+  color: var(--text);
+  font-family: var(--font-ui), Inter, system-ui, sans-serif;
+  text-align: left;
+}
+
+.aether-artifact-card__kind,
+.aether-file-card__badge {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.aether-artifact-card__title,
+.aether-file-card__name {
+  font-size: 14px;
+  font-weight: 550;
+  line-height: 1.35;
+}
+
+.aether-artifact-card__status,
+.aether-file-card__hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.aether-file-card__preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--canvas);
+}
+
+.aether-file-card__preview img {
+  max-height: 88px;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.aether-file-card__download {
+  align-self: flex-start;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+}
+
+@media (max-width: 1023px) {
+  .aether-artifact-panel {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 70;
+    width: 100%;
+    max-width: none;
+    height: min(88dvh, 100dvh);
+    border-radius: 18px 18px 0 0;
+    background: var(--surface);
+    animation-name: aether-sheet-up;
+    animation-duration: 220ms;
+  }
+}
+
+@keyframes aether-sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .aether-title-enter {
   animation-duration: var(--motion-slow);
 }

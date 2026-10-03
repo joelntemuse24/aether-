@@ -4,10 +4,19 @@
 
 const MAX_LEN = 52;
 
+/** One label for an untitled thread, in the header and the sidebar row. */
+export const UNTITLED_CONVERSATION = "New conversation";
+
+export function conversationLabel(title?: string | null): string {
+  const text = title?.trim() ?? "";
+  if (!text || text.toLowerCase() === "new chat") return UNTITLED_CONVERSATION;
+  return text;
+}
+
 /** Strip noise then invent a short label when the model call is unavailable. */
 export function fallbackConversationTitle(message: string): string {
   let text = message.trim().replace(/\s+/g, " ");
-  if (!text) return "New chat";
+  if (!text) return UNTITLED_CONVERSATION;
 
   // Keep owner/repo; drop full github URLs.
   text = text.replace(
@@ -61,7 +70,7 @@ function truncateWords(s: string, maxWords: number): string {
 
 function clipTitle(s: string): string {
   const t = s.trim().replace(/\s+/g, " ");
-  if (!t) return "New chat";
+  if (!t) return UNTITLED_CONVERSATION;
   if (t.length <= MAX_LEN) return t.replace(/[.!?]+$/, "") || t;
   const sliced = t.slice(0, MAX_LEN - 1);
   const at = sliced.lastIndexOf(" ");

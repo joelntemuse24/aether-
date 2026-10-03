@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FC } from "react";
 import { useAui, useAuiState } from "@assistant-ui/react";
 import { CheckIcon, PencilIcon } from "lucide-react";
+import { conversationLabel } from "@/lib/conversation-title";
 import { cn } from "@/lib/utils";
 
 /**
@@ -10,9 +11,7 @@ import { cn } from "@/lib/utils";
  */
 export const ThreadHeader: FC = () => {
   const aui = useAui();
-  const title = useAuiState(
-    (s) => s.threadListItem.title?.trim() || "New conversation",
-  );
+  const title = useAuiState((s) => conversationLabel(s.threadListItem.title));
   const isEmpty = useAuiState((s) => s.thread.messages.length === 0);
 
   const [editing, setEditing] = useState(false);
