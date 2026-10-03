@@ -31,7 +31,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000. The dev process waits until the sidecar answers `/api/v1/capabilities`, seeds providers, then starts Next. A seed failure stops boot. SQLite lives under the OS app-data dir for `trueforge` with suffix `aether`.
+Open http://localhost:3000. The dev process waits until the sidecar answers `/api/v1/capabilities`, seeds providers, then starts Next. A model the settings API rejects is logged and skipped. The sidecar still starts. SQLite lives under the OS app-data dir for `trueforge` with suffix `aether`.
 
 Hosted turns send session instructions and file attachments as data-URI parts. The composer model chip sends the chosen Buzz model as `x-model`. GPT ids use the Buzz OpenAI-compatible provider (`buzz/…`). Claude ids use Buzz's Anthropic-compatible provider (`anthropic/…`, base `https://api.buzzai.cc/v1`). Unknown ids fall back to `gpt-5.6-luna`. Text, reasoning, and tool deltas stream as they arrive. A turn waits about 20 seconds for the first byte, then retries the same model once on a transient error (5xx, Cloudflare 525, network). If it still fails, the thread shows an error and Retry. A model that Buzz says is not enabled for the key is marked unavailable in the picker for the session. There is no OpenRouter failover on this path. Reasoning effort is `none`. A restarted Next process reuses the sidecar session and skips the session update when the model, instructions, and tool context are unchanged.
 
@@ -83,6 +83,8 @@ docker compose up -d --build
 ```
 
 Without Docker, from the repo root: `npm install` then `npm run trueforge`.
+
+After a VM update, run `bash deploy/trueforge/health-gate.sh [previous-commit]`. It starts the sidecar, requires that process to stay up for 60 seconds, and requires `http://127.0.0.1:8790/health` to answer. If either check fails, it checks out the previous commit and starts that build. Set `AETHER_SIDECAR_START` when the start command is not `/opt/aether/sidecar-only.ts` or `npm run trueforge`.
 
 A launcher outside this repo, such as `/opt/aether/sidecar-only.ts`, should call `prepareSidecar()` from `src/lib/trueforge/sidecar-bootstrap.ts` before it starts TrueForge. That applies the package patch and starts sandbox pruning. `npm run trueforge` and `npm run dev` already call it.
 

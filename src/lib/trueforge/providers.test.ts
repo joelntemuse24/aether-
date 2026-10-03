@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { ModelProviderManifest } from "@truefoundry/trueforge-sdk/serialization";
+import { KNOWN_BUZZ_CHAT_MODELS } from "@/lib/buzz/models";
 import {
   AETHER_EXPERT_MODEL_FQN,
   DEFAULT_BUZZ_BASE_URL,
@@ -94,9 +96,39 @@ describe("aether TrueForge providers", () => {
       ["gpt-6-astra", "claude-haiku-4-5-20251001"],
     );
     assert.equal(manifests[0]?.models[0]?.properties.maxOutputTokens, 128_000);
-    assert.equal(manifests[0]?.models[0]?.properties.reasoningEfforts.includes("none"), false);
+    assert.equal(manifests[0]?.models[0]?.properties.reasoningEfforts?.includes("none"), false);
     assert.equal(manifests[1]?.models[0]?.properties.maxOutputTokens, 64_000);
-    assert.deepEqual(manifests[1]?.models[0]?.properties.reasoningEfforts, []);
+    assert.equal(manifests[1]?.models[0]?.properties.reasoningEfforts, undefined);
+  });
+
+  it("matches the TrueForge settings schema and omits empty arrays", () => {
+    const manifests = aetherProviderManifests(
+      { AETHER_HOSTED_BUZZ_API_KEY: "buzz-secret" },
+      KNOWN_BUZZ_CHAT_MODELS,
+    );
+    assert.equal(manifests.length, 2);
+    const walk = (value: unknown) => {
+      if (Array.isArray(value)) {
+        assert.ok(value.length > 0);
+        for (const item of value) walk(item);
+        return;
+      }
+      if (value && typeof value === "object") {
+        for (const nested of Object.values(value)) walk(nested);
+      }
+    };
+    for (const manifest of manifests) {
+      const raw = ModelProviderManifest.json(manifest);
+      ModelProviderManifest.parse(raw);
+      walk(raw);
+      const body = raw as { models?: { properties?: { reasoning_efforts?: string[] } }[] };
+      for (const model of body.models ?? []) {
+        const efforts = model.properties?.reasoning_efforts;
+        if (efforts) assert.ok(efforts.length >= 1);
+      }
+    }
+    const claude = manifests.find((manifest) => manifest.type === "anthropic");
+    assert.equal(claude?.models.every((model) => model.properties.reasoningEfforts === undefined), true);
   });
 
   it("prefers the Buzz Luna FQN over catalog order", () => {

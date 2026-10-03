@@ -32,6 +32,7 @@ export async function driveTrueForgeTurn(input: {
   events: AsyncIterable<TurnEvent>;
   write: (chunk: UiChunk) => void;
   sessionId: string;
+  modelId?: string;
 }): Promise<{ failedBeforeOutput: boolean; wroteError: boolean; errorText: string }> {
   const state = createTrueForgeUiState();
   let sawContent = false;
@@ -41,8 +42,10 @@ export async function driveTrueForgeTurn(input: {
     if (CONTENT_TYPES.has(String(chunk.type))) sawContent = true;
     if (chunk.type === "error") {
       failed = true;
-      errorText = String(chunk.errorText ?? errorText);
+      errorText = hostedTurnErrorCopy(String(chunk.errorText ?? errorText), input.modelId ?? "");
       if (!sawContent) return;
+      input.write({ ...chunk, errorText });
+      return;
     }
     input.write(chunk);
   };
@@ -72,9 +75,10 @@ export async function driveTrueForgeTurn(input: {
   } catch (error) {
     const message = error instanceof Error ? error.message : "The harness turn failed.";
     if (!sawContent) return { failedBeforeOutput: true, wroteError: false, errorText: message };
-    input.write({ type: "error", errorText: message });
+    const errorText = hostedTurnErrorCopy(message, input.modelId ?? "");
+    input.write({ type: "error", errorText });
     for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
-    return { failedBeforeOutput: false, wroteError: true, errorText: message };
+    return { failedBeforeOutput: false, wroteError: true, errorText };
   }
   if (failed && !sawContent) return { failedBeforeOutput: true, wroteError: false, errorText };
   for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
@@ -87,6 +91,7 @@ async function runTurn(input: {
   abortSignal?: AbortSignal;
   previousTurnId?: "auto" | "none";
   write: (chunk: UiChunk) => void;
+  modelId?: string;
 }): Promise<{ failedBeforeOutput: boolean; wroteError: boolean; errorText: string }> {
   try {
     const turn = await trueforgeClient().sessions.createTurnStream(
@@ -101,6 +106,7 @@ async function runTurn(input: {
       events: turn as AsyncIterable<TurnEvent>,
       write: input.write,
       sessionId: input.sessionId,
+      modelId: input.modelId,
     });
   } catch (error) {
     const errorText = error instanceof Error ? error.message : "The model didn't respond.";
@@ -196,6 +202,7 @@ export async function streamTrueForgeHostedChat(input: {
             abortSignal: controller.signal,
             previousTurnId: attempt === 0 ? "auto" : "none",
             write: guardedWrite,
+            modelId,
           });
         } finally {
           clearTimeout(timer);

@@ -50,6 +50,28 @@ describe("hosted turn errors", () => {
     assert.match(hostedTurnErrorCopy("'none' is not supported", "gpt-6-astra"), /rejected the request/);
     assert.match(hostedTurnErrorCopy("Cloudflare 525", "gpt-5.6-luna"), /overloaded/);
     assert.match(hostedTurnErrorCopy("The operation was aborted", "gpt-5.6-luna"), /timed out/);
+    assert.match(hostedTurnErrorCopy("Request failed (522): <none>", "claude-opus-5-5"), /overloaded/);
+  });
+
+  it("maps a provider failure after a tool call to the same short wording", async () => {
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield {
+        type: "model.message",
+        toolCalls: [{ id: "call_1", function: { name: "web_search", arguments: "{}" } }],
+      };
+      yield { type: "turn.done", state: { status: "error", message: "Request failed (522): <none>" } };
+    }
+    const outcome = await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses",
+      modelId: "claude-opus-5-5",
+    });
+    const error = writes.find((chunk) => chunk.type === "error");
+    assert.equal(outcome.failedBeforeOutput, false);
+    assert.match(String(error?.errorText), /provider had an error or is overloaded/);
+    assert.equal(String(error?.errorText).includes("522"), false);
   });
 });
 
