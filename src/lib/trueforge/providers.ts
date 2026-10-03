@@ -104,7 +104,8 @@ export type AetherConfiguredModel = {
   properties: {
     contextLength: number;
     maxOutputTokens: number;
-    reasoningEfforts: ReasoningEffort[];
+    /** Omitted when empty. The settings API rejects `reasoning_efforts: []`. */
+    reasoningEfforts?: ReasoningEffort[];
   };
 };
 
@@ -167,7 +168,7 @@ function buzzModel(modelId: string, name: string): AetherConfiguredModel {
     properties: {
       contextLength: profile.contextLength,
       maxOutputTokens: profile.maxOutputTokens,
-      reasoningEfforts: profile.reasoningEfforts,
+      ...(profile.reasoningEfforts.length > 0 ? { reasoningEfforts: profile.reasoningEfforts } : {}),
     },
   };
 }
