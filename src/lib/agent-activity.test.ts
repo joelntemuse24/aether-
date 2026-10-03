@@ -1212,4 +1212,51 @@ describe("thread / composer copy stays honest", () => {
       /continuePhase:\s*isRunning \? continueStatus\.phase : "idle"/,
     );
   });
+
+  it("freshens the thread: measure, bubble, composer, sources, title, scroll", () => {
+    const thread = readFileSync(
+      new URL("../components/assistant-ui/thread.tsx", import.meta.url),
+      "utf8",
+    );
+    const header = readFileSync(
+      new URL("../components/assistant-ui/thread-header.tsx", import.meta.url),
+      "utf8",
+    );
+    const sidebar = readFileSync(
+      new URL("../components/layout/sidebar.tsx", import.meta.url),
+      "utf8",
+    );
+    const css = readFileSync(
+      new URL("../components/assistant-ui/agent-activity.css", import.meta.url),
+      "utf8",
+    );
+    const markdown = readFileSync(
+      new URL("../components/assistant-ui/markdown-text.tsx", import.meta.url),
+      "utf8",
+    );
+    const strip = readFileSync(
+      new URL(
+        "../components/assistant-ui/agent-status-strip.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    assert.match(thread, /42rem/);
+    assert.match(thread, /aether-user-bubble/);
+    assert.match(thread, /aether-composer/);
+    assert.match(thread, /aether-thread-enter/);
+    assert.match(thread, /aether-scroll-bottom/);
+    assert.match(thread, /aether-action-row/);
+    assert.match(header, /aether-title-enter/);
+    assert.doesNotMatch(header, /font-sc/);
+    const recent = sidebar.slice(
+      Math.max(0, sidebar.indexOf("Recent") - 220),
+      sidebar.indexOf("Recent"),
+    );
+    assert.doesNotMatch(recent, /uppercase/);
+    assert.match(strip, /aether-source-card/);
+    assert.match(css, /aether-source-card/);
+    assert.match(markdown, /aether-cite/);
+    assert.match(markdown, /title=/);
+  });
 });

@@ -10,7 +10,7 @@ import {
 } from "@assistant-ui/react-markdown";
 import { useAuiState } from "@assistant-ui/react";
 import remarkGfm from "remark-gfm";
-import { type FC, memo, useMemo, useState } from "react";
+import { type FC, memo, useContext, useMemo, useState, createContext } from "react";
 import { CheckIcon, CopyIcon, PanelRightOpenIcon } from "lucide-react";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { cn } from "@/lib/utils";
@@ -18,7 +18,10 @@ import { useArtifact } from "@/providers/artifact-provider";
 import {
   collectSourceCitations,
   remarkInlineCitations,
+  type SourceCitation,
 } from "@/lib/citations";
+
+const CitationSources = createContext<SourceCitation[]>([]);
 import { sanitizeVisibleAssistantText } from "@/lib/visible-chat-text";
 
 const ARTIFACT_LANGS = new Set([
@@ -63,13 +66,15 @@ const MarkdownTextImpl = () => {
     [sources],
   );
   return (
-    <MarkdownTextPrimitive
-      remarkPlugins={plugins}
-      className="aui-md prose-aether"
-      components={defaultComponents}
-      preprocess={(text) => sanitizeVisibleAssistantText(text)}
-      defer
-    />
+    <CitationSources.Provider value={sources}>
+      <MarkdownTextPrimitive
+        remarkPlugins={plugins}
+        className="aui-md prose-aether"
+        components={defaultComponents}
+        preprocess={(text) => sanitizeVisibleAssistantText(text)}
+        defer
+      />
+    </CitationSources.Provider>
   );
 };
 
@@ -187,13 +192,17 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  a: ({ className, href, children, ...props }) => {
+  a: function MarkdownLink({ className, href, children, ...props }) {
+    const sources = useContext(CitationSources);
     const label = Array.isArray(children)
       ? children.map((c) => (typeof c === "string" ? c : "")).join("")
       : typeof children === "string"
         ? children
         : "";
     const citation = /^\d+$/.test(label.trim());
+    const source = citation
+      ? sources.find((item) => item.url === href || item.id === label.trim())
+      : undefined;
     return (
       <a
         className={cn(
@@ -205,6 +214,7 @@ const defaultComponents = memoizeMarkdownComponents({
         target="_blank"
         rel="noreferrer"
         href={href}
+        title={citation ? source?.title || `Source ${label.trim()}` : undefined}
         {...props}
       >
         {citation ? label.trim() : children}

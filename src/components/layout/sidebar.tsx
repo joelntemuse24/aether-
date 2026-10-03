@@ -355,7 +355,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </div>
         </div>
 
-        <div className="mb-1 px-3 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--muted-soft)]">
+        <div className="mb-1 px-3 py-0.5 text-[12px] text-[var(--muted)]">
           Recent
         </div>
         <div className="flex-1 overflow-y-auto px-2 pb-2">

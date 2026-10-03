@@ -17,7 +17,6 @@ import {
   shouldRevealActivityElapsed,
   shouldShowComposerActivity,
   sourceChipLabel,
-  sourceTrayPills,
   syncActivityClock,
   type ActivityMessage,
   type ActivityView,
@@ -284,57 +283,47 @@ export const MessageSourceCards: FC = () => {
   const parts = useAuiState((s) => s.message?.parts);
   const hits = collectWebSearchHits(parts);
   if (hits.length === 0) return null;
-  const pills = sourceTrayPills(hits);
 
-  // One reserved row: count + hosts. Expand in-place with a capped list
-  // so chips never wrap the composer.
   return (
-    <details className="aether-source-tray">
-      <summary aria-label="Sources">
-        <span className="aether-source-tray__count">
-          {hits.length} {hits.length === 1 ? "source" : "sources"}
-        </span>
-        <span className="aether-source-tray__hosts">
-          {pills.map((hit, i) => (
-            <span key={`host:${i}`} className="aether-source-tray__pill">
-              {sourceChipLabel(hit)}
-            </span>
-          ))}
-        </span>
-      </summary>
-      <ul className="aether-inline-sources" aria-label="Sources">
+    <section className="aether-source-tray" aria-label="Sources">
+      <span className="aether-source-tray__count">
+        {hits.length} {hits.length === 1 ? "source" : "sources"}
+      </span>
+      <ul className="aether-source-tray__hosts aether-inline-sources">
         {hits.map((hit, i) => {
-        const host = hostLabel(hit.url);
-        const inner = (
-          <>
-            <span className="aether-inline-source__title">
-              {hit.id ? `[${hit.id}] ` : ""}
-              {hit.title}
-            </span>
-            {host ? (
-              <span className="aether-inline-source__host">{host}</span>
-            ) : null}
-          </>
-        );
-        return (
-          <li key={`${hit.url ?? hit.title}:${i}`}>
-            {hit.url ? (
-              <a
-                href={hit.url}
-                target="_blank"
-                rel="noreferrer"
-                className="aether-inline-source"
-              >
-                {inner}
-              </a>
-            ) : (
-              <span className="aether-inline-source">{inner}</span>
-            )}
-          </li>
-        );
-      })}
+          const host = hostLabel(hit.url);
+          const chip = sourceChipLabel(hit);
+          const inner = (
+            <>
+              <span className="aether-inline-source__title">{hit.title}</span>
+              {chip ? (
+                <span className="aether-source-tray__pill">{chip}</span>
+              ) : host ? (
+                <span className="aether-inline-source__host">{host}</span>
+              ) : null}
+            </>
+          );
+          return (
+            <li key={`${hit.url ?? hit.title}:${i}`}>
+              {hit.url ? (
+                <a
+                  href={hit.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="aether-inline-source aether-source-card"
+                >
+                  {inner}
+                </a>
+              ) : (
+                <span className="aether-inline-source aether-source-card">
+                  {inner}
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ul>
-    </details>
+    </section>
   );
 };
 

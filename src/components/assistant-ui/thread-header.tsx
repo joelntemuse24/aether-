@@ -84,7 +84,10 @@ export const ThreadHeader: FC = () => {
               )}
               title="Rename conversation"
             >
-              <h2 className="truncate font-[family-name:var(--font-sc)] text-[13px] font-medium tracking-[0.06em] text-[var(--text)]">
+              <h2
+                key={title}
+                className="aether-title-enter truncate font-[family-name:var(--font-ui)] text-[14px] font-medium tracking-[-0.01em] text-[var(--text)]"
+              >
                 {title}
               </h2>
               <PencilIcon className="size-3 shrink-0 text-[var(--muted-soft)] opacity-0 transition-opacity group-hover:opacity-100" />
