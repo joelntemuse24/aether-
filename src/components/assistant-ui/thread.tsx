@@ -108,7 +108,7 @@ import { persistThreadSpeedTier } from "@/lib/thread-speed";
 import { peekInFlightFirstSendDraft, stashFirstSendDraft } from "@/lib/chat-turn-draft";
 import { composerShouldShowStop } from "@/lib/agent-activity";
 import { resolveInitializedRemoteId } from "@/lib/trigger/thread-remote-id";
-import { isHiddenToolMarkup } from "@/lib/visible-chat-text";
+import { isHiddenToolMarkup, sanitizeVisibleAssistantText } from "@/lib/visible-chat-text";
 
 /**
  * True only for a settled empty chat. Avoid welcome flash while history is
@@ -1358,7 +1358,13 @@ const AssistantMessage: FC = () => {
               if (type === "text") {
                 const raw =
                   "text" in part && typeof part.text === "string" ? part.text : "";
-                if (!raw.trim() || isHiddenToolMarkup(raw)) return null;
+                if (
+                  !raw.trim() ||
+                  isHiddenToolMarkup(raw) ||
+                  !sanitizeVisibleAssistantText(raw).trim()
+                ) {
+                  return null;
+                }
                 return (
                   <ChatRenderErrorBoundary fallback={null}>
                     <MarkdownText />

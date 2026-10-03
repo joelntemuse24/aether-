@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
+  inlineTopLevelSvg,
   isHiddenToolMarkup,
   looksLikeRawToolMarkup,
   recoverToolCallsFromMarkup,
@@ -98,7 +99,56 @@ describe("visible-text wiring", () => {
       "utf8",
     );
     assert.match(markdown, /sanitizeVisibleAssistantText/);
+    assert.match(markdown, /inlineTopLevelSvg/);
     assert.match(markdown, /preprocess/);
     assert.match(activity, /recoverToolCallsFromMarkup/);
+  });
+});
+
+describe("probe replay (r3 rendering leaks)", () => {
+  it("strips closed and unclosed Sol thinking tags from the visible answer", () => {
+    const closed = sanitizeVisibleAssistantText(
+      "Answer starts <thinking>hidden musing about the plan</thinking> and ends here.",
+    );
+    assert.equal(closed.includes("thinking"), false);
+    assert.equal(closed.includes("hidden musing"), false);
+    assert.match(closed, /Answer starts/);
+    assert.match(closed, /and ends here\./);
+    const unclosed = sanitizeVisibleAssistantText(
+      "Answer starts <thinking>still musing",
+    );
+    assert.equal(unclosed.includes("thinking"), false);
+    assert.equal(unclosed.includes("musing"), false);
+    assert.match(unclosed, /Answer starts/);
+  });
+
+  it("strips the Sol sandbox_artifacts closing-tag residue", () => {
+    const cleaned = sanitizeVisibleAssistantText(
+      "The sheet is ready.\n[/sandbox_artifacts]\nAnything else?",
+    );
+    assert.equal(cleaned.includes("sandbox_artifacts"), false);
+    assert.match(cleaned, /The sheet is ready\./);
+    assert.match(cleaned, /Anything else\?/);
+  });
+
+  it("separates reasoning headings that ran together as **A****B**", () => {
+    const glued = sanitizeVisibleAssistantText("**Gather prices****Compute the split**");
+    assert.equal(glued.includes("****"), false);
+    assert.match(glued, /\*\*Gather prices\*\*\n\n\*\*Compute the split\*\*/);
+    const plain = sanitizeVisibleAssistantText("**Gather prices**\n\n**Compute the split**");
+    assert.equal(plain, "**Gather prices**\n\n**Compute the split**");
+  });
+
+  it("renders a bare top-level Sol svg as an inline image, code fences untouched", () => {
+    const svg = '<svg width="100" height="40" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="40" fill="#cream"/></svg>';
+    const inline = inlineTopLevelSvg(`Chart:\n${svg}\nDone.`);
+    assert.equal(inline.includes("<svg"), false);
+    assert.match(inline, /^Chart:\n!\[chart\]\(data:image\/svg\+xml;base64,/);
+    const match = inline.match(/base64,([^)]+)\)/);
+    assert.ok(match);
+    const decoded = Buffer.from(match[1]!, "base64").toString("utf8");
+    assert.equal(decoded, svg);
+    const fenced = inlineTopLevelSvg("```\n" + svg + "\n```");
+    assert.equal(fenced.includes("data:image"), false);
   });
 });

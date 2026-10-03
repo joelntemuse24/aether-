@@ -269,3 +269,92 @@ describe("probe replay (re-run and round-1 strings)", () => {
     assert.equal(fed.visible, "See [the docs](README.md) for details.");
   });
 });
+
+describe("probe replay (r3 strings)", () => {
+  it("publishes the Luna chart image written with a sandbox: scheme", () => {
+    const fed = redactSandboxText(
+      "Here is the chart:\n![](sandbox:/workspace/btc_30d.png)",
+      { flush: true },
+    );
+    assert.equal(fed.visible.includes("sandbox:"), false);
+    assert.equal(fed.visible.includes("!["), false);
+    assert.equal(fed.visible.includes("btc_30d.png"), false);
+    assert.match(fed.visible, /Here is the chart:/);
+    assert.deepEqual(fed.refs.map((ref) => ref.path), ["/workspace/btc_30d.png"]);
+    assert.equal(fed.refs[0]?.label, "btc_30d.png");
+  });
+
+  it("publishes the Luna chart image whose markdown link arrives across chunks", () => {
+    const first = redactSandboxText("Here is the chart:\n![chart](sandbox:/worksp");
+    assert.equal(first.visible.includes("!"), false);
+    assert.match(first.held, /!\[chart\]/);
+    const second = redactSandboxText(`${first.held}ace/btc_30d.png)`);
+    assert.equal(second.visible.includes("!["), false);
+    assert.equal(second.visible.includes("sandbox:"), false);
+    assert.deepEqual(second.refs.map((ref) => ref.path), ["/workspace/btc_30d.png"]);
+  });
+
+  it("publishes a chart image that points at the internal sandbox path", () => {
+    const path = `${VM}/01m41kbvxrxkqgksr9nfjcpc44/01m41kd2fzvkast0qzhpz50ec4/btc_30d.png`;
+    const fed = redactSandboxText(`Done.\n![chart](${path})`, { flush: true });
+    assert.equal(fed.visible.includes("/home/"), false);
+    assert.equal(fed.visible.includes("!["), false);
+    assert.deepEqual(fed.refs.map((ref) => ref.path), [path]);
+  });
+
+  it("publishes a bare relative chart image", () => {
+    const fed = redactSandboxText("Chart:\n![btc 30d](btc_30d.png)", { flush: true });
+    assert.equal(fed.visible.includes("!["), false);
+    assert.deepEqual(fed.refs.map((ref) => ref.path), ["btc_30d.png"]);
+    assert.equal(fed.refs[0]?.label, "btc 30d");
+  });
+
+  it("replays the Luna image as a png file card the thread renders inline", async () => {
+    const chunks = await sandboxFileCards({
+      refs: [{ label: "btc_30d", path: "/workspace/btc_30d.png" }],
+      load: async (filePath) =>
+        filePath === "/workspace/btc_30d.png" || filePath === "btc_30d.png"
+          ? Buffer.from("png-bytes")
+          : null,
+    });
+    const output = chunks.find((chunk) => chunk.type === "tool-output-available")?.output as {
+      kind?: string;
+      filename?: string;
+      content?: string;
+    };
+    assert.equal(output.kind, "file");
+    assert.equal(output.filename, "btc_30d.png");
+    assert.match(output.content ?? "", /^data:image\/png;base64,/);
+  });
+
+  it("strips the Sol sandbox_artifacts closing-tag residue", () => {
+    const fed = redactSandboxText(
+      "The sheet is ready.\n[/sandbox_artifacts]\nAnything else?",
+    );
+    assert.equal(fed.visible.includes("sandbox_artifacts"), false);
+    assert.match(fed.visible, /The sheet is ready\./);
+    assert.match(fed.visible, /Anything else\?/);
+  });
+
+  it("strips closed Sol thinking tags from the answer", () => {
+    const fed = redactSandboxText(
+      "Answer starts <thinking>hidden musing about the plan</thinking> and ends here.",
+      { flush: true },
+    );
+    assert.equal(fed.visible.includes("thinking"), false);
+    assert.equal(fed.visible.includes("hidden musing"), false);
+    assert.match(fed.visible, /Answer starts/);
+    assert.match(fed.visible, /and ends here\./);
+  });
+
+  it("holds an unclosed Sol thinking tag and drops it on flush", () => {
+    const first = redactSandboxText("Answer starts <thinking>still musing about");
+    assert.match(first.visible, /Answer starts/);
+    assert.equal(first.visible.includes("thinking"), false);
+    assert.match(first.held, /<thinking>/);
+    const flushed = redactSandboxText(`${first.held} the numbers`, { flush: true });
+    assert.equal(flushed.visible.includes("thinking"), false);
+    assert.equal(flushed.visible.includes("musing"), false);
+    assert.equal(flushed.visible.trim(), "");
+  });
+});
