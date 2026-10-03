@@ -68,7 +68,7 @@ export function recoverToolCallsFromMarkup(text: unknown): RecoveredToolCall[] {
 export function sanitizeVisibleAssistantText(text: unknown): string {
   const value = asText(text);
   if (!value) return "";
-  if (!looksLikeRawToolMarkup(value)) return value;
+  if (!looksLikeRawToolMarkup(value)) return value.trim() ? value : "";
   let next = value.replace(DSML_BLOCK, " ");
   next = next.replace(DSML_TAG, " ");
   next = next.replace(TOOL_XML_BLOCK, " ");

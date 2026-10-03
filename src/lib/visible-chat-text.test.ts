@@ -42,6 +42,12 @@ describe("visible assistant text never dumps raw tool XML", () => {
     assert.equal(isHiddenToolMarkup(mixed), false);
   });
 
+  it("treats whitespace-only text as empty", () => {
+    assert.equal(sanitizeVisibleAssistantText("  \n "), "");
+    assert.equal(sanitizeVisibleAssistantText("  "), "");
+    assert.equal(sanitizeVisibleAssistantText("\n\n"), "");
+  });
+
   it("keeps lists, blockquotes, and paragraphs", () => {
     const markdown = "- one\n- two\n\n> a quoted line\n\nFirst paragraph.\n\nSecond paragraph.";
     assert.equal(looksLikeRawToolMarkup(markdown), false);
