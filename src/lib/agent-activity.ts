@@ -196,8 +196,14 @@ function partLooksComplete(part: ActivityPart): boolean {
   return false;
 }
 
+function isSandboxExec(name: string | null): boolean {
+  return name === "exec" || name === "sandbox_exec";
+}
+
 function partLooksRunning(part: ActivityPart, isRunning: boolean): boolean {
   if (partLooksComplete(part)) return false;
+  // A cut-off command is not still running. Leaving it "Running" freezes the status line.
+  if (!isRunning && isSandboxExec(toolNameFromActivityPart(part))) return false;
   const t = part.status?.type;
   if (t === "running" || t === "requires-action") return true;
   if (
@@ -346,6 +352,9 @@ export function activityLabelForTool(
       return running ? "Checking work" : "Checked work";
     case "request_confirmation":
       return running ? "Waiting for approval" : "Asked for approval";
+    case "exec":
+    case "sandbox_exec":
+      return running ? "Running exec" : "Ran exec";
     default:
       return running ? `Running ${toolName}` : `Ran ${toolName}`;
   }
@@ -362,6 +371,15 @@ export function collectActivitySteps(
     const toolName = toolNameFromActivityPart(part);
     if (toolName) {
       const running = partLooksRunning(part, isRunning);
+      const output = part.output ?? part.result;
+      const failedExec =
+        isSandboxExec(toolName) &&
+        !!output &&
+        typeof output === "object" &&
+        (output as { ok?: boolean }).ok === false;
+      const stopped =
+        failedExec ||
+        (!running && !partLooksComplete(part) && !isRunning && isSandboxExec(toolName));
       const id = `${toolName}:${index}`;
       const args = parseArgs(part);
       seen.add(toolName);
@@ -369,7 +387,7 @@ export function collectActivitySteps(
         id,
         kind: "tool",
         toolName,
-        label: activityLabelForTool(toolName, args, running),
+        label: stopped ? "Exec stopped" : activityLabelForTool(toolName, args, running),
         state: running ? "running" : "complete",
         ...stepDetail(toolName, args, part),
       });
