@@ -4,7 +4,7 @@ Repeatable breakage probe for hosted Aether (Expert) on **API and UI**. This is 
 
 API: blank transcripts, raw DSML/tool XML, client/Application errors, `This step failed`, `ZoneInfoNotFoundError`, stuck Stop, duplicate Working strips, stacked live tool one-liners, Thinking theater, no answer after N seconds, leaked upstream auth errors, **empty synthesis** (research/clock finished with no number), **vanished Working** (blank transcript after a clock/research turn), snapshot research slower than the Ireland cite budget (`slow_research`).
 
-UI (Playwright against the wired chrome): blank **Howzit?** after send, remount-blank after `/c/<id>` (answer gone until a sidebar click), duplicate Working strips, stacked live status, source-chip / live-tool jank that jumps the composer, raw DSML visible, “Application error” client exception, stuck Stop, missing **Worked for Ns**, vanished Working with an empty transcript, “This step failed” without recovery. Failures write a PNG under `evals/probe/artifacts/`.
+UI (Playwright against the wired chrome): blank **Howzit?** after send, remount-blank after `/c/<id>` (answer gone until a sidebar click), duplicate live status strips, stacked live status, source-chip / live-tool jank that jumps the composer, raw DSML visible, “Application error” client exception, stuck Stop, missing settled status (**Thought for Ns** / **Searched the web**), vanished status with an empty transcript, “This step failed” without recovery. Failures write a PNG under `evals/probe/artifacts/`.
 
 ## Layout
 
@@ -13,7 +13,7 @@ UI (Playwright against the wired chrome): blank **Howzit?** after send, remount-
 | `prompts.json` | Capability-gap seeds + Joel’s Grok-history harvest (`surfaces: ["api", "ui"]`) |
 | `run.ts` | CLI (`npm run probe` / `probe:ui`) |
 | `detectors.ts` | API/SSE pass/fail heuristics |
-| `ui-detectors.ts` | DOM snapshot heuristics (Howzit, Working, Stop, Worked for) |
+| `ui-detectors.ts` | DOM snapshot heuristics (Howzit, Thinking, Stop, Thought for) |
 | `client.ts` | Headless hosted turn via Head Start → `/api/chat` |
 | `ui-client.ts` | Playwright against the live composer |
 | `last-report.json` / `last-report.md` | Latest run (gitignored) |
@@ -88,7 +88,7 @@ Hosted keys stay on the **server** you point at. The probe never embeds keys.
 1. Chromium opens `AETHER_PROBE_BASE_URL`.
 2. Dismiss Preferences if hosted is ready (`Close preferences`).
 3. Fill `textarea[aria-label="Message input"]`, click Send.
-4. Assert wired chrome only: welcome `h1` (Howzit? / we uup / in the trenches?), `.aether-activity` Working / Worked for, `Stop generating`, `[data-role="assistant"]`, `.aether-tool-trace__error`. Stay on the live canvas after `/c/<id>` — do not click the sidebar to recover a remount-blank.
+4. Assert wired chrome only: welcome `h1` (Howzit? / we uup / in the trenches?), `.aether-activity` Thinking / Thought for, `Stop generating`, `[data-role="assistant"]`, `.aether-tool-trace__error`. Stay on the live canvas after `/c/<id>` — do not click the sidebar to recover a remount-blank.
 5. On any UI finding, screenshot `evals/probe/artifacts/<id>-<tier>-ui.png`.
 
 ## Grok harvest
@@ -101,7 +101,7 @@ To add more later, append a row with `source: "grok-history"`, a unique `id`, an
 
 ## Figma Make / failure chrome
 
-UI chrome for failure states (Howzit vanishing, Working → Worked for, This step failed, Application error) may be designed in Figma Make. **Those frames must stay synced with the real wired backend/UI** — this harness asserts the classes and copy that already ship in `thread.tsx` / `agent-status-strip.tsx` / `tool-ui.tsx`. Do not invent a fake probe-only surface that is not wired to chat. This PR does not open a Figma Make file.
+UI chrome for failure states (Howzit vanishing, Thinking → Thought for, This step failed, Application error) may be designed in Figma Make. **Those frames must stay synced with the real wired backend/UI** — this harness asserts the classes and copy that already ship in `thread.tsx` / `agent-status-strip.tsx` / `tool-ui.tsx`. Do not invent a fake probe-only surface that is not wired to chat. This PR does not open a Figma Make file.
 
 ## Joel / Grok Bot — next invoke
 

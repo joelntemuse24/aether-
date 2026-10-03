@@ -10,7 +10,8 @@ const APPLICATION_ERROR = /application error/i;
 const STEP_FAILED = /this step failed/i;
 const ZONEINFO = /zoneinfonotfounderror/i;
 const STUCK_STOP = /\bstuck stop\b|\bstop stuck\b/i;
-const WORKING_LINE = /^(?:working(?: for \S+)?)$/i;
+const WORKING_LINE = /^(?:working(?: for \S+)?|thinking(?:\s+\d+\S*)?)$/i;
+const SETTLED_STATUS = /(?:worked|thought) for \s*\d|\bsearched the web\b/i;
 const TOOL_STATUS_LINE =
   /^(?:Searching|Searched|Reading|Read|Running|Ran|Creating|Created|Writing|Wrote|Checking|Checked|Looking|Looked|Building|Built|Saving|Saved|Generating|Generated|Listing|Listed)\b/;
 const UPSTREAM_LEAK =
@@ -35,6 +36,10 @@ export function snapshotResearchBudgetMs(input: {
     return SNAPSHOT_RESEARCH_BUDGET_MS;
   }
   return null;
+}
+
+export function textLooksSettled(text: string): boolean {
+  return SETTLED_STATUS.test(text);
 }
 
 export function countWorkingStrips(text: string): number {

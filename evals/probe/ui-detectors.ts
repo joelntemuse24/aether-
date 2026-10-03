@@ -162,7 +162,7 @@ export function detectUiFailures(snap: UiSnapshot): ProbeFinding[] {
     } else {
       findings.push({
         code: "missing_worked_for",
-        detail: "Turn showed Working but never collapsed to “Worked for Ns”.",
+        detail: "Turn showed a live status but never collapsed to “Thought for Ns” or a finished step.",
       });
     }
   }

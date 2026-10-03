@@ -1,6 +1,6 @@
 # TrueForge harness
 
-The chat the user sees is the existing Aether shell: cream canvas, Inter chrome, Cormorant assistant text, terracotta, the composer, sidebar, “Worked for Ns” status, confirm cards, and the artifact panel. TrueForge (`@truefoundry/trueforge`) runs the agent loop in a local sidecar. Hosted Expert turns go to its session and turn APIs. The stream is translated into the AI SDK chunks that shell already renders. Trigger.dev is not on this path.
+The chat the user sees is the existing Aether shell: cream canvas, Inter chrome, Cormorant assistant text, terracotta, the composer, sidebar, the live “Thinking” / “Thought for Ns” status, confirm cards, and the artifact panel. TrueForge (`@truefoundry/trueforge`) runs the agent loop in a local sidecar. Hosted Expert turns go to its session and turn APIs. The stream is translated into the AI SDK chunks that shell already renders. Trigger.dev is not on this path.
 
 `AETHER_TRUEFORGE=0` restores the previous hosted path (Trigger when configured, otherwise the in-process `/api/chat` loop).
 

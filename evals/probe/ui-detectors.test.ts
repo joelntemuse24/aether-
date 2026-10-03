@@ -58,6 +58,10 @@ describe("probe UI detectors", () => {
       fixtureUiSnapshot({ bodyText: "Planning… Gathering context" }),
     );
     assert.equal(theater.some((f) => f.code === "thinking_theater"), true);
+    const honest = detectUiFailures(
+      fixtureUiSnapshot({ bodyText: "Thinking\n5s" }),
+    );
+    assert.equal(honest.some((f) => f.code === "thinking_theater"), false);
 
     const stacked = detectUiFailures(fixtureUiSnapshot({ liveStepCount: 3 }));
     assert.equal(stacked.some((f) => f.code === "status_stack"), true);

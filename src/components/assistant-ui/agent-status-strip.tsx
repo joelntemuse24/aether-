@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FC } from "react";
+import { useEffect, useId, useRef, useState, type FC } from "react";
 import { ChevronDownIcon } from "lucide-react";
 import { useAuiState } from "@assistant-ui/react";
 import { useHarness } from "@/providers/harness-provider";
@@ -14,6 +14,7 @@ import {
   activityClockShouldRun,
   liveWorkOneLiner,
   recalledActivityElapsed,
+  shouldRevealActivityElapsed,
   shouldShowComposerActivity,
   sourceChipLabel,
   sourceTrayPills,
@@ -79,32 +80,18 @@ function useThreadActivityElapsed(isRunning: boolean, messageId?: string) {
   return elapsed;
 }
 
-function ElapsedTicks({
-  seconds,
-  prefix,
-}: {
-  seconds: number;
-  prefix: "Working for" | "Worked for";
-}) {
-  if (seconds <= 0) return null;
+function StatusGlyph() {
   return (
-    <span>
-      {prefix}{" "}
-      <span className="tabular-nums">{formatActivityElapsed(seconds)}</span>
-    </span>
-  );
-}
-
-function WorkingHeader({ view }: { view: ActivityView }) {
-  return (
-    <div className="aether-activity__line">
-      <span className="aether-activity__spinner" aria-hidden />
-      {view.elapsedSeconds > 0 ? (
-        <ElapsedTicks seconds={view.elapsedSeconds} prefix="Working for" />
-      ) : (
-        <span className="aether-activity__words">Working</span>
-      )}
-    </div>
+    <svg
+      className="aether-activity__glyph"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+    >
+      <path
+        fill="currentColor"
+        d="M8 0.75 9.05 6.95 15.25 8 9.05 9.05 8 15.25 6.95 9.05 0.75 8 6.95 6.95Z"
+      />
+    </svg>
   );
 }
 
@@ -115,8 +102,10 @@ function LiveActivity({
   view: ActivityView;
   className?: string;
 }) {
-  const oneLiner = liveWorkOneLiner(view);
+  const toolLine = liveWorkOneLiner(view);
   const liveSteps = compactLiveSteps(view);
+  const label = toolLine ?? liveSteps[0]?.label ?? view.liveLine ?? "Thinking";
+  const showElapsed = shouldRevealActivityElapsed(view.elapsedSeconds);
   return (
     <div
       className={cn(
@@ -124,32 +113,23 @@ function LiveActivity({
         className,
       )}
       data-activity-mode={view.mode}
-      role="status"
-      aria-live="polite"
     >
-      <WorkingHeader view={view} />
-      {oneLiner ? (
-        <ol className="aether-activity__steps" aria-label="Work in this turn">
-          {liveSteps.length > 0 ? (
-            liveSteps.map((step) => (
-              <li
-                key={step.id}
-                className={cn(
-                  "aether-activity__step",
-                  "aether-activity__step--live",
-                )}
-                title={step.label}
-              >
-                {step.label}
-              </li>
-            ))
-          ) : (
-            <li className="aether-activity__step aether-activity__step--live">
-              {oneLiner}
-            </li>
-          )}
-        </ol>
-      ) : null}
+      <div className="aether-activity__line">
+        <StatusGlyph />
+        <span
+          key={view.lineKey ?? label}
+          className="aether-activity__label"
+          role="status"
+          aria-live="polite"
+        >
+          {label}
+        </span>
+        {showElapsed ? (
+          <span className="aether-activity__elapsed">
+            {formatActivityElapsed(view.elapsedSeconds)}
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -162,34 +142,41 @@ export function AgentActivityPanel({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const stepsId = useId();
 
   if (!view.visible) return null;
 
   if (view.mode === "collapsed") {
+    const canExpand = view.steps.length > 0;
     return (
       <div
         className={cn("aether-activity aether-activity--enter", className)}
         data-activity-mode="collapsed"
-        role="status"
-        aria-live="polite"
       >
-        <button
-          type="button"
-          className="aether-activity__summary-btn"
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {view.summaryLabel?.startsWith("Worked for ") ? (
-            <ElapsedTicks seconds={view.elapsedSeconds} prefix="Worked for" />
-          ) : (
-            <span>{view.summaryLabel}</span>
-          )}
-          {view.steps.length > 0 ? (
+        {canExpand ? (
+          <button
+            type="button"
+            className="aether-activity__summary-btn"
+            aria-expanded={open}
+            aria-controls={stepsId}
+            onClick={() => setOpen((v) => !v)}
+          >
+            <span role="status" aria-live="polite">
+              {view.summaryLabel}
+            </span>
             <ChevronDownIcon className="aether-activity__caret" aria-hidden />
-          ) : null}
-        </button>
-        {open && view.steps.length > 0 ? (
-          <ol className="aether-activity__steps" aria-label="Work in this turn">
+          </button>
+        ) : (
+          <span className="aether-activity__summary-btn" role="status" aria-live="polite">
+            {view.summaryLabel}
+          </span>
+        )}
+        {open && canExpand ? (
+          <ol
+            id={stepsId}
+            className="aether-activity__steps"
+            aria-label="Work in this turn"
+          >
             {view.steps.map((step) => (
               <li
                 key={step.id}

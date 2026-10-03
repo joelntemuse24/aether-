@@ -1334,7 +1334,7 @@ const AssistantMessage: FC = () => {
       data-role="assistant"
       className={cn(
         "group/message relative",
-        isLive && "animate-[fadeIn_120ms_ease-out]",
+        isLive && "aether-message-enter",
       )}
     >
       <div

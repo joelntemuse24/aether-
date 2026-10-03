@@ -607,7 +607,7 @@ function FileCard({
           {typeof progress === "number" && progress < 100 && (
             <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--elevated-deep)]">
               <div
-                className="h-full bg-[var(--accent)] transition-all"
+                className="h-full bg-[var(--accent)] transition-[width] duration-base ease-aether"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -677,7 +677,7 @@ function FileRow({
           {typeof progress === "number" && progress < 100 && (
             <div className="mt-1 h-1 max-w-[12rem] overflow-hidden rounded-full bg-[var(--elevated-deep)]">
               <div
-                className="h-full bg-[var(--accent)] transition-all"
+                className="h-full bg-[var(--accent)] transition-[width] duration-base ease-aether"
                 style={{ width: `${progress}%` }}
               />
             </div>
