@@ -201,6 +201,7 @@ export function buildTrueForgeAgentSpec(input: {
       config: {
         sandbox: { enabled: input.sandboxEnabled },
         ask_user_questions: { enabled: ASK_USER_QUESTIONS_ENABLED },
+        generative_ui: { enabled: false },
       },
       ...(input.mcp
         ? { mcpServers: aetherMcpServers({ direct: input.mcp.direct }, input.mcp.includeAccountTools) }
