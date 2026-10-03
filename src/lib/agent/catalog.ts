@@ -1,6 +1,6 @@
 /**
  * Tools the native engine can actually run.
- * Web tools execute on the VM. Account tools execute on Vercel.
+ * Web tools and the sandbox execute on the VM. Account tools execute on Vercel.
  * Names outside this list are not attached, even if a token mentions them.
  */
 
@@ -21,6 +21,7 @@ import {
   webSearchInput,
 } from "@/lib/tools";
 import type { AgentToolDefinition } from "./registry";
+import { SANDBOX_TOOL_DEFINITIONS } from "./sandbox-tools";
 
 export const NATIVE_WEB_TOOL_NAMES = [
   "web_search",
@@ -41,6 +42,8 @@ export const NATIVE_ACCOUNT_TOOL_NAMES = [
   "github_list_contents",
   "github_list_issues",
 ] as const;
+
+export const NATIVE_SANDBOX_TOOL_NAMES = ["sandbox_exec", "sandbox_files"] as const;
 
 const CATALOG: readonly AgentToolDefinition[] = [
   {
@@ -79,6 +82,7 @@ const CATALOG: readonly AgentToolDefinition[] = [
     runsOn: "vm",
     requiresAuth: false,
   },
+  ...SANDBOX_TOOL_DEFINITIONS,
   {
     name: "memory_search",
     description: "Search the signed-in user's saved memory.",
@@ -173,10 +177,11 @@ const CATALOG: readonly AgentToolDefinition[] = [
 
 const BY_NAME = new Map(CATALOG.map((definition) => [definition.name, definition]));
 
-export function nativeToolNames(includeAccount: boolean): string[] {
-  return includeAccount
-    ? [...NATIVE_WEB_TOOL_NAMES, ...NATIVE_ACCOUNT_TOOL_NAMES]
-    : [...NATIVE_WEB_TOOL_NAMES];
+export function nativeToolNames(includeAccount: boolean, includeSandbox = false): string[] {
+  const names: string[] = [...NATIVE_WEB_TOOL_NAMES];
+  if (includeSandbox) names.push(...NATIVE_SANDBOX_TOOL_NAMES);
+  if (includeAccount) names.push(...NATIVE_ACCOUNT_TOOL_NAMES);
+  return names;
 }
 
 /** Keep allow-list order. Skip names this process cannot run. */

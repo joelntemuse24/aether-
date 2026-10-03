@@ -9,7 +9,8 @@ import { executeNativeTool } from "@/lib/agent/execute-native";
 import type { AgentEvent } from "@/lib/agent/events";
 import { runAgentLoop, type AgentLoopResult } from "@/lib/agent/loop";
 import { AGENT_MODEL_UNAVAILABLE, buildAgentLanguageModels, type AgentModelBuild } from "@/lib/agent/models";
-import { agentToolGroup, type AgentToolExecute, type AgentToolGroup } from "@/lib/agent/registry";
+import { agentToolGroup, type AgentToolDefinition, type AgentToolExecute, type AgentToolGroup } from "@/lib/agent/registry";
+import { bubblewrapAvailable, createBubblewrapSandbox, type AgentSandbox } from "@/lib/agent/sandbox";
 import type { WebExecDeps } from "@/lib/agent/web-exec";
 import { assertPublicHttpUrl } from "@/lib/connectors/url-safety";
 import type { UiChunk } from "@/lib/trueforge/ui-chunks";
@@ -24,7 +25,21 @@ export type NativeTurnDeps = {
   /** Test hook. Production checks the callback origin with the public-URL rule. */
   allowCallback?: boolean;
   web?: WebExecDeps;
+  /** When set, skip the bwrap probe. Production probes only if a sandbox tool is allowed. */
+  sandboxAvailable?: boolean;
+  sandbox?: AgentSandbox;
 };
+
+export function attachNativeTools(
+  names: readonly string[],
+  options: { callbackOk: boolean; sandboxOk: boolean },
+): AgentToolDefinition[] {
+  return definitionsForAllowList(names).filter((definition) => {
+    if (definition.runsOn === "vercel" && !options.callbackOk) return false;
+    if (agentToolGroup(definition.name) === "sandbox" && !options.sandboxOk) return false;
+    return true;
+  });
+}
 
 function unavailableGroups(definitions: readonly { name: string }[]): AgentToolGroup[] {
   const present = new Set(
@@ -70,7 +85,17 @@ export async function runNativeTurn(
   if (!built.ok) return unavailableEvents();
   const callbackOk = await callbackOriginAllowed(body.callbackOrigin, deps.allowCallback === true);
   const listed = definitionsForAllowList(body.tools);
-  const tools = callbackOk ? listed : listed.filter((definition) => definition.runsOn === "vm");
+  const wantsSandbox = listed.some((definition) => agentToolGroup(definition.name) === "sandbox");
+  const sandboxOk =
+    deps.sandboxAvailable != null
+      ? deps.sandboxAvailable
+      : wantsSandbox
+        ? await bubblewrapAvailable()
+        : false;
+  const tools = attachNativeTools(body.tools, { callbackOk, sandboxOk });
+  const sandbox = sandboxOk
+    ? (deps.sandbox ?? createBubblewrapSandbox({ conversationId: body.conversationId, env }))
+    : null;
   const result: AgentLoopResult = await runAgentLoop({
     model: built.model,
     fallbackModels: built.fallbacks,
@@ -91,6 +116,7 @@ export async function runNativeTurn(
           fetchImpl: deps.fetchImpl,
           checkOrigin: deps.allowCallback ? async () => true : undefined,
           web: deps.web,
+          sandbox,
         })),
     unavailableGroups: unavailableGroups(tools),
     depth: body.depth,
