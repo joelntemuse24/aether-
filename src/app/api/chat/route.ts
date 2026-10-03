@@ -277,7 +277,8 @@ export async function POST(req: Request) {
     // TrueForge runs hosted Expert turns when the sidecar is up. Otherwise the
     // existing in-process / Hermes path handles the turn (Vercel has no sidecar).
     const { isOpenRouterModelId } = await import("@/lib/openrouter/models");
-    const { openRouterChatResponse } = await import("@/lib/openrouter/stream");
+    const { openRouterChatResponse, textHistoryFromUiMessages } = await import("@/lib/openrouter/stream");
+    const history = textHistoryFromUiMessages(enrichedMessages);
     if (hosted && isOpenRouterModelId(incomingModel || "")) {
       if (!openRouterKey) {
         return new Response(
@@ -290,6 +291,7 @@ export async function POST(req: Request) {
         model: incomingModel,
         system,
         userText: lastUserText(enrichedMessages) || lastUserText(messages),
+        history,
         abortSignal: req.signal,
       });
     }
@@ -308,6 +310,7 @@ export async function POST(req: Request) {
       return streamTrueForgeHostedChat({
         conversationId,
         userText: lastUserText(enrichedMessages) || lastUserText(messages),
+        history,
         system,
         attachments,
         abortSignal: req.signal,

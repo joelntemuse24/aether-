@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { aetherProviderManifests } from "@/lib/trueforge/providers";
-import { shouldBackupBuzzWithOpenRouter } from "./stream";
+import { boundedOpenRouterMessages, shouldBackupBuzzWithOpenRouter, textHistoryFromUiMessages } from "./stream";
 import {
   filterOpenRouterChatModels,
   isOpenRouterModelId,
@@ -55,5 +55,42 @@ describe("OpenRouter BYOK catalog", () => {
 
   it("removes the user key from an error string", () => {
     assert.equal(redactSecret("bad key sk-or-secret in body", "sk-or-secret"), "bad key [redacted] in body");
+  });
+
+  it("sends bounded conversation history, not only the last user line", () => {
+    const history = textHistoryFromUiMessages([
+      { role: "user", parts: [{ type: "text", text: "Earlier question" }] },
+      { role: "assistant", parts: [{ type: "text", text: "Earlier answer" }] },
+      { role: "user", parts: [{ type: "text", text: "Follow up" }, { type: "file", text: "skip" }] },
+    ]);
+    assert.deepEqual(history, [
+      { role: "user", content: "Earlier question" },
+      { role: "assistant", content: "Earlier answer" },
+      { role: "user", content: "Follow up" },
+    ]);
+    const messages = boundedOpenRouterMessages({
+      system: "Be brief.",
+      history,
+      userText: "Follow up",
+    });
+    assert.deepEqual(
+      messages.map((row) => row.content),
+      ["Be brief.", "Earlier question", "Earlier answer", "Follow up"],
+    );
+    const trimmed = boundedOpenRouterMessages({
+      system: "Be brief.",
+      history: Array.from({ length: 30 }, (_, index) => ({
+        role: index % 2 === 0 ? "user" : "assistant",
+        content: `turn ${index}`,
+      })),
+      limit: 4,
+    });
+    assert.equal(trimmed.length, 5);
+    assert.equal(trimmed[0]?.content, "Be brief.");
+    assert.equal(trimmed.at(-1)?.content, "turn 29");
+    assert.deepEqual(boundedOpenRouterMessages({ system: "Be brief.", userText: "Only this" }), [
+      { role: "system", content: "Be brief." },
+      { role: "user", content: "Only this" },
+    ]);
   });
 });
