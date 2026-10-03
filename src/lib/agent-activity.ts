@@ -9,6 +9,7 @@
 import { collectSourceCitations } from "./citations";
 import {
   recoverToolCallsFromMarkup,
+  sanitizeReasoningText,
   sanitizeVisibleAssistantText,
 } from "./visible-chat-text";
 
@@ -38,6 +39,12 @@ export type ActivityStep = {
   toolName: string;
   label: string;
   state: "running" | "complete";
+  /** Search query, shown only inside the expanded disclosure. */
+  query?: string;
+  /** Host that was read, shown only inside the expanded disclosure. */
+  site?: string;
+  /** Short code preview, shown only inside the expanded disclosure. */
+  code?: string;
 };
 
 export type ActivityMode = "hidden" | "elapsed" | "live" | "collapsed";
@@ -54,6 +61,8 @@ export type ActivityView = {
   elapsedSeconds: number;
   elapsedLabel: string | null;
   summaryLabel: string | null;
+  /** Sanitized chain-of-thought. Never the collapsed headline. */
+  reasoning: string | null;
 };
 
 const WORKING_CLOCK_LINE = /^(?:working(?: for \S+)?|thinking)$/i;
@@ -131,6 +140,7 @@ function hidden(elapsedSeconds = 0): ActivityView {
     elapsedSeconds,
     elapsedLabel: null,
     summaryLabel: null,
+    reasoning: null,
   };
 }
 
@@ -353,13 +363,15 @@ export function collectActivitySteps(
     if (toolName) {
       const running = partLooksRunning(part, isRunning);
       const id = `${toolName}:${index}`;
+      const args = parseArgs(part);
       seen.add(toolName);
       steps.push({
         id,
         kind: "tool",
         toolName,
-        label: activityLabelForTool(toolName, parseArgs(part), running),
+        label: activityLabelForTool(toolName, args, running),
         state: running ? "running" : "complete",
+        ...stepDetail(toolName, args, part),
       });
       continue;
     }
@@ -377,6 +389,7 @@ export function collectActivitySteps(
             isRunning,
           ),
           state: isRunning ? "running" : "complete",
+          ...stepDetail(recovered.toolName, recovered.args),
         });
       }
     }
@@ -393,23 +406,117 @@ function thoughtSummary(elapsedSeconds: number): string {
   return `Thought for ${formatActivityElapsed(Math.max(elapsedSeconds, 1))}`;
 }
 
+function searchClause(sourceCount: number): string {
+  if (sourceCount === 1) return "Searched the web · 1 source";
+  if (sourceCount > 1) return `Searched the web · ${sourceCount} sources`;
+  return "Searched the web";
+}
+
+/**
+ * One headline for the whole turn. Search turns that ran long enough
+ * lead with "Thought for Ns". Every other completed step joins that
+ * same line. A lone tool stays its own past-tense label.
+ */
 function collapsedSummary(
   steps: ActivityStep[],
   elapsedSeconds: number,
   sourceCount: number,
 ): string {
-  if (steps.some((step) => step.toolName === "web_search")) {
-    if (sourceCount === 1) return "Searched the web · 1 source";
-    if (sourceCount > 1) return `Searched the web · ${sourceCount} sources`;
-    return "Searched the web";
+  const phrases: string[] = [];
+  const seen = new Set<string>();
+  const push = (phrase: string) => {
+    if (!phrase || seen.has(phrase)) return;
+    seen.add(phrase);
+    phrases.push(phrase);
+  };
+
+  const searched = steps.some((step) => step.toolName === "web_search");
+  if (searched && shouldRevealActivityElapsed(elapsedSeconds)) {
+    push(thoughtSummary(elapsedSeconds));
   }
-  if (steps.length > 0) {
-    const last =
-      [...steps].reverse().find((step) => step.state === "complete") ??
-      steps[steps.length - 1];
-    return last?.label ?? thoughtSummary(elapsedSeconds);
+
+  for (const step of steps) {
+    if (step.toolName === "web_search") {
+      push(searchClause(sourceCount));
+      continue;
+    }
+    push(step.label);
   }
-  return thoughtSummary(elapsedSeconds);
+
+  if (phrases.length === 0) return thoughtSummary(elapsedSeconds);
+  return phrases.join(" · ");
+}
+
+function codePreview(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const text = value.replace(/\r\n/g, "\n").trim();
+  if (!text) return undefined;
+  const clipped = text.length > 180 ? `${text.slice(0, 179).trimEnd()}…` : text;
+  const joined = clipped.split("\n").slice(0, 4).join("\n").trim();
+  return joined || undefined;
+}
+
+function stepDetail(
+  toolName: string,
+  args: Record<string, unknown>,
+  part?: ActivityPart,
+): Pick<ActivityStep, "query" | "site" | "code"> {
+  const detail: Pick<ActivityStep, "query" | "site" | "code"> = {};
+  if (
+    toolName === "web_search" ||
+    toolName === "memory_search" ||
+    toolName === "drive_search" ||
+    toolName === "search_images" ||
+    toolName === "gmail_search"
+  ) {
+    const query = clipPhrase(args.query, 80);
+    if (query) detail.query = query;
+  }
+  if (
+    toolName === "fetch_url" ||
+    toolName === "browse_page" ||
+    toolName === "browser_snapshot" ||
+    toolName === "browser_navigate" ||
+    toolName === "browser_act"
+  ) {
+    const record = {
+      ...asRecord(part?.output),
+      ...asRecord(part?.result),
+    };
+    const site = hostFromUrl(args.url) ?? hostFromUrl(record.url);
+    if (site) detail.site = site;
+  }
+  if (toolName === "execute_python") {
+    const code = codePreview(args.code);
+    if (code) detail.code = code;
+  }
+  return detail;
+}
+
+function reasoningText(part: ActivityPart): string {
+  if (typeof part.text === "string" && part.text.trim()) return part.text;
+  const extra = part as ActivityPart & { reasoning?: unknown; delta?: unknown };
+  if (typeof extra.reasoning === "string") return extra.reasoning;
+  if (typeof extra.delta === "string") return extra.delta;
+  return "";
+}
+
+/** Muted summary for the disclosure. Empty when the provider sent none. */
+export function collectReasoningSummary(
+  parts: readonly ActivityPart[] | undefined,
+): string | null {
+  const bits: string[] = [];
+  for (const part of parts ?? []) {
+    if (!part || typeof part !== "object") continue;
+    const type = part.type ?? "";
+    if (type !== "reasoning" && !type.startsWith("reasoning")) continue;
+    const clean = sanitizeReasoningText(reasoningText(part));
+    if (clean) bits.push(clean);
+  }
+  const joined = bits.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+  if (!joined) return null;
+  if (joined.length <= 700) return joined;
+  return `${joined.slice(0, 699).trimEnd()}…`;
 }
 
 function latestAssistant(
@@ -440,6 +547,7 @@ export function deriveAgentActivity(
 
   const assistant = latestAssistant(input.messages);
   const steps = collectActivitySteps(assistant?.parts, input.isRunning);
+  const reasoning = collectReasoningSummary(assistant?.parts);
   const live = steps.find((s) => s.state === "running") ?? null;
   const elapsed =
     input.elapsedSeconds > 0
@@ -474,6 +582,7 @@ export function deriveAgentActivity(
       elapsedSeconds: elapsed,
       elapsedLabel: continueLabel,
       summaryLabel: null,
+      reasoning,
     };
   }
 
@@ -488,6 +597,7 @@ export function deriveAgentActivity(
       elapsedSeconds: elapsed,
       elapsedLabel: "Paused — continue",
       summaryLabel: null,
+      reasoning,
     };
   }
 
@@ -505,6 +615,7 @@ export function deriveAgentActivity(
         elapsedSeconds: elapsed,
         elapsedLabel: revealedElapsedLabel(elapsed),
         summaryLabel: null,
+        reasoning,
       };
     }
     return {
@@ -517,6 +628,7 @@ export function deriveAgentActivity(
       elapsedSeconds: elapsed,
       elapsedLabel: revealedElapsedLabel(elapsed),
       summaryLabel: null,
+      reasoning,
     };
   }
 
@@ -533,6 +645,7 @@ export function deriveAgentActivity(
       elapsedLabel:
         settledElapsed > 0 ? formatActivityElapsed(settledElapsed) : null,
       summaryLabel: collapsedSummary(steps, settledElapsed, sourceCount),
+      reasoning,
     };
   }
 

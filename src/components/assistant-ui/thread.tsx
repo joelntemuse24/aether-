@@ -1351,6 +1351,7 @@ const AssistantMessage: FC = () => {
               if (!part || typeof part !== "object") return null;
               const type =
                 "type" in part && typeof part.type === "string" ? part.type : "";
+              if (type === "reasoning" || type.startsWith("reasoning")) return null;
               if (type === "text") {
                 const raw =
                   "text" in part && typeof part.text === "string" ? part.text : "";

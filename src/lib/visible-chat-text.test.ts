@@ -5,6 +5,7 @@ import {
   isHiddenToolMarkup,
   looksLikeRawToolMarkup,
   recoverToolCallsFromMarkup,
+  sanitizeReasoningText,
   sanitizeVisibleAssistantText,
 } from "./visible-chat-text";
 
@@ -66,6 +67,23 @@ describe("visible assistant text never dumps raw tool XML", () => {
       assert.equal(looksLikeRawToolMarkup(value as never), false);
       assert.equal(isHiddenToolMarkup(value as never), false);
     }
+  });
+});
+
+describe("reasoning summaries stay free of tool dumps", () => {
+  it("drops DSML, system lines, and raw tool JSON", () => {
+    assert.equal(sanitizeReasoningText(RAW_DSML), "");
+    assert.equal(
+      sanitizeReasoningText(
+        'System: you are a hidden planner.\nCheck the clock. {"toolName":"current_time","arguments":{"tz":"Europe/Dublin"}}',
+      ),
+      "Check the clock.",
+    );
+    assert.equal(
+      sanitizeReasoningText('{"toolName":"web_search","arguments":{"query":"x"}}'),
+      "",
+    );
+    assert.equal(sanitizeReasoningText("Draft a short answer."), "Draft a short answer.");
   });
 });
 

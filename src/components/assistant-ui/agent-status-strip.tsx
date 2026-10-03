@@ -147,7 +147,7 @@ export function AgentActivityPanel({
   if (!view.visible) return null;
 
   if (view.mode === "collapsed") {
-    const canExpand = view.steps.length > 0;
+    const canExpand = view.steps.length > 0 || !!view.reasoning;
     return (
       <div
         className={cn("aether-activity aether-activity--enter", className)}
@@ -172,21 +172,29 @@ export function AgentActivityPanel({
           </span>
         )}
         {open && canExpand ? (
-          <ol
-            id={stepsId}
-            className="aether-activity__steps"
-            aria-label="Work in this turn"
-          >
-            {view.steps.map((step) => (
-              <li
-                key={step.id}
-                className="aether-activity__step"
-                title={step.label}
-              >
-                {step.label}
-              </li>
-            ))}
-          </ol>
+          <div id={stepsId} className="aether-activity__detail">
+            {view.reasoning ? (
+              <p className="aether-activity__reasoning">{view.reasoning}</p>
+            ) : null}
+            {view.steps.length > 0 ? (
+              <ol className="aether-activity__steps" aria-label="Work in this turn">
+                {view.steps.map((step) => (
+                  <li key={step.id} className="aether-activity__step">
+                    <span>{step.label}</span>
+                    {step.query ? (
+                      <span className="aether-activity__chip">{step.query}</span>
+                    ) : null}
+                    {step.site ? (
+                      <span className="aether-activity__chip">{step.site}</span>
+                    ) : null}
+                    {step.code ? (
+                      <pre className="aether-activity__code">{step.code}</pre>
+                    ) : null}
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </div>
         ) : null}
       </div>
     );

@@ -116,9 +116,43 @@
 
 .aether-activity__step {
   min-width: 0;
+  color: var(--muted);
+}
+
+.aether-activity__summary-btn > span[role="status"] {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.aether-activity__detail {
+  margin-top: 4px;
+}
+
+.aether-activity__reasoning {
+  margin: 2px 6px 6px;
+  max-width: 40rem;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted-soft);
+}
+
+.aether-activity__detail .aether-activity__chip {
+  margin-inline-start: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--hover-overlay);
+  vertical-align: baseline;
+}
+
+.aether-activity__code {
+  display: block;
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.4;
   color: var(--muted);
 }
 
