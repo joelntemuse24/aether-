@@ -13,6 +13,7 @@ import {
   trueforgeToolNote,
 } from "./instructions";
 import { playbooksSystemAddendum, resolvePlaybooks } from "@/lib/harness/playbooks";
+import { resolveSessionSkills, sessionSkillsSystemAddendum } from "@/lib/harness/session-skills";
 import { verifySystemAddendum } from "@/lib/harness/verify";
 import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
 import { applyTrueForgeSidecarPatches } from "./sidecar-patch";
@@ -113,11 +114,63 @@ describe("harness rules", () => {
     assert.deepEqual(toolNamesInPrompt(hosted, catalog), [...web].sort());
   });
 
+  it("keeps the guest prompt to the tools the turn attached", () => {
+    const catalog = AETHER_MCP_TOOL_NAMES;
+    const web = ["web_search", "fetch_url", "browse_page"];
+    const deck = playbooksSystemAddendum(
+      resolvePlaybooks({ text: "Build a 5-slide deck as a downloadable pptx" }),
+    );
+    const sheet = playbooksSystemAddendum(
+      resolvePlaybooks({ text: "now put that in a spreadsheet" }),
+    );
+    const skills = sessionSkillsSystemAddendum(resolveSessionSkills({}));
+    const verify = verifySystemAddendum({ depth: "deep", intent: "write" }) ?? "";
+    const hosted = instructionsForAttachedTools(
+      trueforgeInstructions(`${TOOLS_SYSTEM_PROMPT}\n\n${deck}\n\n${sheet}\n\n${skills}\n\n${verify}`),
+      web,
+    );
+    for (const name of [
+      "create_presentation",
+      "create_spreadsheet",
+      "create_document",
+      "create_pdf",
+      "workspace_ffmpeg",
+      "workspace_exec",
+      "browser_navigate",
+      "browser_act",
+      "browser_snapshot",
+      "request_confirmation",
+      "schedule_create",
+      "skill_downloader",
+    ]) {
+      assert.equal(hosted.includes(name), false, name);
+    }
+    assert.doesNotMatch(hosted, /SKILL\.md|\bskills\/[a-z0-9_.-]+/i);
+    assert.deepEqual(toolNamesInPrompt(hosted, catalog), [...web].sort());
+    assert.match(hosted, /relative paths and do not guess absolute ones/);
+    assert.match(hosted, /pypi\.org and github\.com/);
+    assert.match(hosted, /Each exec call stops after 45 seconds/);
+    assert.match(hosted, /Run simulations with exec/);
+    assert.match(hosted, /python-pptx are already installed/);
+    assert.match(hosted, /Never save a chart or interactive calculator as a sandbox file/);
+    assert.doesNotMatch(hosted, /\/home\//);
+  });
+
+  it("keeps sandbox facts from naming web tools the turn did not attach", () => {
+    const note = trueforgeToolNote(["memory_search"]);
+    assert.equal(note.includes("web_search"), false);
+    assert.equal(note.includes("fetch_url"), false);
+    assert.equal(note.includes("browse_page"), false);
+    assert.match(note, /fetch live data before the turn and paste it into the script/);
+    assert.deepEqual(toolNamesInPrompt(note, AETHER_MCP_TOOL_NAMES), ["memory_search"]);
+  });
+
   it("still matches the installed sidecar package", () => {
     const files = [
       "node_modules/@truefoundry/trueforge-core/dist/core/runtime/DeferredTool.js",
       "node_modules/@truefoundry/trueforge-core/dist/core/sandbox/Sandbox.js",
       "node_modules/@truefoundry/trueforge-core/dist/agent-session/builtinsFromSpec.mjs",
+      "node_modules/@truefoundry/trueforge/dist/main.js",
     ];
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-patch-"));
     for (const relative of files) {
@@ -132,6 +185,7 @@ describe("harness rules", () => {
       fs.readFileSync(path.join(temp, files[2]!), "utf8").includes("currentDateTime({ tracing })"),
       false,
     );
+    assert.match(fs.readFileSync(path.join(temp, files[3]!), "utf8"), /--system-site-packages/);
   });
 
   it("does not return raw error.message from API routes", () => {
