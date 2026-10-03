@@ -36,6 +36,7 @@ describe("TrueForge sidecar patch", () => {
       assert.match(text, /exec can reach these MCP servers/);
       assert.match(text, /buildSchemaSection\(builder\) \{\n    return;/);
       assert.match(text, /sandbox_artifacts block/);
+      assert.match(text, /Do not repeat those paths/);
       const mcp = text.indexOf("exec can reach these MCP servers");
       const essay = text.indexOf("from mcp_client import call_tool");
       assert.ok(mcp > 0 && essay > mcp);

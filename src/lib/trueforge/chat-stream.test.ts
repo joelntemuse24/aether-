@@ -217,4 +217,42 @@ describe("TrueForge live stream", () => {
     assert.equal(outcome.wroteError, true);
     assert.equal(writes.filter((chunk) => chunk.type === "text-delta").length, 1);
   });
+
+  it("publishes the housing deck instead of the sandbox path", async () => {
+    const deck =
+      "/home/aether/.local/share/trueforge-aether/sandboxes/abc/abc/artifacts/irish_housing_crisis.pptx";
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield { type: "turn.created", turnId: "turn_deck", previousTurnId: null };
+      yield { type: "model.message.delta", content: "```sandbox_artif" };
+      yield {
+        type: "model.message.delta",
+        content: `acts\n[Irish housing crisis](${deck})\n\`\`\`\nThe slides cover supply and prices.`,
+      };
+      yield { type: "turn.done", state: { status: "completed" } };
+    }
+    await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses_deck",
+      loadSandboxFile: async (filePath, turnId) => {
+        assert.equal(filePath, deck);
+        assert.equal(turnId, "turn_deck");
+        return Buffer.from("PK\u0003\u0004deck");
+      },
+    });
+    const text = writes
+      .filter((chunk) => chunk.type === "text-delta")
+      .map((chunk) => String(chunk.delta ?? ""))
+      .join("");
+    assert.match(text, /The slides cover supply and prices/);
+    assert.equal(text.includes("/home/"), false);
+    assert.equal(text.includes("sandbox_artifacts"), false);
+    const output = writes.find((chunk) => chunk.type === "tool-output-available");
+    const file = output?.output as { kind?: string; filename?: string; content?: string };
+    assert.equal(file.kind, "file");
+    assert.equal(file.filename, "irish_housing_crisis.pptx");
+    assert.match(file.content ?? "", /^data:/);
+    assert.equal(JSON.stringify(writes).includes("/home/aether"), false);
+  });
 });

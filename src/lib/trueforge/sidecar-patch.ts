@@ -49,7 +49,9 @@ const FILE_OUTPUT = `        ## File outputs
         1. Ensure that the file is present in the sandbox.
         2. Then emit a fenced sandbox_artifacts block referencing the file.`;
 
-const FILE_OUTPUT_PATCHED = `        To give the user a file, write it in the sandbox and emit a sandbox_artifacts block: [label](/absolute/path). One link per line.`;
+const FILE_OUTPUT_LEAK = `        To give the user a file, write it in the sandbox and emit a sandbox_artifacts block: [label](/absolute/path). One link per line.`;
+
+const FILE_OUTPUT_PATCHED = `        To give the user a file, write it in the sandbox and emit one fenced sandbox_artifacts block. One markdown link per line: [label](/absolute/path). Do not repeat those paths in the answer.`;
 
 function patchClock(source: string): { text: string; changed: boolean } {
   if (source.includes(CLOCK_OFF) && !source.includes("currentDateTime({ tracing })") && !source.includes("import_CurrentDateTime.currentDateTime")) {
@@ -92,6 +94,9 @@ function patchText(source: string, kind: "deferred" | "sandbox"): { text: string
   }
   if (text.includes(FILE_OUTPUT)) {
     text = text.replace(FILE_OUTPUT, FILE_OUTPUT_PATCHED);
+    changed = true;
+  } else if (text.includes(FILE_OUTPUT_LEAK)) {
+    text = text.replace(FILE_OUTPUT_LEAK, FILE_OUTPUT_PATCHED);
     changed = true;
   }
   return { text, changed };

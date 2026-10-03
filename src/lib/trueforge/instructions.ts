@@ -1,5 +1,9 @@
 import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
 
+/** How a downloadable sandbox file reaches the thread. Paths stay off the answer. */
+export const SANDBOX_FILE_LINE =
+  "For a downloadable deck, spreadsheet, document, PDF, or image, write the file in the sandbox (pptx, xlsx, docx, pdf, or png). List each file once in a sandbox_artifacts block as [label](path). Do not paste /home paths or sandbox paths in the answer. A file card is added for each file.";
+
 /** Short tool note. The full Aether catalog describes tools this harness does not run. */
 export const TRUEFORGE_TOOL_NOTE = `You are Aether. Tools execute on Aether's servers.
 Use web_search for live facts (weather, news, prices), then fetch_url or browse_page on the best links. Use the sandbox for computation and files, not for fetching the web.
@@ -7,13 +11,15 @@ memory_search, project_knowledge_search, drive_search, drive_read, and github_* 
 memory_write and create_artifact wait on the user's approval card before they save.
 Cite web sources as [1], [2]. End every turn with a clear answer. Do not invent tools you were not given.
 If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.
-For a chart or interactive view, write a fenced svg, html, or react block, or a png image. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.`;
+For a chart or interactive view, write a fenced svg, html, or react block, or a png image. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.
+${SANDBOX_FILE_LINE}`;
 
 export const TRUEFORGE_NO_TOOLS_NOTE = `You are Aether. Tools are not connected for this turn.
 Answer from the conversation. If the user needs a live lookup, say you cannot reach it right now.
 Do not invent tool results.
 If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.
-For a chart or interactive view, write a fenced svg, html, or react block, or a png image. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.`;
+For a chart or interactive view, write a fenced svg, html, or react block, or a png image. The thread shows an artifact card that opens Preview and Code. Do not emit an openui block.
+${SANDBOX_FILE_LINE}`;
 
 export const TOOLS_UNAVAILABLE_NOTICE = "Tools are not connected for this turn.";
 
@@ -49,13 +55,56 @@ export function trueforgeToolNote(attached: readonly string[]): string {
       "Save that chart or interactive view with create_artifact using kind svg, html, react, or image.",
     );
   }
+  lines.push(SANDBOX_FILE_LINE);
   return lines.join("\n");
+}
+
+const OFFICE_TOOL_REPLACEMENTS: Record<string, string> = {
+  create_presentation: "a pptx written in the sandbox",
+  create_spreadsheet: "an xlsx written in the sandbox",
+  create_document: "a docx written in the sandbox",
+  create_pdf: "a pdf written in the sandbox",
+  workspace_publish_file: "the sandbox",
+  workspace_exec: "the sandbox",
+  workspace_read_file: "the sandbox",
+  workspace_write_file: "the sandbox",
+  workspace_list_files: "the sandbox",
+  workspace_ffmpeg: "the sandbox",
+  execute_python: "the sandbox",
+  verify_checklist: "a final check",
+  create_artifact: "a fenced block",
+};
+
+/** Playbooks name office tools this harness does not attach. Point those at the sandbox instead. */
+export function alignHostedFileInstructions(text: string, attached: readonly string[]): string {
+  const keep = new Set(attached);
+  const banned = Object.keys(OFFICE_TOOL_REPLACEMENTS)
+    .filter((name) => !keep.has(name))
+    .sort((a, b) => b.length - a.length);
+  let next = text;
+  let touched = false;
+  for (const name of banned) {
+    if (!next.includes(name)) continue;
+    touched = true;
+    next = next.replaceAll(name, OFFICE_TOOL_REPLACEMENTS[name] ?? "");
+  }
+  if (next.includes("github_*") && !attached.some((name) => name.startsWith("github_"))) {
+    next = next.replaceAll("github_*", "connected accounts");
+    touched = true;
+  }
+  next = next.replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n");
+  if (touched && !next.includes("sandbox_artifacts block")) {
+    next = `${next.trim()}\n${SANDBOX_FILE_LINE}`;
+  }
+  return next;
 }
 
 export function instructionsForAttachedTools(instructions: string, attached: readonly string[]): string {
   const note = attached.length ? trueforgeToolNote(attached) : TRUEFORGE_NO_TOOLS_NOTE;
-  if (instructions.includes(TRUEFORGE_TOOL_NOTE)) return instructions.replace(TRUEFORGE_TOOL_NOTE, note);
-  return instructions;
+  const swapped = instructions.includes(TRUEFORGE_TOOL_NOTE)
+    ? instructions.replace(TRUEFORGE_TOOL_NOTE, note)
+    : instructions;
+  return alignHostedFileInstructions(swapped, attached);
 }
 
 /** Tool ids that appear in a prompt. `github_*` means every catalog id with that prefix. */
