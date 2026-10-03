@@ -211,8 +211,17 @@ async function attachTools(
   });
 }
 
+export type TrueForgeSessionResult = CachedSession & {
+  /** False when this conversation already had a session. */
+  created: boolean;
+};
+
+function sessionResult(row: CachedSession, created: boolean): TrueForgeSessionResult {
+  return { ...row, created };
+}
+
 /** One TrueForge session per Aether conversation id. Skips update when nothing changed. */
-export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<CachedSession> {
+export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<TrueForgeSessionResult> {
   await pruneTrueForgeCaches();
   const secret = toolContextKey();
   if (!secret) warnMissingToolContextKey();
@@ -232,7 +241,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
     existing.instructions === input.instructions &&
     existing.mcpKey === plannedKey
   ) {
-    return existing;
+    return sessionResult(existing, false);
   }
   const mcp = plannedNames ? await attachTools(input.conversationId, input.toolContext) : null;
   if (
@@ -242,7 +251,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
       modelName: input.modelName,
     })
   ) {
-    return existing as CachedSession;
+    return sessionResult(existing as CachedSession, false);
   }
   const attached = mcp
     ? [...(aetherMcpServers({ direct: mcp.direct }, mcp.includeAccountTools)[0]?.enableTools ?? [])]
@@ -267,7 +276,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
       }),
     });
     rememberTrueForgeSession(trueforgeSessionCacheKey(input.owner, input.conversationId), existing);
-    return existing;
+    return sessionResult(existing, false);
   }
   const created = await client().sessions.create({
     agent: buildTrueForgeAgentSpec({
@@ -287,7 +296,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
     at: Date.now(),
   };
   rememberTrueForgeSession(trueforgeSessionCacheKey(input.owner, input.conversationId), row);
-  return row;
+  return sessionResult(row, true);
 }
 
 /** Point later turns at the fallback model after a primary failure. */

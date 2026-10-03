@@ -12,6 +12,7 @@ import {
   createTrueForgeUiState,
   type UiChunk,
 } from "./ui-chunks";
+import { planHostedTurnResume, resolveHostedConversationId } from "./conversation-continuity";
 import { buildTrueForgeUserContent } from "./user-content";
 import { openRouterFallbackModel, redactSecret } from "@/lib/openrouter/models";
 import { shouldBackupBuzzWithOpenRouter, writeOpenRouterAnswer } from "@/lib/openrouter/stream";
@@ -197,9 +198,8 @@ export async function streamTrueForgeHostedChat(input: {
   openRouterKey?: string | null;
   history?: { role: "user" | "assistant"; content: string }[];
 }): Promise<Response> {
-  const conversationId = input.conversationId || `guest-${crypto.randomUUID()}`;
+  const conversationId = resolveHostedConversationId(input.conversationId);
   const instructions = trueforgeInstructions(input.system);
-  const content = buildTrueForgeUserContent(input.userText || "", input.attachments ?? []);
   const modelId = input.modelId || "gpt-5.6-luna";
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
@@ -214,6 +214,13 @@ export async function streamTrueForgeHostedChat(input: {
         instructions,
         toolContext: input.toolContext,
       });
+      const resumed = planHostedTurnResume({
+        conversationId,
+        userText: input.userText || "",
+        history: input.history,
+        sessionIsNew: session.created,
+      });
+      const content = buildTrueForgeUserContent(resumed.userText, input.attachments ?? []);
       if (session.toolsAttached === false) {
         write({ type: "text-start", id: "tf-no-tools" });
         write({ type: "text-delta", id: "tf-no-tools", delta: TOOLS_UNAVAILABLE_NOTICE });
