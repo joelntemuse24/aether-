@@ -177,6 +177,13 @@ async function findSession(owner: string, conversationId: string): Promise<Cache
   return null;
 }
 
+/** The question tool never renders. Models assume and state the assumption. */
+export const ASK_USER_QUESTIONS_ENABLED = false;
+
+export function hostedRuntimeKey(sandboxEnabled: boolean): string {
+  return `${sandboxEnabled ? "1" : "0"}:ask${ASK_USER_QUESTIONS_ENABLED ? "1" : "0"}`;
+}
+
 export function buildTrueForgeAgentSpec(input: {
   modelName: string;
   instructions: string;
@@ -191,7 +198,10 @@ export function buildTrueForgeAgentSpec(input: {
         ...(reasoningEffort ? { params: { reasoningEffort } } : {}),
       },
       instructions: input.instructions,
-      config: { sandbox: { enabled: input.sandboxEnabled } },
+      config: {
+        sandbox: { enabled: input.sandboxEnabled },
+        ask_user_questions: { enabled: ASK_USER_QUESTIONS_ENABLED },
+      },
       ...(input.mcp
         ? { mcpServers: aetherMcpServers({ direct: input.mcp.direct }, input.mcp.includeAccountTools) }
         : {}),
@@ -234,7 +244,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
   const sandboxEnabled = await trueforgeSandboxEnabled();
   const plannedKey = `${
     plannedNames ? `${plannedNames.direct}:${includeAccountTools ? "all" : "web"}:${token}` : ""
-  }:${sandboxEnabled ? "1" : "0"}`;
+  }:${hostedRuntimeKey(sandboxEnabled)}`;
   const existing = await findSession(input.owner, input.conversationId);
   if (
     existing?.model === input.modelName &&
@@ -259,7 +269,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
   const instructions = instructionsForAttachedTools(input.instructions, attached);
   const mcpKey = `${
     mcp ? `${mcp.direct}:${mcp.includeAccountTools ? "all" : "web"}:${mcp.token}` : ""
-  }:${sandboxEnabled ? "1" : "0"}`;
+  }:${hostedRuntimeKey(sandboxEnabled)}`;
   if (existing) {
     const model = input.modelName;
     existing.model = model;

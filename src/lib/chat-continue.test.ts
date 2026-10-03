@@ -10,6 +10,7 @@ import {
   looksLikeUnfinishedTurn,
   shouldAutoContinue,
   shouldOfferContinue,
+  waitsForUserQuestion,
   MAX_AUTO_CONTINUES,
 } from "./chat-continue";
 
@@ -189,6 +190,53 @@ describe("chat-continue", () => {
         continueCount: MAX_AUTO_CONTINUES,
       }),
       true,
+    );
+  });
+
+  it("does not auto-continue past an unanswered ask_user_question", () => {
+    const messages: UIMessage[] = [
+      {
+        id: "a1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-ask_user_question",
+            state: "input-available",
+            toolCallId: "q1",
+            input: {
+              question: "Which CPI series should I use?",
+              options: ["National CPI", "Dublin CPI"],
+            },
+          } as UIMessage["parts"][number],
+          {
+            type: "text",
+            text: "This step needs an answer in the composer before it can continue.",
+          },
+        ],
+      },
+    ];
+    assert.equal(waitsForUserQuestion(messages), true);
+    assert.equal(
+      shouldAutoContinue({
+        isAbort: false,
+        isDisconnect: false,
+        isError: false,
+        messages,
+        runDurationMs: 6_000,
+        continueCount: 0,
+      }),
+      false,
+    );
+    assert.equal(
+      shouldOfferContinue({
+        isAbort: false,
+        isDisconnect: false,
+        isError: true,
+        messages,
+        runDurationMs: 6_000,
+        continueCount: 0,
+      }),
+      false,
     );
   });
 

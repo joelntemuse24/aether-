@@ -105,6 +105,29 @@ function toolWaitsForConfirmation(part: UIMessage["parts"][number]): boolean {
   );
 }
 
+const USER_QUESTION_TOOL = "ask_user_question";
+
+/** A question is waiting. Continuing would skip it and start a new turn. */
+export function waitsForUserQuestion(messages: UIMessage[]): boolean {
+  for (const message of messages) {
+    if (!message || message.role !== "assistant" || !Array.isArray(message.parts)) continue;
+    for (const part of message.parts) {
+      const rec = asPartRecord(part);
+      const type = typeof part.type === "string" ? part.type : "";
+      const name = typeof rec.toolName === "string" ? rec.toolName : "";
+      if (type === `tool-${USER_QUESTION_TOOL}` || name === USER_QUESTION_TOOL) return true;
+      if (
+        part.type === "text" &&
+        typeof rec.text === "string" &&
+        /needs an answer in the composer/i.test(rec.text)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /** Stream ended between tools, or tools never resolved — not a finished answer. */
 export function looksLikeUnfinishedTurn(messages: UIMessage[]): boolean {
   const last = messages[messages.length - 1];
@@ -140,6 +163,7 @@ export type ContinueDecisionInput = {
 
 /** Fallback after live session follow ends with unfinished work. */
 export function shouldAutoContinue(input: ContinueDecisionInput): boolean {
+  if (waitsForUserQuestion(input.messages)) return false;
   if (input.continueCount >= MAX_AUTO_CONTINUES) return false;
   const unfinished = looksLikeUnfinishedTurn(input.messages);
   if (input.isAbort) {
@@ -167,6 +191,7 @@ export function shouldAutoContinue(input: ContinueDecisionInput): boolean {
 
 /** Show the Continue bar even when auto-continue budget is spent. */
 export function shouldOfferContinue(input: ContinueDecisionInput): boolean {
+  if (waitsForUserQuestion(input.messages)) return false;
   const unfinished = looksLikeUnfinishedTurn(input.messages);
   if (input.isAbort && !unfinished) return false;
   if (unfinished) return true;
