@@ -101,6 +101,65 @@ describe("TrueForge UI chunks", () => {
     assert.equal(JSON.stringify(tool?.input).includes("query"), false);
   });
 
+  it("keeps a sub-agent report in the tool step and continues the parent in a new text part", () => {
+    const state = createTrueForgeUiState();
+    const chunks = [
+      ...chunksForTrueForgeEvent(
+        { type: "model.message.delta", threadId: "main", content: "Looking it up." },
+        state,
+      ),
+      ...chunksForTrueForgeEvent(
+        {
+          type: "model.message",
+          threadId: "main",
+          toolCalls: [
+            {
+              index: 0,
+              id: "call_sub",
+              function: { name: "create_sub_agent", arguments: "{\"task\":\"lookup\"}" },
+            },
+          ],
+        },
+        state,
+      ),
+      ...chunksForTrueForgeEvent(
+        {
+          type: "thread.created",
+          threadId: "child-1",
+          parent: { threadId: "main", toolCallId: "call_sub" },
+        },
+        state,
+      ),
+      ...chunksForTrueForgeEvent(
+        { type: "model.message.delta", thread_id: "child-1", content: "Full repo report." },
+        state,
+      ),
+      ...chunksForTrueForgeEvent(
+        { type: "tool.response", threadId: "main", toolCallId: "call_sub", content: "" },
+        state,
+      ),
+      ...chunksForTrueForgeEvent(
+        { type: "model.message.delta", threadId: "main", content: "Cloudflare OS is not a product." },
+        state,
+      ),
+    ];
+    const text = chunks
+      .filter((chunk) => chunk.type === "text-delta")
+      .map((chunk) => chunk.delta)
+      .join("");
+    assert.equal(text.includes("Full repo report"), false);
+    assert.match(text, /Looking it up\./);
+    assert.match(text, /Cloudflare OS is not a product\./);
+    const summary = chunks.filter((chunk) => chunk.delta === "Cloudflare OS is not a product.");
+    assert.equal(summary[0]?.id, "tf-text-2");
+    assert.equal(
+      chunks.some((chunk) => chunk.type === "text-end" && chunk.id === "tf-text-1"),
+      true,
+    );
+    const tool = chunks.find((chunk) => chunk.toolCallId === "call_sub" && chunk.type === "tool-output-available");
+    assert.equal(tool?.output, "Full repo report.");
+  });
+
   it("opens the confirm card when a tool result is waiting for approval", () => {
     const state = createTrueForgeUiState();
     const chunks = chunksForTrueForgeEvent(

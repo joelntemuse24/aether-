@@ -169,7 +169,9 @@ describe("chat transport wiring contract", () => {
       new URL("../../components/assistant-ui/thread.tsx", import.meta.url),
       "utf8",
     );
-    assert.doesNotMatch(thread, /ModelPicker|Response speed/);
+    assert.match(thread, /BuzzModelPicker/);
+    assert.equal(thread.replaceAll("BuzzModelPicker", "").includes("ModelPicker"), false);
+    assert.doesNotMatch(thread, /Response speed/);
     assert.doesNotMatch(thread, />\s*Fast\s*</);
   });
 

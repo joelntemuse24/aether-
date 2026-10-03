@@ -92,6 +92,8 @@ The script then runs `pm2 reload aether` only. It passes when `restart_time` ris
 
 A launcher outside this repo, such as `/opt/aether/sidecar-only.ts`, should call `prepareSidecar()` from `src/lib/trueforge/sidecar-bootstrap.ts` before it starts TrueForge. That applies the package patch and starts sandbox pruning. `npm run trueforge` and `npm run dev` already call it.
 
+That launcher is TypeScript run by `tsx`, so a reload after a source change compiles again. tsx keeps its transform cache in `$TMPDIR/tsx-<user>` (often `/tmp`), which a `pm2 reload` keeps and a systemd `PrivateTmp` restart does not. The first repo module the launcher imports also turns on Node's compile cache at `~/.cache/aether-compile` (`AETHER_COMPILE_CACHE` overrides it). Leave that directory in place across reloads. To skip tsx, the launcher would have to start a plain `node` build; the repo entry still uses the `@/` import alias, so `node --experimental-strip-types` cannot load it.
+
 Open port `8790` only to the HTTPS proxy, not to the public internet. On the VM, `GET /api/v1/capabilities` is the unauthenticated ready check and returns 200. Every other request needs `Authorization: Bearer <AETHER_TRUEFORGE_TOKEN>`.
 
 Put HTTPS in front before Vercel calls it. Caddy: reverse-proxy `localhost:8790` and let it get a certificate. Or run `cloudflared tunnel` to that port. Do not terminate TLS inside this container.

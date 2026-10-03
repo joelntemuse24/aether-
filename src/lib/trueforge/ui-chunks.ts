@@ -7,12 +7,16 @@ export type UiChunk = Record<string, unknown>;
 
 type ToolBuf = { id?: string; name?: string; args: string };
 
+type ChildThread = { toolCallId: string; text: string };
+
 export type TrueForgeUiState = {
   textSeq: number;
   textId: string | null;
   reasoningId: string | null;
   tools: Map<number, ToolBuf>;
   opened: Set<string>;
+  rootThreadId: string | null;
+  childThreads: Map<string, ChildThread>;
 };
 
 export function createTrueForgeUiState(): TrueForgeUiState {
@@ -22,6 +26,8 @@ export function createTrueForgeUiState(): TrueForgeUiState {
     reasoningId: null,
     tools: new Map(),
     opened: new Set(),
+    rootThreadId: null,
+    childThreads: new Map(),
   };
 }
 
@@ -162,6 +168,50 @@ function absorbToolDelta(
   }
 }
 
+function stringField(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
+}
+
+function eventThreadId(event: { [key: string]: unknown }): string | null {
+  return stringField(event.threadId) ?? stringField(event.thread_id);
+}
+
+function parentToolCallId(event: { [key: string]: unknown }): string | null {
+  const parent = event.parent;
+  if (!parent || typeof parent !== "object") return null;
+  const row = parent as { toolCallId?: unknown; tool_call_id?: unknown };
+  return stringField(row.toolCallId) ?? stringField(row.tool_call_id);
+}
+
+function rememberChildThread(state: TrueForgeUiState, threadId: string, toolCallId: string | null) {
+  const existing = state.childThreads.get(threadId);
+  state.childThreads.set(threadId, {
+    toolCallId: toolCallId || existing?.toolCallId || "",
+    text: existing?.text ?? "",
+  });
+}
+
+function isChildThread(state: TrueForgeUiState, threadId: string | null): boolean {
+  if (!threadId) return false;
+  if (state.childThreads.has(threadId)) return true;
+  return state.rootThreadId != null && threadId !== state.rootThreadId;
+}
+
+function appendChildText(state: TrueForgeUiState, threadId: string, text: string) {
+  const existing = state.childThreads.get(threadId);
+  state.childThreads.set(threadId, {
+    toolCallId: existing?.toolCallId ?? "",
+    text: `${existing?.text ?? ""}${text}`,
+  });
+}
+
+function childTextForTool(state: TrueForgeUiState, toolCallId: string): string {
+  for (const child of state.childThreads.values()) {
+    if (child.toolCallId === toolCallId && child.text) return child.text;
+  }
+  return "";
+}
+
 /** One TrueForge event → zero or more UI chunks. */
 export function chunksForTrueForgeEvent(
   event: { type?: string; [key: string]: unknown },
@@ -169,6 +219,24 @@ export function chunksForTrueForgeEvent(
 ): UiChunk[] {
   const chunks: UiChunk[] = [];
   const type = event.type;
+  const threadId = eventThreadId(event);
+  if (type === "thread.created") {
+    const toolCallId = parentToolCallId(event);
+    if (threadId) rememberChildThread(state, threadId, toolCallId);
+    flushPendingTools(state, chunks);
+    return chunks;
+  }
+  if (threadId && !state.rootThreadId && !state.childThreads.has(threadId)) {
+    state.rootThreadId = threadId;
+  }
+  if (isChildThread(state, threadId) && threadId) {
+    if (!state.childThreads.has(threadId)) rememberChildThread(state, threadId, null);
+    const delta = textOf(event.content);
+    if (delta && (type === "model.message.delta" || type === "model.message")) {
+      appendChildText(state, threadId, delta);
+    }
+    return chunks;
+  }
 
   if (type === "model.message.delta") {
     const reasoning = typeof event.reasoningContent === "string" ? event.reasoningContent : "";
@@ -229,7 +297,10 @@ export function chunksForTrueForgeEvent(
   }
 
   if (type === "tool.response") {
-    const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : "";
+    const toolCallId =
+      (typeof event.toolCallId === "string" && event.toolCallId) ||
+      (typeof event.tool_call_id === "string" && event.tool_call_id) ||
+      "";
     if (!toolCallId) return chunks;
     let output: unknown = event.content;
     if (typeof event.content === "string") {
@@ -239,6 +310,9 @@ export function chunksForTrueForgeEvent(
         output = event.content;
       }
     }
+    const childReport = childTextForTool(state, toolCallId);
+    const blankOutput = output == null || (typeof output === "string" && output.trim() === "");
+    if (childReport && blankOutput) output = childReport;
     chunks.push({
       type: "tool-output-available",
       toolCallId,
