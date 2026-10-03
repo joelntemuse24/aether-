@@ -118,6 +118,20 @@ describe("TrueForge sidecar patch", () => {
     assert.deepEqual(applyTrueForgeSidecarPatches(root), []);
   });
 
+  it("lets sandbox pandas read the timezone database", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tf-zoneinfo-"));
+    const relative = "node_modules/@truefoundry/trueforge/dist/main.js";
+    const from = path.join(process.cwd(), relative);
+    const to = path.join(root, relative);
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.copyFileSync(from, to);
+    assert.deepEqual(applyTrueForgeSidecarPatches(root), [relative]);
+    const text = fs.readFileSync(to, "utf8");
+    assert.match(text, /"\/usr\/share\/zoneinfo",\n        SRT_VENDOR/);
+    assert.match(text, /"\/proc",\n        "\/sys",\n        "\/usr\/share\/zoneinfo",\n        SRT_VENDOR/);
+    assert.deepEqual(applyTrueForgeSidecarPatches(root), []);
+  });
+
   it("warns when a present file does not contain the expected patch text", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "tf-patch-miss-"));
     const relative = "node_modules/@truefoundry/trueforge-core/dist/core/runtime/DeferredTool.js";
