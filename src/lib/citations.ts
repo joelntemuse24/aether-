@@ -2,6 +2,7 @@ export type SourceCitation = {
   id: string;
   title: string;
   url?: string;
+  snippet?: string;
 };
 
 /** Structural message-part shape used for citation harvest. */
@@ -39,14 +40,25 @@ function pushUnique(
   title: string,
   url?: string,
   id?: string,
+  snippet?: string,
 ) {
   const key = (url || title).toLowerCase();
   if (!title || seen.has(key)) return;
   seen.add(key);
+  const text = snippet
+    ?.replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
   out.push({
     id: id?.trim() || String(out.length + 1),
     title,
     url,
+    snippet: text || undefined,
   });
 }
 
@@ -71,6 +83,7 @@ export function collectSourceCitations(
           title,
           typeof row.url === "string" ? row.url : undefined,
           typeof row.id === "string" ? row.id : undefined,
+          typeof row.snippet === "string" ? row.snippet : undefined,
         );
       }
     } else if (name === "fetch_url" || name === "browse_page" || name === "browser_snapshot") {

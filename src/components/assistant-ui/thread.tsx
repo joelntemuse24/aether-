@@ -162,7 +162,7 @@ export const Thread: FC = () => {
     <ThreadPrimitive.Root
       className="flex h-full flex-col bg-[var(--canvas)]"
       style={{
-        ["--thread-max-width" as string]: "48rem",
+        ["--thread-max-width" as string]: "42rem",
       }}
     >
       <ThreadPrimitive.Viewport
@@ -191,7 +191,7 @@ export const Thread: FC = () => {
           )}
 
           {hasMessages && (
-            <div className="flex flex-col gap-y-6 pb-4 empty:hidden">
+            <div className="aether-thread-enter flex flex-col gap-y-8 pb-6 empty:hidden">
               <ThreadPrimitive.Messages>
                 {() => <ThreadMessage />}
               </ThreadPrimitive.Messages>
@@ -231,7 +231,7 @@ const ThreadScrollToBottom: FC = () => {
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="absolute -top-12 z-10 self-center rounded-full border border-[var(--border)] bg-[var(--surface)] p-2 disabled:invisible"
+        className="aether-scroll-bottom absolute -top-14 left-1/2 z-10 flex size-9 -translate-x-1/2 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--elevated)] p-0 shadow-[0_8px_24px_rgba(40,32,24,0.16)] disabled:invisible"
       >
         <ArrowDownIcon className="size-4" />
       </TooltipIconButton>
@@ -249,10 +249,9 @@ function getWelcomePhrase() {
 const ThreadWelcome: FC = () => {
   const phrase = getWelcomePhrase();
 
-  // Exact structure from Figma Make WelcomeState.
   return (
-    <div className="flex w-full flex-col">
-      <div className="mb-4 flex size-11 self-center items-center justify-center rounded-full border border-[var(--border)] bg-[var(--elevated)]">
+    <div className="aether-welcome flex w-full flex-col items-center">
+      <div className="mb-4 flex size-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--elevated)]">
         <Image
           src="/logo.jpg"
           alt="Aether"
@@ -262,14 +261,13 @@ const ThreadWelcome: FC = () => {
         />
       </div>
       <h1
-        className="mb-3 font-[family-name:var(--font-serif)] text-[var(--text)]"
+        className="mb-3 max-w-[28rem] text-center font-[family-name:var(--font-serif)] text-[var(--text)]"
         style={{
-          fontSize: "clamp(0.95rem, 2.25vw, 1.2rem)",
+          fontSize: "clamp(1.35rem, 2.6vw, 1.75rem)",
           fontWeight: 400,
           fontStyle: "italic",
-          letterSpacing: "-0.015em",
-          lineHeight: 1.18,
-          maxWidth: "28rem",
+          letterSpacing: "-0.02em",
+          lineHeight: 1.15,
         }}
       >
         {phrase}
@@ -822,10 +820,10 @@ const Composer: FC = () => {
         }}
         onDrop={(e) => void onDrop(e)}
         className={cn(
-          "relative flex w-full flex-col gap-1 rounded-2xl border bg-[var(--elevated)] p-2 transition-colors",
+          "aether-composer relative flex w-full flex-col gap-1 rounded-[22px] border bg-[var(--elevated)] px-1.5 py-1.5 transition-[border-color,background-color,box-shadow] duration-[var(--motion-fast)]",
           dragging
             ? "border-[var(--accent)]/50 bg-[var(--accent-muted)]"
-            : "border-[var(--border)]",
+            : "border-[var(--border)] shadow-[0_1px_0_rgba(40,32,24,0.04),0_12px_32px_rgba(40,32,24,0.04)]",
         )}
       >
         <AttachmentChips />
@@ -1158,7 +1156,7 @@ const ComposerAction: FC<{
                 Upload from device
               </button>
               {(driveAvailable || githubAvailable) && (
-                <div className="px-2 pb-1.5 pt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--muted-soft)]">
+                <div className="px-2 pb-1.5 pt-2 text-[12px] text-[var(--muted)]">
                   {driveConnected || githubConnected
                     ? "Add from"
                     : "Connect"}
@@ -1344,8 +1342,8 @@ const AssistantMessage: FC = () => {
     >
       <div
         className={cn(
-          "px-1 text-[var(--text)]",
-          "font-[family-name:var(--font-serif)] text-[19px] leading-[1.72] tracking-[-0.01em]",
+          "aether-assistant-copy px-1 text-[var(--text)]",
+          "font-[family-name:var(--font-serif)] text-[18px] leading-[1.7] tracking-[-0.011em]",
           "[&_.prose-aether]:font-[family-name:var(--font-serif)]",
         )}
       >
@@ -1378,21 +1376,20 @@ const AssistantMessage: FC = () => {
               return null;
             }}
           </MessagePrimitive.Parts>
+          <div
+            data-running={isLive ? "true" : undefined}
+            className={cn(
+              "aether-action-row mt-2 flex min-h-8 items-center gap-0.5 opacity-100 transition-opacity duration-150 data-[running=true]:opacity-0",
+              !isLast &&
+                "md:opacity-0 md:group-hover/message:opacity-100 md:focus-within:opacity-100",
+            )}
+          >
+            <BranchPicker />
+            <AssistantActionBar />
+          </div>
           <MessageSourceCards />
           <MessageError />
         </ChatRenderErrorBoundary>
-      </div>
-
-      <div
-        data-running={isLive ? "true" : undefined}
-        className={cn(
-          "mt-1.5 flex min-h-8 items-center gap-1 opacity-100 transition-opacity duration-150 data-[running=true]:opacity-0",
-          !isLast &&
-            "md:opacity-0 md:group-hover/message:opacity-100 md:focus-within:opacity-100",
-        )}
-      >
-        <BranchPicker />
-        <AssistantActionBar />
       </div>
     </MessagePrimitive.Root>
   );
@@ -1619,8 +1616,8 @@ const UserMessage: FC = () => {
       data-role="user"
       className="group/message flex flex-col items-end gap-1"
     >
-      <div className="relative max-w-[85%] sm:max-w-[80%]">
-        <div className="rounded-2xl rounded-br-md bg-[var(--elevated-deep)] px-4 py-2.5 text-[15px] leading-relaxed text-[var(--text)] wrap-break-word">
+      <div className="aether-user-bubble relative max-w-[min(100%,28rem)]">
+        <div className="rounded-[1.35rem] border border-[var(--border)] bg-[var(--elevated)] px-4 py-2.5 font-[family-name:var(--font-ui)] text-[15px] leading-snug text-[var(--text)] wrap-break-word">
           <MessagePrimitive.Parts />
         </div>
         <div className="absolute -left-16 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-100 transition-opacity max-sm:static max-sm:mt-1 max-sm:translate-y-0 md:opacity-0 md:group-hover/message:opacity-100">
