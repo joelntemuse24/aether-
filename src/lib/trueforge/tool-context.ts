@@ -11,6 +11,9 @@ export type TrueForgeToolContext = {
   hasDrive?: boolean;
   hasGitHub?: boolean;
   driveAccessToken?: string;
+  /** Google refresh token. Sealed in the same ciphertext as the access token. */
+  driveRefreshToken?: string;
+  driveExpiresAt?: number;
   githubAccessToken?: string;
   exp: number;
 };

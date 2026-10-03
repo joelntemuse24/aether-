@@ -323,6 +323,8 @@ export async function POST(req: Request) {
           hasDrive: hasDriveEarly,
           hasGitHub: hasGitHubEarly,
           driveAccessToken: driveToken?.accessToken,
+          driveRefreshToken: driveToken?.refreshToken,
+          driveExpiresAt: driveToken?.expiresAt,
           githubAccessToken: githubToken?.accessToken,
         },
       });

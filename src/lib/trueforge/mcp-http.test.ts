@@ -1,15 +1,35 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { AETHER_MCP_DEFERRED, AETHER_MCP_DIRECT, handleTrueForgeMcpRpc } from "./mcp-http";
-import { aetherMcpServers, ensureAetherMcpServer, needsDeferredAetherTools } from "./mcp-register";
-import { buildTrueForgeAgentSpec } from "./sessions";
+import { AETHER_MCP_DEFERRED, AETHER_MCP_DIRECT, handleTrueForgeMcpRpc, toolResultJson, withToolDeadline } from "./mcp-http";
+import {
+  aetherMcpServers,
+  aetherPublicOrigin,
+  ensureAetherMcpServer,
+  MAX_SIGNED_TOOL_TOKENS,
+  needsDeferredAetherTools,
+  removeAetherMcpServer,
+  resetAetherMcpRegisterState,
+  signedToolTokenCount,
+  cachedToolContextToken,
+} from "./mcp-register";
+import {
+  buildTrueForgeAgentSpec,
+  evictIdleTrueForgeSessions,
+  MAX_TRUEFORGE_SESSIONS,
+  rememberTrueForgeSession,
+  resetTrueForgeSessionCache,
+  TRUEFORGE_SESSION_TTL_MS,
+  trueforgeSessionCount,
+} from "./sessions";
 import { sandboxEnabledFromCapabilities } from "./config";
+import { freshDriveAccessToken } from "./connector-tokens";
 import { readTrueForgeToolContext, signTrueForgeToolContext } from "./tool-context";
-import { trueforgeInstructions } from "./instructions";
+import { instructionsForRegisteredTools, trueforgeInstructions } from "./instructions";
 import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
 import { withLocalMcpHosts } from "./outbound-hosts";
 
-describe("TrueForge MCP tools", () => {
+describe("TrueForge MCP tools", { concurrency: 1 }, () => {
   it("lists web search and answers current_time without a signed context", async () => {
     const listed = await handleTrueForgeMcpRpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, null);
     const tools = (listed?.result as { tools?: { name: string }[] }).tools ?? [];
@@ -167,5 +187,142 @@ describe("TrueForge MCP tools", () => {
   it("allowlists loopback for the sidecar MCP callback", () => {
     const hosts = JSON.parse(withLocalMcpHosts('["example.com"]')) as string[];
     assert.deepEqual(hosts, ["example.com", "127.0.0.1", "localhost"]);
+  });
+
+  it("truncates long tool text inside valid JSON", () => {
+    const text = toolResultJson({ ok: true, note: "keep", body: "x".repeat(30_000) }, 800);
+    const parsed = JSON.parse(text) as { ok: boolean; note: string; body: string };
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.note, "keep");
+    assert.match(parsed.body, /\[truncated\]$/);
+    assert.equal(text.length <= 800, true);
+    assert.equal(JSON.stringify({ ok: true, body: "x".repeat(30_000) }).slice(0, 800).includes("[truncated]"), false);
+  });
+
+  it("stops a slow tool with a clean error before the route limit", async () => {
+    await assert.rejects(() => withToolDeadline(new Promise(() => {}), 30), /too long/);
+    const route = readFileSync(new URL("../../app/api/trueforge/mcp/route.ts", import.meta.url), "utf8");
+    assert.match(route, /export const maxDuration = 300/);
+    const source = readFileSync(new URL("./mcp-http.ts", import.meta.url), "utf8");
+    assert.match(source, /withToolDeadline\(runTool/);
+    assert.equal(source.includes(".slice(0, 24_000)"), false);
+  });
+
+  it("refreshes an expired Google token and keeps a live one", async () => {
+    const refreshed = await freshDriveAccessToken({
+      accessToken: "old",
+      refreshToken: "refresh-secret",
+      expiresAt: 1_000,
+      now: 5_000,
+      refresh: async (token) => {
+        assert.equal(token, "refresh-secret");
+        return { accessToken: "new", expiresAt: 90_000 };
+      },
+    });
+    assert.equal(refreshed, "new");
+    const kept = await freshDriveAccessToken({
+      accessToken: "still",
+      refreshToken: "refresh-secret",
+      expiresAt: 90_000,
+      now: 5_000,
+      refresh: async () => {
+        throw new Error("should not refresh");
+      },
+    });
+    assert.equal(kept, "still");
+  });
+
+  it("falls back to the Vercel production host and logs once if none is set", () => {
+    const previous = {
+      app: process.env.AETHER_APP_URL,
+      auth: process.env.AUTH_URL,
+      production: process.env.VERCEL_PROJECT_PRODUCTION_URL,
+      vercel: process.env.VERCEL_URL,
+      nodeEnv: process.env.NODE_ENV,
+    };
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    const env = process.env as Record<string, string | undefined>;
+    resetAetherMcpRegisterState();
+    try {
+      delete process.env.AETHER_APP_URL;
+      delete process.env.AUTH_URL;
+      process.env.VERCEL_PROJECT_PRODUCTION_URL = "aether-seven-theta.vercel.app";
+      process.env.VERCEL_URL = "aether-preview.vercel.app";
+      env.NODE_ENV = "production";
+      assert.equal(aetherPublicOrigin(), "https://aether-seven-theta.vercel.app");
+      delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+      delete process.env.VERCEL_URL;
+      assert.equal(aetherPublicOrigin(), null);
+      assert.equal(aetherPublicOrigin(), null);
+      assert.equal(warnings.length, 1);
+    } finally {
+      console.warn = originalWarn;
+      resetAetherMcpRegisterState();
+      if (previous.app === undefined) delete process.env.AETHER_APP_URL;
+      else process.env.AETHER_APP_URL = previous.app;
+      if (previous.auth === undefined) delete process.env.AUTH_URL;
+      else process.env.AUTH_URL = previous.auth;
+      if (previous.production === undefined) delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+      else process.env.VERCEL_PROJECT_PRODUCTION_URL = previous.production;
+      if (previous.vercel === undefined) delete process.env.VERCEL_URL;
+      else process.env.VERCEL_URL = previous.vercel;
+      if (previous.nodeEnv === undefined) delete env.NODE_ENV;
+      else env.NODE_ENV = previous.nodeEnv;
+    }
+  });
+
+  it("does not claim tools when registration is skipped", () => {
+    const withTools = trueforgeInstructions(`${TOOLS_SYSTEM_PROMPT}\n\nMemory: likes tea`);
+    const without = instructionsForRegisteredTools(withTools, false);
+    assert.equal(without.includes("web_search"), false);
+    assert.match(without, /not connected/);
+    assert.match(without, /Memory: likes tea/);
+    assert.equal(instructionsForRegisteredTools(withTools, true).includes("web_search"), true);
+  });
+
+  it("caps signed tool contexts and session rows", async () => {
+    resetAetherMcpRegisterState();
+    resetTrueForgeSessionCache();
+    const previousToken = process.env.AETHER_TRUEFORGE_TOKEN;
+    const previousUrl = process.env.AETHER_TRUEFORGE_URL;
+    process.env.AETHER_TRUEFORGE_TOKEN = "secret";
+    process.env.AETHER_TRUEFORGE_URL = "https://forge.example";
+    const originalFetch = globalThis.fetch;
+    const calls: string[] = [];
+    globalThis.fetch = async (url, init) => {
+      calls.push(`${init?.method ?? "GET"} ${String(url)}`);
+      return new Response(null, { status: 405 });
+    };
+    try {
+      for (let i = 0; i < MAX_SIGNED_TOOL_TOKENS + 5; i++) {
+        cachedToolContextToken(`conv-${i}`, { approvalMode: "ask" }, "secret", 1_000);
+      }
+      assert.equal(signedToolTokenCount() <= MAX_SIGNED_TOOL_TOKENS, true);
+      for (let i = 0; i < MAX_TRUEFORGE_SESSIONS + 5; i++) {
+        rememberTrueForgeSession(`conv-${i}`, { id: `ses-${i}`, model: "m", at: 1_000 + i });
+      }
+      assert.equal(evictIdleTrueForgeSessions(2_000).length, 5);
+      assert.equal(trueforgeSessionCount(), MAX_TRUEFORGE_SESSIONS);
+      rememberTrueForgeSession("stale", { id: "old", model: "m", at: 0 });
+      const dropped = evictIdleTrueForgeSessions(TRUEFORGE_SESSION_TTL_MS + 1);
+      assert.equal(dropped.includes("stale"), true);
+      assert.equal(await removeAetherMcpServer("aether-stale"), false);
+      assert.equal(calls.length, 1);
+      assert.match(calls[0] ?? "", /DELETE/);
+      assert.equal(await removeAetherMcpServer("aether-again"), false);
+      assert.equal(calls.length, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+      resetAetherMcpRegisterState();
+      resetTrueForgeSessionCache();
+      if (previousToken === undefined) delete process.env.AETHER_TRUEFORGE_TOKEN;
+      else process.env.AETHER_TRUEFORGE_TOKEN = previousToken;
+      if (previousUrl === undefined) delete process.env.AETHER_TRUEFORGE_URL;
+      else process.env.AETHER_TRUEFORGE_URL = previousUrl;
+    }
   });
 });

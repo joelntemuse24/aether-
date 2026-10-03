@@ -1,9 +1,16 @@
+import { cachedProbe, recordProbe, type ProbeState, SIDECAR_PROBE_LOCAL_TIMEOUT_MS, SIDECAR_PROBE_REMOTE_TIMEOUT_MS } from "./probe";
+
 /** Local TrueForge sidecar. A remote VM is used when `AETHER_TRUEFORGE_URL` is set. */
 export function trueforgePort(): number {
   const raw = Number(process.env.TRUEFORGE_PORT || 8790);
   return Number.isFinite(raw) && raw > 0 ? raw : 8790;
 }
 
+/**
+ * Port at the moment this module was first imported. Prefer `trueforgePort()`
+ * after `loadLocalEnvFiles()`. Kept as a number so an external launcher can
+ * still import it.
+ */
 export const TRUEFORGE_PORT = trueforgePort();
 
 /** Public sidecar origin. Empty means this process should use loopback. */
@@ -32,7 +39,42 @@ export function trueforgeSidecarEnabled(): boolean {
   return process.env.AETHER_TRUEFORGE !== "0";
 }
 
-let reachabilityCache: { key: string; ok: boolean; at: number } | null = null;
+let reachabilityCache: ProbeState | null = null;
+let sandboxCache: ProbeState | null = null;
+
+export function resetTrueforgeProbeCache(): void {
+  reachabilityCache = null;
+  sandboxCache = null;
+}
+
+/** Move cached probe timestamps back so tests can expire a positive result. */
+export function ageTrueforgeProbeCache(ms: number): void {
+  if (reachabilityCache) reachabilityCache = { ...reachabilityCache, at: reachabilityCache.at - ms };
+  if (sandboxCache) sandboxCache = { ...sandboxCache, at: sandboxCache.at - ms };
+}
+
+async function probeSidecar(
+  cache: ProbeState | null,
+  key: string,
+  timeoutMs: number,
+  read: (response: Response) => Promise<boolean>,
+): Promise<{ cache: ProbeState; ok: boolean }> {
+  const now = Date.now();
+  const cached = cachedProbe(cache, key, now);
+  if (cached !== undefined) return { cache: cache as ProbeState, ok: cached };
+  let result = { ok: false, confident: false };
+  try {
+    const response = await fetch(`${trueforgeOrigin()}/api/v1/capabilities`, {
+      headers: trueforgeAuthHeaders(),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (response.ok) result = { ok: await read(response), confident: true };
+  } catch {
+    result = { ok: false, confident: false };
+  }
+  const next = recordProbe(cache, key, result, Date.now());
+  return { cache: next, ok: next.ok };
+}
 
 /** True when this process can call the sidecar. A miss falls back to in-process chat. */
 export async function trueforgeSidecarReachable(timeoutMs?: number): Promise<boolean> {
@@ -40,27 +82,11 @@ export async function trueforgeSidecarReachable(timeoutMs?: number): Promise<boo
   const remote = trueforgeRemoteUrl();
   if (remote && !trueforgeToken()) return false;
   const key = `${trueforgeOrigin()}|${remote ? "remote" : "local"}`;
-  const now = Date.now();
-  if (reachabilityCache && reachabilityCache.key === key) {
-    const ttl = reachabilityCache.ok ? 60_000 : 15_000;
-    if (now - reachabilityCache.at < ttl) return reachabilityCache.ok;
-  }
-  const timeout = timeoutMs ?? (remote ? 2_000 : 400);
-  let ok = false;
-  try {
-    const response = await fetch(`${trueforgeOrigin()}/api/v1/capabilities`, {
-      headers: trueforgeAuthHeaders(),
-      signal: AbortSignal.timeout(timeout),
-    });
-    ok = response.ok;
-  } catch {
-    ok = false;
-  }
-  reachabilityCache = { key, ok, at: Date.now() };
-  return ok;
+  const timeout = timeoutMs ?? (remote ? SIDECAR_PROBE_REMOTE_TIMEOUT_MS : SIDECAR_PROBE_LOCAL_TIMEOUT_MS);
+  const result = await probeSidecar(reachabilityCache, key, timeout, async () => true);
+  reachabilityCache = result.cache;
+  return result.ok;
 }
-
-let sandboxCache: { key: string; enabled: boolean; at: number } | null = null;
 
 /** True only when capabilities say a sandbox provider (or local bubblewrap) is ready. */
 export function sandboxEnabledFromCapabilities(body: unknown): boolean {
@@ -78,22 +104,10 @@ export async function trueforgeSandboxEnabled(timeoutMs?: number): Promise<boole
   const remote = trueforgeRemoteUrl();
   if (remote && !trueforgeToken()) return false;
   const key = trueforgeOrigin();
-  const now = Date.now();
-  if (sandboxCache && sandboxCache.key === key) {
-    const ttl = sandboxCache.enabled ? 60_000 : 15_000;
-    if (now - sandboxCache.at < ttl) return sandboxCache.enabled;
-  }
-  const timeout = timeoutMs ?? (remote ? 2_000 : 400);
-  let enabled = false;
-  try {
-    const response = await fetch(`${trueforgeOrigin()}/api/v1/capabilities`, {
-      headers: trueforgeAuthHeaders(),
-      signal: AbortSignal.timeout(timeout),
-    });
-    if (response.ok) enabled = sandboxEnabledFromCapabilities(await response.json());
-  } catch {
-    enabled = false;
-  }
-  sandboxCache = { key, enabled, at: Date.now() };
-  return enabled;
+  const timeout = timeoutMs ?? (remote ? SIDECAR_PROBE_REMOTE_TIMEOUT_MS : SIDECAR_PROBE_LOCAL_TIMEOUT_MS);
+  const result = await probeSidecar(sandboxCache, key, timeout, async (response) =>
+    sandboxEnabledFromCapabilities(await response.json()),
+  );
+  sandboxCache = result.cache;
+  return result.ok;
 }
