@@ -6,6 +6,7 @@ import {
   trueforgeToken,
 } from "./config";
 import { instructionsForRegisteredTools } from "./instructions";
+import { toolContextKey } from "./tool-context";
 import {
   aetherMcpServerNames,
   aetherMcpServers,
@@ -51,10 +52,35 @@ export const TRUEFORGE_SESSION_TTL_MS = 6 * 60 * 60 * 1000;
 
 export type TrueForgeSessionInput = {
   conversationId: string;
+  /** Signed-in user id or guest cookie id. Sessions are not shared across owners. */
+  owner: string;
   modelName: string;
   instructions: string;
   toolContext?: Omit<TrueForgeToolContext, "exp"> | null;
 };
+
+export function trueforgeSessionCacheKey(owner: string, conversationId: string): string {
+  return `${owner}\n${conversationId}`;
+}
+
+export function conversationIdFromSessionCacheKey(key: string): string {
+  const split = key.indexOf("\n");
+  return split >= 0 ? key.slice(split + 1) : key;
+}
+
+let loggedMissingContextKey = false;
+
+/** Production without the Vercel-only key skips tool registration. The chat shows the no-tools notice. */
+export function warnMissingToolContextKey(env: NodeJS.ProcessEnv = process.env): boolean {
+  const missing = env.NODE_ENV === "production" && !(env.AETHER_TOOL_CONTEXT_KEY ?? "").trim();
+  if (missing && !loggedMissingContextKey) {
+    loggedMissingContextKey = true;
+    console.error(
+      "[trueforge] AETHER_TOOL_CONTEXT_KEY is not set. Tools are not registered for this turn. Set it on Vercel only, not on the VM.",
+    );
+  }
+  return missing;
+}
 
 const sessions = new Map<string, CachedSession>();
 
@@ -95,8 +121,8 @@ export function evictIdleTrueForgeSessions(now = Date.now()): string[] {
 export async function pruneTrueForgeCaches(now = Date.now()): Promise<string[]> {
   const dropped = evictIdleTrueForgeSessions(now);
   evictSignedToolTokens(now);
-  for (const conversationId of dropped) {
-    await removeAetherMcpServer(aetherMcpServerNames(conversationId).direct);
+  for (const key of dropped) {
+    await removeAetherMcpServer(aetherMcpServerNames(conversationIdFromSessionCacheKey(key)).direct);
   }
   return dropped;
 }
@@ -133,19 +159,20 @@ export async function trueforgeModelChoice(): Promise<{
   return { primary: primaryModel, fallback: fallbackModel };
 }
 
-async function findSession(conversationId: string): Promise<CachedSession | null> {
-  const cached = sessions.get(conversationId);
+async function findSession(owner: string, conversationId: string): Promise<CachedSession | null> {
+  const key = trueforgeSessionCacheKey(owner, conversationId);
+  const cached = sessions.get(key);
   if (cached) {
-    rememberTrueForgeSession(conversationId, cached);
-    return sessions.get(conversationId) ?? cached;
+    rememberTrueForgeSession(key, cached);
+    return sessions.get(key) ?? cached;
   }
   const page = await client().sessions.list({
-    metadata: { aetherConversationId: conversationId },
+    metadata: { aetherConversationId: conversationId, aetherOwner: owner },
     limit: 1,
   });
   for await (const row of page) {
-    rememberTrueForgeSession(conversationId, { id: row.id, model: "" });
-    return sessions.get(conversationId) ?? null;
+    rememberTrueForgeSession(key, { id: row.id, model: "" });
+    return sessions.get(key) ?? null;
   }
   return null;
 }
@@ -187,7 +214,8 @@ async function attachTools(
 /** One TrueForge session per Aether conversation id. Skips update when nothing changed. */
 export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<CachedSession> {
   await pruneTrueForgeCaches();
-  const secret = trueforgeToken();
+  const secret = toolContextKey();
+  if (!secret) warnMissingToolContextKey();
   const token =
     input.toolContext && secret
       ? cachedToolContextToken(input.conversationId, input.toolContext, secret)
@@ -198,7 +226,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
   const plannedKey = `${
     plannedNames ? `${plannedNames.direct}:${includeAccountTools ? "all" : "web"}:${token}` : ""
   }:${sandboxEnabled ? "1" : "0"}`;
-  const existing = await findSession(input.conversationId);
+  const existing = await findSession(input.owner, input.conversationId);
   if (
     existing?.model === input.modelName &&
     existing.instructions === input.instructions &&
@@ -235,7 +263,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
         sandboxEnabled,
       }),
     });
-    rememberTrueForgeSession(input.conversationId, existing);
+    rememberTrueForgeSession(trueforgeSessionCacheKey(input.owner, input.conversationId), existing);
     return existing;
   }
   const created = await client().sessions.create({
@@ -245,7 +273,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
       mcp,
       sandboxEnabled,
     }),
-    metadata: { aetherConversationId: input.conversationId },
+    metadata: { aetherConversationId: input.conversationId, aetherOwner: input.owner },
   });
   const row: CachedSession = {
     id: created.data.id,
@@ -255,13 +283,14 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
     toolsAttached: mcp != null,
     at: Date.now(),
   };
-  rememberTrueForgeSession(input.conversationId, row);
+  rememberTrueForgeSession(trueforgeSessionCacheKey(input.owner, input.conversationId), row);
   return row;
 }
 
 /** Point later turns at the fallback model after a primary failure. */
 export async function switchTrueForgeSessionModel(input: {
   conversationId: string;
+  owner?: string;
   sessionId: string;
   modelName: string;
   instructions: string;
@@ -275,13 +304,14 @@ export async function switchTrueForgeSessionModel(input: {
       sandboxEnabled: await trueforgeSandboxEnabled(),
     }),
   });
-  const cached = sessions.get(input.conversationId);
+  const key = trueforgeSessionCacheKey(input.owner ?? "", input.conversationId);
+  const cached = sessions.get(key);
   if (cached) {
     cached.model = input.modelName;
     cached.instructions = input.instructions;
-    rememberTrueForgeSession(input.conversationId, cached);
+    rememberTrueForgeSession(key, cached);
   } else {
-    rememberTrueForgeSession(input.conversationId, { id: input.sessionId, model: input.modelName });
+    rememberTrueForgeSession(key, { id: input.sessionId, model: input.modelName });
   }
 }
 

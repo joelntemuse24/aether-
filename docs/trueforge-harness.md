@@ -14,7 +14,9 @@ The chat the user sees is the existing Aether shell: cream canvas, Inter chrome,
 | `OPENROUTER_API_KEY` | Not used by TrueForge chat. Other features may still read it. |
 | `OPENROUTER_BASE_URL` | Defaults to `https://openrouter.ai/api/v1`. |
 | `AETHER_TRUEFORGE_URL` | Remote sidecar origin, for example `https://forge.example.com`. Unset uses loopback. |
-| `AETHER_TRUEFORGE_TOKEN` | Shared secret. Required with the URL. Sent as `Authorization: Bearer`. |
+| `AETHER_TRUEFORGE_TOKEN` | Transport secret only. Required with the URL. Sent as `Authorization: Bearer`. The VM has this value. It does not encrypt tool context. |
+| `AETHER_TOOL_CONTEXT_KEY` | Vercel production and preview only. AES-GCM key for the tool-context header. Do not set this on the VM. If it is missing in production, tool registration is skipped and the chat shows “Tools are not connected for this turn.” Dev falls back to `AETHER_TRUEFORGE_TOKEN`. |
+| `AETHER_HOSTED_ANON_DAILY_CAP` | Vercel only. Anonymous hosted turns per IP per day. Default `100`. A request with the user's OpenRouter key does not count. |
 | `TRUEFORGE_PORT` | Public port. Default `8790`. |
 | `APP_DATA_DIR_SUFFIX` | SQLite directory suffix. Default `aether`. |
 | `AETHER_TRUEFORGE=0` | Do not use the sidecar. Trigger owns hosted turns when it is configured. |
@@ -103,6 +105,9 @@ On Vercel:
 | Variable | Purpose |
 | --- | --- |
 | `AETHER_TRUEFORGE_URL` | `https://` origin of the VM. No path. |
-| `AETHER_TRUEFORGE_TOKEN` | The same secret as the VM. |
+| `AETHER_TRUEFORGE_TOKEN` | The same transport secret as the VM. |
+| `AETHER_TOOL_CONTEXT_KEY` | Encrypts tool context. Vercel only. Not the transport token. |
+| `AETHER_APP_URL` | Public origin the VM calls back to. Do not rely on `VERCEL_URL`. |
+| `AETHER_HOSTED_ANON_DAILY_CAP` | Optional. Anonymous hosted turns per IP per day. Default `100`. |
 
 Leave the Buzz key on the VM. Do not put a user's OpenRouter key in the sidecar env or provider store. If the URL is unset, the token is missing, or the VM does not answer `/api/v1/capabilities`, hosted chat uses the in-process loop. Optional `AETHER_OPENROUTER_MODEL_MAP` is a JSON object of Buzz id to OpenRouter id for the backup hop.
