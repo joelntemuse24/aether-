@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
+import { readAgentEngineFlag } from "@/lib/agent/engine";
 import { AETHER_MCP_TOOL_NAMES } from "./mcp-http";
 import { aetherMcpServers } from "./mcp-register";
 import {
@@ -120,6 +121,12 @@ describe("harness rules", () => {
       }
     }
     assert.deepEqual(hits, []);
+  });
+
+  it("keeps the native engine off unless the flag is native", () => {
+    assert.equal(readAgentEngineFlag({}), null);
+    assert.equal(readAgentEngineFlag({ AETHER_AGENT_ENGINE: "native" }), "native");
+    assert.equal(readAgentEngineFlag({ AETHER_AGENT_ENGINE: "yes" }), null);
   });
 
   it("reloads only the pm2 app aether", () => {

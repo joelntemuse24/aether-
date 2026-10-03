@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   KNOWN_BUZZ_CHAT_MODELS,
+  buzzAgentFamily,
   buzzModelFqn,
   buzzModelLabel,
   filterBuzzChatModelIds,
@@ -19,6 +20,12 @@ describe("Buzz chat models", () => {
       filterBuzzChatModelIds(["gpt-image-1", "gpt-5.6-sol", "claude-sonnet-5", "whisper-1"]),
       ["claude-sonnet-5", "gpt-5.6-sol"],
     );
+  });
+
+  it("classifies Buzz ids as GPT or Claude", () => {
+    assert.equal(buzzAgentFamily("buzz/gpt-5-6-luna"), "gpt");
+    assert.equal(buzzAgentFamily("claude-sonnet-5"), "claude");
+    assert.equal(buzzAgentFamily("gemini-2.5-pro"), null);
   });
 
   it("falls back to Luna when the requested id is unknown", () => {

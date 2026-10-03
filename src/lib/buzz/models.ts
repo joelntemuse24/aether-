@@ -48,6 +48,14 @@ export function buzzModelGroup(id: string): BuzzModelGroup {
   return id.startsWith("claude-") ? "Anthropic" : "OpenAI";
 }
 
+/** GPT vs Claude for a Buzz id. Other vendors are not Buzz models. */
+export function buzzAgentFamily(id: string): "gpt" | "claude" | null {
+  const bare = (id.split("/").pop() ?? id).trim().toLowerCase();
+  if (bare.startsWith("claude")) return "claude";
+  if (bare.startsWith("gpt")) return "gpt";
+  return null;
+}
+
 /** Friendly name. Dates on snapshot ids are dropped. */
 export function buzzModelLabel(id: string): string {
   if (id.startsWith("gpt-")) {

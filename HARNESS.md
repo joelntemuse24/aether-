@@ -47,6 +47,16 @@ The chat shell stays the cream Aether UI. TrueForge events become AI SDK UI chun
 | Visible text, tool parts, and errors follow the UI chunk translator. | deterministic | `src/lib/trueforge/ui-chunks.test.ts` |
 | No visual redesign without an explicit design ask. | agent | this file |
 
+## Native agent engine
+
+`src/lib/agent` is the model-agnostic loop. It is not on the live chat path. `AETHER_AGENT_ENGINE=native` opts in once a later change reads the flag. Unset or any other value keeps the current TrueForge / legacy router.
+
+| Rule | Status | Check |
+| --- | --- | --- |
+| Unset or unrecognised `AETHER_AGENT_ENGINE` does not select native. | deterministic | `src/lib/agent/engine.test.ts`, `src/lib/trueforge/harness-rules.test.ts` |
+| A native prompt names only the tools attached to that turn. | deterministic | `src/lib/agent/registry.test.ts` |
+| Claude is not sent a reasoning effort when the allowed list is empty. | deterministic | `src/lib/agent/profiles.test.ts` |
+
 ## How to run the checks
 
 `npm test` includes `src/lib/trueforge/harness-rules.test.ts`. GitHub Actions runs that file as its own step in `.github/workflows/ci.yml`, then the full suite.
