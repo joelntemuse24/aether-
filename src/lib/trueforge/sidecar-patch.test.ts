@@ -104,6 +104,20 @@ describe("TrueForge sidecar patch", () => {
     assert.deepEqual(applyTrueForgeSidecarPatches(root), []);
   });
 
+  it("lets the sandbox venv see the system-wide python packages", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "tf-venv-"));
+    const relative = "node_modules/@truefoundry/trueforge/dist/main.js";
+    const from = path.join(process.cwd(), relative);
+    const to = path.join(root, relative);
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.copyFileSync(from, to);
+    assert.deepEqual(applyTrueForgeSidecarPatches(root), [relative]);
+    const text = fs.readFileSync(to, "utf8");
+    assert.match(text, /\["-m", "venv", "--system-site-packages", venvDir\]/);
+    assert.doesNotMatch(text, /\["-m", "venv", venvDir\]/);
+    assert.deepEqual(applyTrueForgeSidecarPatches(root), []);
+  });
+
   it("warns when a present file does not contain the expected patch text", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "tf-patch-miss-"));
     const relative = "node_modules/@truefoundry/trueforge-core/dist/core/runtime/DeferredTool.js";
