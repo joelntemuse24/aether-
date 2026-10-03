@@ -1,3 +1,4 @@
+import "./compile-cache";
 import { TrueForge } from "@truefoundry/trueforge-sdk";
 import { listBuzzChatModels } from "@/lib/buzz/models";
 import { aetherProviderManifests, type AetherProviderManifest } from "./providers";

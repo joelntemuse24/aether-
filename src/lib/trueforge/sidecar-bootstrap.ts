@@ -1,3 +1,4 @@
+import "./compile-cache";
 import { pruneOldSandboxes, trueforgeSandboxDir } from "./sandbox-prune";
 import { applyTrueForgeSidecarPatches } from "./sidecar-patch";
 
