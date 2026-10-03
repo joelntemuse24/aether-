@@ -5,7 +5,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json ./
-COPY src/lib/trueforge ./src/lib/trueforge
+COPY src/lib ./src/lib
+COPY src/agent-server ./src/agent-server
 ENV NODE_ENV=production
 ENV HOME=/data
 EXPOSE 8790

@@ -1,4 +1,4 @@
-export { readAgentEngineFlag, AGENT_ENGINE_VALUES, type AgentEngineFlag } from "./engine";
+export { readAgentEngineFlag, selectChatEngine, AGENT_ENGINE_VALUES, type AgentEngineFlag, type ChatEngine } from "./engine";
 export {
   createAgentEventLog,
   sanitizeUiChunks,
@@ -23,6 +23,21 @@ export {
   type RunAgentLoopInput,
 } from "./loop";
 export { scriptedMockModel, type ScriptedModelStep } from "./mock-provider";
+export {
+  AGENT_MODEL_UNAVAILABLE,
+  buildAgentLanguageModels,
+  type AgentModelBuild,
+} from "./models";
+export {
+  NATIVE_DIRECT_UNAVAILABLE,
+  NATIVE_ENGINE_UNAVAILABLE,
+  NATIVE_PROVIDER_UNSUPPORTED,
+  agentServerOrigin,
+  proxyNativeAgentChat,
+  readAgentTransport,
+  type AgentTransport,
+  type ProxyNativeChatInput,
+} from "./proxy";
 export {
   agentFamily,
   agentModelProfile,
@@ -57,3 +72,4 @@ export {
   type ToolResult,
   type ToolSuccess,
 } from "./results";
+export { mintTurnToken, verifyTurnToken, TURN_TOKEN_TTL_SECONDS, type TurnClaims } from "./turn-token";

@@ -1,6 +1,6 @@
 # Aether
 
-A high-fidelity AI chat workspace. The screen is the existing Aether shell. Hosted Expert turns run on the **TrueForge** harness (GPT-5.6 Luna on Buzz, OpenRouter as fallback) instead of Trigger.dev. See [docs/trueforge-harness.md](docs/trueforge-harness.md).
+A high-fidelity AI chat workspace. The screen is the existing Aether shell. Hosted Expert turns run on the **TrueForge** harness (GPT-5.6 Luna on Buzz, OpenRouter as fallback) instead of Trigger.dev. See [docs/trueforge-harness.md](docs/trueforge-harness.md). `AETHER_AGENT_ENGINE=native` is off unless set; see [docs/native-engine.md](docs/native-engine.md).
 
 ## Features
 
