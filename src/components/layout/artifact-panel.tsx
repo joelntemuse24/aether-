@@ -92,6 +92,15 @@ const PREVIEWABLE_CODE_LANGS = new Set([
 
 type Tab = "preview" | "code" | "edit" | "table" | "chart" | "json";
 
+const TAB_LABEL: Record<Tab, string> = {
+  preview: "Preview",
+  code: "Code",
+  edit: "Edit",
+  table: "Table",
+  chart: "Chart",
+  json: "JSON",
+};
+
 function download(filename: string, content: string, mime: string) {
   if (content.startsWith("data:")) {
     const a = document.createElement("a");
@@ -569,15 +578,20 @@ export function ArtifactPanel() {
   }, [content]);
 
   // Debounced write-back for any open artifact (local always; cloud when linked).
+  // Wait until the debounce fires before showing "saving…". The panel mounts
+  // with empty content, then copies the artifact in, and that first mismatch
+  // used to stick the label on "saving…" after the timer was cancelled.
   useEffect(() => {
     if (!artifact?.id) return;
     if (content === lastPersisted.current) return;
-    setSaveState("saving");
+    const snapshot = content;
     const t = setTimeout(() => {
+      if (snapshot === lastPersisted.current) return;
+      setSaveState("saving");
       void (async () => {
-        const ok = await persistArtifactContent(content);
+        const ok = await persistArtifactContent(snapshot);
         if (ok) {
-          lastPersisted.current = content;
+          lastPersisted.current = snapshot;
           setSaveState("saved");
         } else {
           setSaveState("error");
@@ -773,13 +787,19 @@ export function ArtifactPanel() {
   const producedBy = provenanceLabels(provenance);
 
   return (
+    <>
+    <button
+      type="button"
+      className="aether-artifact-panel__backdrop lg:hidden"
+      aria-label="Close artifact"
+      onClick={closeArtifact}
+    />
     <aside
       className={cn(
-        "flex h-full w-full shrink-0 flex-col border-l border-[var(--border)] bg-[var(--surface)]",
+        "aether-artifact-panel flex w-full shrink-0 flex-col border-[var(--border)] bg-[var(--surface)]",
         expanded
-          ? "fixed inset-0 z-50 max-w-none border-l-0"
-          : "max-w-[min(100%,32rem)]",
-        "animate-[slideIn_180ms_ease-out] motion-reduce:animate-none",
+          ? "fixed inset-0 z-50 h-full max-w-none rounded-none border-0"
+          : "fixed inset-x-0 bottom-0 z-[70] h-[min(88dvh,100%)] max-w-none rounded-t-[18px] border-t lg:static lg:z-auto lg:h-full lg:max-w-[min(100%,32rem)] lg:rounded-none lg:border-t-0 lg:border-l",
       )}
     >
       <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2.5">
@@ -970,7 +990,7 @@ export function ArtifactPanel() {
                 )}
               >
                 <TabIcon className="size-3.5" />
-                {t}
+                {TAB_LABEL[t]}
               </button>
             );
           })}
@@ -1123,5 +1143,6 @@ export function ArtifactPanel() {
         </details>
       )}
     </aside>
+    </>
   );
 }

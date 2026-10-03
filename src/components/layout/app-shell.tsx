@@ -10,10 +10,8 @@ import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { DriveBrowserModal } from "@/components/drive/drive-browser-modal";
 import { SyncLocalChatsBanner } from "@/components/sync-local-chats-banner";
 import { SyncLocalMemory } from "@/components/sync-local-memory";
-import { useArtifact } from "@/providers/artifact-provider";
 import { useAttachments } from "@/providers/attachments-provider";
 import { useDrive } from "@/providers/drive-provider";
-import { cn } from "@/lib/utils";
 import { ArtifactDraftingPeek } from "@/components/layout/artifact-drafting-peek";
 import { ChatRenderErrorBoundary } from "@/components/chat-render-error";
 
@@ -44,7 +42,6 @@ function pushNotices(
 export function AppShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebar, setMobileSidebar] = useState(false);
-  const { open: artifactOpen } = useArtifact();
   const { browserOpen, setBrowserOpen } = useDrive();
   const { addAttachments } = useAttachments();
   const [notices, setNotices] = useState<string[]>([]);
@@ -133,12 +130,7 @@ export function AppShell() {
         </div>
 
         <div className="flex min-h-0 flex-1">
-          <div
-            className={cn(
-              "min-w-0 flex-1",
-              artifactOpen && "hidden lg:block",
-            )}
-          >
+          <div className="min-w-0 flex-1">
             <ChatRenderErrorBoundary>
               <Thread />
             </ChatRenderErrorBoundary>

@@ -2,12 +2,7 @@
 
 import { useEffect, useRef, useState, type FC } from "react";
 import { useAuiState } from "@assistant-ui/react";
-import {
-  DownloadIcon,
-  ExternalLinkIcon,
-  FileIcon,
-  PanelRightOpenIcon,
-} from "lucide-react";
+import { DownloadIcon, ExternalLinkIcon, FileIcon } from "lucide-react";
 import { confirmActionCopy } from "@/lib/hermes/confirm-copy";
 import { useArtifact, type Artifact } from "@/providers/artifact-provider";
 import "@/components/assistant-ui/agent-activity.css";
@@ -21,6 +16,7 @@ import {
   type ExecutePythonOutput,
   type WebSearchOutput,
 } from "@/lib/tools";
+import { filePreviewKind } from "@/lib/artifacts/file-card";
 import { normalizeArtifactKind } from "@/lib/artifacts/kinds";
 import { safeStringifyToolResult } from "@/lib/tool-part";
 
@@ -462,6 +458,69 @@ function triggerDownload(href: string, filename: string) {
   a.remove();
 }
 
+const ArtifactDraftCard: FC<{
+  title?: string;
+  kind?: string;
+  running?: boolean;
+  onOpen?: () => void;
+}> = ({ title, kind, running, onOpen }) => (
+  <button
+    type="button"
+    className="aether-artifact-card"
+    data-running={running ? "true" : undefined}
+    onClick={onOpen}
+    disabled={!onOpen}
+  >
+    <span className="aether-artifact-card__kind">{kind || "Artifact"}</span>
+    <span className="aether-artifact-card__title">
+      {title || (running ? "Writing…" : "Artifact")}
+    </span>
+    <span className="aether-artifact-card__status">
+      {running ? "Writing…" : "Open preview"}
+    </span>
+  </button>
+);
+
+const FilePreviewCard: FC<{
+  kind: "pptx" | "xlsx" | "pdf" | "png";
+  title?: string;
+  filename?: string;
+  href?: string;
+  previewSrc?: string;
+  running?: boolean;
+}> = ({ kind, title, filename, href, previewSrc, running }) => {
+  const label = filename || title || `${kind} file`;
+  return (
+    <div className="aether-file-card" data-kind={kind}>
+      <div className="aether-file-card__preview">
+        {kind === "png" && previewSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={previewSrc} alt="" />
+        ) : (
+          <span className="aether-file-card__badge">{kind}</span>
+        )}
+      </div>
+      <div className="aether-file-card__name">{label}</div>
+      <div className="aether-file-card__hint">
+        {running ? "Building…" : "Ready to download"}
+      </div>
+      {href ? (
+        <button
+          type="button"
+          className="aether-file-card__download"
+          onClick={() => triggerDownload(href, label)}
+        >
+          Download
+        </button>
+      ) : (
+        <span className="aether-file-chip__missing">
+          Sign in to download this file.
+        </span>
+      )}
+    </div>
+  );
+};
+
 const FileChip: FC<{
   title?: string;
   filename?: string;
@@ -595,6 +654,15 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     input?.language ||
     result?.filename ||
     extractPartialJsonString(part.argsText, "language");
+  const previewKind = filePreviewKind({
+    kind: kindHint,
+    filename: streamingLanguage || result?.filename,
+    mime:
+      result?.mime ||
+      (typeof bodyContent === "string" && bodyContent.startsWith("data:image/png")
+        ? "image/png"
+        : undefined),
+  });
 
   const artifactId = result?.id || part.toolCallId;
   const draft: Artifact | null =
@@ -683,17 +751,6 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running, complete, artifact?.code, artifact?.title, artifact?.id]);
 
-  const previewLabel =
-    kindHint === "document"
-      ? "Writing"
-      : kindHint === "code"
-        ? "Coding"
-        : "Building";
-  const charHint =
-    streamingContent !== undefined
-      ? `${streamingContent.length.toLocaleString()} chars`
-      : undefined;
-
   const hasConstructingBody =
     kindHint === "file"
       ? !!(streamingTitle || downloadPath || complete)
@@ -706,47 +763,30 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       name={TOOL_NAMES.createArtifact}
       running={running}
       expandWhileRunning={hasConstructingBody}
-      stayOpen={confirm.needsConfirmation || kindHint === "file"}
-      subtitle={
-        kindHint === "file"
-          ? undefined
-          : streamingTitle
-          ? result?.persisted
-            ? `${streamingTitle} · saved`
-            : running
-              ? `${streamingTitle}${charHint ? ` · ${charHint}` : ""}`
-              : streamingTitle
-          : kindHint
-            ? `Creating ${kindHint}…`
-            : running
-              ? "Preparing…"
-              : undefined
-      }
-      headerAction={
-        artifact && kindHint !== "file" ? (
-          <button
-            type="button"
-            onClick={() => openArtifact(artifact)}
-            className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)] hover:text-[var(--text)]"
-          >
-            <PanelRightOpenIcon className="size-3" />
-            Open
-          </button>
-        ) : undefined
-      }
+      stayOpen
     >
-      {(kindHint || streamingLanguage || running) && kindHint !== "file" && (
-        <div className="text-[11px] text-[var(--muted)]">
-          {kindHint ? `${kindHint} artifact` : "artifact"}
-          {streamingLanguage ? ` · ${streamingLanguage}` : ""}
-          {running && streamingContent !== undefined
-            ? ` · ${previewLabel}…${charHint ? ` ${charHint}` : ""}`
-            : running
-              ? " · starting…"
-              : ""}
-        </div>
-      )}
-      {kindHint === "file" && (
+      {previewKind ? (
+        <FilePreviewCard
+          kind={previewKind}
+          title={streamingTitle}
+          filename={streamingLanguage || result?.filename}
+          href={
+            downloadPath ||
+            (typeof streamingContent === "string" &&
+            streamingContent.startsWith("data:")
+              ? streamingContent
+              : undefined)
+          }
+          previewSrc={
+            previewKind === "png" &&
+            typeof streamingContent === "string" &&
+            streamingContent.startsWith("data:image/")
+              ? streamingContent
+              : undefined
+          }
+          running={running}
+        />
+      ) : kindHint === "file" ? (
         <FileChip
           title={streamingTitle}
           filename={streamingLanguage || result?.filename}
@@ -767,28 +807,20 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
               : undefined
           }
         />
-      )}
-      {streamingContent !== undefined &&
-        streamingContent.length > 0 &&
-        kindHint !== "file" &&
-        !streamingContent.startsWith("data:") && (
-        <CodeSnippet
-          code={
-            streamingContent.length > 6000
-              ? `${streamingContent.slice(0, 6000)}…`
-              : streamingContent
+      ) : (
+        <ArtifactDraftCard
+          title={streamingTitle}
+          kind={kindHint}
+          running={running}
+          onOpen={
+            artifact
+              ? () =>
+                  openArtifact({
+                    ...artifact,
+                    persisted: !!result?.persisted,
+                  })
+              : undefined
           }
-          label={running ? `${previewLabel}…` : "Content"}
-        />
-      )}
-      {running && !streamingContent && part.argsText && (
-        <CodeSnippet
-          code={
-            part.argsText.length > 2000
-              ? `${part.argsText.slice(0, 2000)}…`
-              : part.argsText
-          }
-          label="Writing…"
         />
       )}
       <ConfirmCardActions
