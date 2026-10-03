@@ -19,6 +19,42 @@ export function instructionsForRegisteredTools(instructions: string, toolsAvaila
   return instructions.replace(TRUEFORGE_TOOL_NOTE, TRUEFORGE_NO_TOOLS_NOTE);
 }
 
+/** Name only the tools this turn actually attached. */
+export function trueforgeToolNote(attached: readonly string[]): string {
+  const webIds = new Set(["web_search", "fetch_url", "browse_page"]);
+  const web = attached.filter((name) => webIds.has(name));
+  const rest = attached.filter((name) => !webIds.has(name));
+  const lines = ["You are Aether. Tools execute on Aether's servers."];
+  if (web.length) {
+    lines.push(
+      `Use ${web.join(", ")} for the web. Use the sandbox for computation and files, not for fetching the web.`,
+    );
+  }
+  if (rest.length) {
+    lines.push(`These tools are available when the account is connected: ${rest.join(", ")}.`);
+  }
+  lines.push("Cite web sources as [1], [2]. End every turn with a clear answer. Do not invent tools you were not given.");
+  return lines.join("\n");
+}
+
+export function instructionsForAttachedTools(instructions: string, attached: readonly string[]): string {
+  const note = attached.length ? trueforgeToolNote(attached) : TRUEFORGE_NO_TOOLS_NOTE;
+  if (instructions.includes(TRUEFORGE_TOOL_NOTE)) return instructions.replace(TRUEFORGE_TOOL_NOTE, note);
+  return instructions;
+}
+
+/** Tool ids that appear in a prompt. `github_*` means every catalog id with that prefix. */
+export function toolNamesInPrompt(text: string, catalog: readonly string[]): string[] {
+  const found = new Set<string>();
+  const wildcard = text.includes("github_*");
+  const ordered = [...catalog].sort((a, b) => b.length - a.length);
+  for (const name of ordered) {
+    if (wildcard && name.startsWith("github_")) found.add(name);
+    if (text.includes(name)) found.add(name);
+  }
+  return [...found].sort();
+}
+
 function formatClock(now: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-GB", {
     timeZone,

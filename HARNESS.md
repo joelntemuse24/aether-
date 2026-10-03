@@ -1,0 +1,52 @@
+# HARNESS.md
+
+Read this before changing Aether. It lists the rules that keep the product true. Each rule has an enforcement status:
+
+- **deterministic** — a test or script fails when the rule breaks. The check path is the source of truth.
+- **agent** — a person or coding agent must apply the rule. No automated check owns it yet.
+- **unverified** — the rule is intended, and nothing checks it yet.
+
+## Topology
+
+Aether is a Next.js 15 app. Production is Vercel project `aether-seven-theta` plus the Contabo VM sidecar. The VM process is `tsx /opt/aether/sidecar-only.ts` under pm2 app `aether`. Trigger.dev is not the live chat path. Railway and the root `Dockerfile` are unused.
+
+| Rule | Status | Check |
+| --- | --- | --- |
+| Production is Vercel plus the VM sidecar. Do not treat Railway or the root Dockerfile as the deploy path. | agent | `README.md`, `docs/trueforge-harness.md` |
+| Only pm2 app `aether` may be reloaded. Do not `systemctl restart pm2-aether` and do not touch `echomancer-takehome`. | deterministic | `deploy/trueforge/health-gate.sh`, `src/lib/trueforge/harness-rules.test.ts` |
+| Do not edit `/opt/aether/sidecar-only.ts` from the repo. It imports `prepareSidecar`, `load-env`, and `seed`. | agent | `docs/trueforge-harness.md` |
+| Node is `>=22.14`. | deterministic | `package.json` `engines`, `src/lib/trueforge/hygiene.test.ts` |
+
+## Keys
+
+Hosted Buzz keys live on Vercel and on the VM sidecar env. User BYOK keys stay in the browser `localStorage` (`aether:` prefix). They are not written to Neon, Trigger env, or sidecar provider settings.
+
+| Rule | Status | Check |
+| --- | --- | --- |
+| Do not seed a user OpenRouter key into TrueForge provider settings. | deterministic | `src/lib/openrouter/models.test.ts` |
+| `AETHER_TRUEFORGE_TOKEN` is the bearer secret shared with the VM. `AETHER_TOOL_CONTEXT_KEY` encrypts tool context and is Vercel-only. Do not put the context key on the VM. | agent | `docs/trueforge-harness.md`, `src/lib/trueforge/tool-context.ts` |
+| Do not log API keys, access tokens, or refresh tokens. | deterministic | `src/lib/trueforge/harness-rules.test.ts` |
+| Do not return raw `error.message` from API responses. Log a redacted detail and send a fixed sentence. | deterministic | `src/lib/trueforge/harness-rules.test.ts` |
+
+## Tools and prompts
+
+The system prompt may name only tools attached to that turn. Web tools are `web_search`, `fetch_url`, and `browse_page`. Account tools join the same preloaded MCP server only when memory, Drive, GitHub, or a project is present. `current_time` is not attached. The sidecar patch removes TrueForge's builtin clock.
+
+| Rule | Status | Check |
+| --- | --- | --- |
+| The prompt's tool names equal the attached MCP tool set. A turn with no registration uses the no-tools note. | deterministic | `src/lib/trueforge/harness-rules.test.ts` |
+| User-supplied URL fetches go through `src/lib/connectors/url-safety.ts` (`assertPublicHttpUrl`, `fetchWithPublicRedirects`). | deterministic | `src/lib/trueforge/harness-rules.test.ts` |
+| Sidecar string patches still match the installed `@truefoundry/trueforge-core` package. A missing target string warns. | deterministic | `src/lib/trueforge/harness-rules.test.ts`, `src/lib/trueforge/sidecar-patch.test.ts` |
+
+## UI
+
+The chat shell stays the cream Aether UI. TrueForge events become AI SDK UI chunks. Do not change layout, color, or type unless a design request asks for it.
+
+| Rule | Status | Check |
+| --- | --- | --- |
+| Visible text, tool parts, and errors follow the UI chunk translator. | deterministic | `src/lib/trueforge/ui-chunks.test.ts` |
+| No visual redesign without an explicit design ask. | agent | this file |
+
+## How to run the checks
+
+`npm test` includes `src/lib/trueforge/harness-rules.test.ts`. GitHub Actions runs that file as its own step in `.github/workflows/ci.yml`, then the full suite.

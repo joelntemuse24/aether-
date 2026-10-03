@@ -15,4 +15,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx tsc --noEmit --pretty false
+      - name: Harness rules
+        run: npx tsx --test --test-force-exit src/lib/trueforge/harness-rules.test.ts
       - run: npm test
