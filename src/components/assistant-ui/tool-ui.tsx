@@ -1653,7 +1653,12 @@ const SandboxToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       ? rawError
       : undefined;
   return (
-    <ToolShell name={part.toolName === "sandbox_files" ? "Sandbox files" : "Sandbox"} running={running} error={part.isError}>
+    <ToolShell
+      name={part.toolName === "sandbox_files" ? "Sandbox files" : "Sandbox"}
+      running={running}
+      error={part.isError}
+      stayOpen={files.length > 0 || !!error}
+    >
       {files.map((file) => (
         <FileChip
           key={`${file.filename}:${file.downloadPath ?? "thread"}`}
