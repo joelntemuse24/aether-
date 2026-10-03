@@ -15,6 +15,7 @@ import {
   looksLikeThinkingTheater,
   recalledActivityElapsed,
   resetActivityClock,
+  shouldRevealActivityElapsed,
   shouldShowComposerActivity,
   sourceChipLabel,
   sourceTrayPills,
@@ -69,7 +70,7 @@ describe("deriveAgentActivity — honesty", () => {
 
     assert.equal(view.visible, true);
     assert.equal(view.mode, "live");
-    assert.equal(view.liveLine, "Searching aether cream ui");
+    assert.equal(view.liveLine, "Searching the web");
     assert.equal(view.steps.length, 1);
     assert.equal(view.steps[0]?.kind, "tool");
     assert.equal(view.steps[0]?.toolName, "web_search");
@@ -110,9 +111,10 @@ describe("deriveAgentActivity — honesty", () => {
     });
     assert.equal(empty.steps.filter((s) => s.kind === "tool").length, 0);
     assert.equal(empty.mode, "elapsed");
-    assert.equal(empty.liveLine, "Working");
-    assert.equal(empty.elapsedLabel, "Working for 5s");
-    assert.doesNotMatch(JSON.stringify(empty), /search|Planning|Thinking|Mulling|Untangling/i);
+    assert.equal(empty.liveLine, "Thinking");
+    assert.equal(empty.elapsedLabel, "5s");
+    assert.equal(shouldRevealActivityElapsed(empty.elapsedSeconds), true);
+    assert.doesNotMatch(JSON.stringify(empty), /search|Planning…|Mulling|Untangling|Working/i);
 
     const tokensOnScreen = deriveAgentActivity({
       messages: [
@@ -125,8 +127,9 @@ describe("deriveAgentActivity — honesty", () => {
       elapsedSeconds: 5,
     });
     assert.equal(tokensOnScreen.visible, true);
-    assert.equal(tokensOnScreen.mode, "elapsed");
-    assert.equal(tokensOnScreen.elapsedLabel, "Working for 5s");
+    assert.equal(tokensOnScreen.mode, "collapsed");
+    assert.equal(tokensOnScreen.summaryLabel, "Thought for 5s");
+    assert.equal(tokensOnScreen.liveLine, null);
     assert.equal(tokensOnScreen.steps.length, 0);
 
     const finishedTextOnly = deriveAgentActivity({
@@ -141,7 +144,7 @@ describe("deriveAgentActivity — honesty", () => {
     });
     assert.equal(finishedTextOnly.visible, true);
     assert.equal(finishedTextOnly.mode, "collapsed");
-    assert.equal(finishedTextOnly.summaryLabel, "Worked for 8s");
+    assert.equal(finishedTextOnly.summaryLabel, "Thought for 8s");
     assert.equal(finishedTextOnly.steps.length, 0);
   });
 
@@ -153,7 +156,7 @@ describe("deriveAgentActivity — honesty", () => {
     });
     assert.equal(vanished.visible, true);
     assert.equal(vanished.mode, "collapsed");
-    assert.match(vanished.summaryLabel ?? "", /Worked for /);
+    assert.match(vanished.summaryLabel ?? "", /Thought for /);
   });
 
   it("mutates one live line to the current real step, keeping others for collapse", () => {
@@ -204,6 +207,7 @@ describe("deriveAgentActivity — honesty", () => {
       isRunning: true,
       elapsedSeconds: 4,
     });
+    assert.equal(elapsed.liveLine, "Thinking");
     assert.equal(isWorkingClockLine(elapsed.liveLine), true);
     assert.equal(liveWorkOneLiner(elapsed), null);
     assert.equal(compactLiveSteps(elapsed).length, 0);
@@ -260,13 +264,65 @@ describe("deriveAgentActivity — honesty", () => {
 
     assert.equal(view.visible, true);
     assert.equal(view.mode, "collapsed");
-    assert.equal(view.summaryLabel, "Worked for 12s");
+    assert.equal(view.summaryLabel, "Searched the web");
     assert.equal(view.elapsedSeconds, 12);
     assert.equal(view.steps.length, 1);
     assert.equal(view.steps[0]?.label, "Searched the web");
   });
 
-  it("collapses multiple real steps to Worked for Ns", () => {
+  it("collapses a search with hits to the source count", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-call",
+              toolName: "web_search",
+              args: { query: "dublin time" },
+              result: {
+                ok: true,
+                results: [
+                  { title: "Time", url: "https://time.is/Dublin" },
+                  { title: "Wiki", url: "https://en.wikipedia.org/wiki/Dublin" },
+                ],
+              },
+              status: { type: "complete" },
+            },
+            { type: "text", text: "It is afternoon in Dublin." },
+          ],
+        },
+      ],
+      isRunning: true,
+      elapsedSeconds: 8,
+    });
+    assert.equal(view.mode, "collapsed");
+    assert.equal(view.summaryLabel, "Searched the web · 2 sources");
+    assert.equal(view.liveLine, null);
+  });
+
+  it("holds the elapsed counter until three seconds", () => {
+    const early = deriveAgentActivity({
+      messages: [{ role: "assistant", parts: [] }],
+      isRunning: true,
+      elapsedSeconds: 2,
+    });
+    assert.equal(early.liveLine, "Thinking");
+    assert.equal(early.elapsedLabel, null);
+    assert.equal(shouldRevealActivityElapsed(2), false);
+    const later = deriveAgentActivity({
+      messages: [{ role: "assistant", parts: [] }],
+      isRunning: true,
+      elapsedSeconds: 3,
+    });
+    assert.equal(later.elapsedLabel, "3s");
+    assert.equal(later.lineKey, early.lineKey);
+    assert.equal(shouldRevealActivityElapsed(3), true);
+    assert.equal(looksLikeThinkingTheater("Thinking"), false);
+    assert.equal(looksLikeThinkingTheater("Thinking…"), true);
+  });
+
+  it("collapses a search plus another tool to Searched the web", () => {
     const view = deriveAgentActivity({
       messages: [
         {
@@ -294,7 +350,7 @@ describe("deriveAgentActivity — honesty", () => {
     });
 
     assert.equal(view.mode, "collapsed");
-    assert.equal(view.summaryLabel, "Worked for 12s");
+    assert.equal(view.summaryLabel, "Searched the web");
     assert.equal(view.steps.length, 2);
   });
 
@@ -318,8 +374,8 @@ describe("deriveAgentActivity — honesty", () => {
     const b = deriveAgentActivity({ ...base, elapsedSeconds: 5 });
     assert.equal(a.lineKey, "elapsed");
     assert.equal(a.lineKey, b.lineKey);
-    assert.equal(a.liveLine, "Working");
-    assert.equal(b.liveLine, "Working");
+    assert.equal(a.liveLine, "Thinking");
+    assert.equal(b.liveLine, "Thinking");
   });
 
   it("shows the gerund immediately — no empty first second, no fake steps", () => {
@@ -330,7 +386,8 @@ describe("deriveAgentActivity — honesty", () => {
     });
     assert.equal(view.visible, true);
     assert.equal(view.mode, "elapsed");
-    assert.equal(view.liveLine, "Working");
+    assert.equal(view.liveLine, "Thinking");
+    assert.equal(view.elapsedLabel, null);
     assert.equal(view.steps.length, 0);
     assert.doesNotMatch(JSON.stringify(view), /Mulling|Untangling|Searching/i);
   });
@@ -354,7 +411,7 @@ describe("deriveAgentActivity — honesty", () => {
     });
     assert.equal(view.visible, true);
     assert.equal(view.mode, "live");
-    assert.equal(view.liveLine, "Searching keep going");
+    assert.equal(view.liveLine, "Searching the web");
     assert.equal(view.steps[0]?.state, "running");
   });
 
@@ -412,7 +469,7 @@ describe("deriveAgentActivity — honesty", () => {
       continuePhase: "needs-continue",
     });
     assert.equal(view.mode, "live");
-    assert.equal(view.liveLine, "Searching keep going");
+    assert.equal(view.liveLine, "Searching the web");
     assert.doesNotMatch(view.liveLine ?? "", /Paused/);
   });
 
@@ -454,7 +511,7 @@ describe("deriveAgentActivity — honesty", () => {
     );
   });
 
-  it("uses the real search query on the live line", () => {
+  it("names a web search in natural language and keeps the query off the live line", () => {
     const query = "Dublin's current time zone and daylight saving status";
     const view = deriveAgentActivity({
       messages: [
@@ -474,8 +531,10 @@ describe("deriveAgentActivity — honesty", () => {
       elapsedSeconds: 8,
     });
     assert.equal(view.mode, "live");
-    assert.equal(view.liveLine, `Searching ${query}`);
-    assert.equal(view.elapsedSeconds, 8);
+    assert.equal(view.liveLine, "Searching the web");
+    assert.equal(view.elapsedLabel, "8s");
+    assert.doesNotMatch(view.liveLine ?? "", /Dublin/);
+    assert.equal(view.steps[0]?.label, "Searching the web");
   });
 
   it("collects web search hits for source cards, and nothing when no search ran", () => {
@@ -535,7 +594,8 @@ describe("deriveAgentActivity — honesty", () => {
     assert.equal(live.mode, "live");
     assert.equal(live.steps[0]?.toolName, "tool_search");
     assert.match(live.steps[0]?.label ?? "", /Looking up tools|Searching/i);
-    assert.equal(live.elapsedLabel, "Working for 3s");
+    assert.equal(live.elapsedLabel, "3s");
+    assert.equal(live.liveLine, "Looking up tools");
     assert.doesNotMatch(JSON.stringify(live), /DSML|tool_search query=/);
 
     const done = deriveAgentActivity({
@@ -550,7 +610,7 @@ describe("deriveAgentActivity — honesty", () => {
       elapsedSeconds: 7,
     });
     assert.equal(done.mode, "collapsed");
-    assert.equal(done.summaryLabel, "Worked for 7s");
+    assert.equal(done.summaryLabel, "Looked up tools");
   });
 
   it("keeps Worked for Ns after the live clock is interrupted", () => {
@@ -581,7 +641,8 @@ describe("deriveAgentActivity — honesty", () => {
       elapsedSeconds: 0,
     });
     assert.equal(view.mode, "collapsed");
-    assert.equal(view.summaryLabel, `Worked for ${seconds}s`);
+    assert.equal(view.elapsedSeconds, seconds);
+    assert.equal(view.summaryLabel, "Searched the web");
     resetActivityClock();
   });
 
@@ -616,7 +677,7 @@ describe("deriveAgentActivity — honesty", () => {
       elapsedSeconds: 31,
     });
     assert.equal(view.mode, "collapsed");
-    assert.equal(view.summaryLabel, "Worked for 31s");
+    assert.equal(view.summaryLabel, "Searched the web");
     assert.equal(view.steps.every((step) => step.state === "complete"), true);
     assert.equal(
       activityClockShouldRun({
@@ -804,7 +865,10 @@ describe("thread / composer copy stays honest", () => {
     assert.match(css, /prefers-reduced-motion/);
     assert.match(css, /transition-property:/);
     assert.match(css, /aether-inline-source/);
-    assert.match(css, /aether-activity__spinner/);
+    assert.match(css, /aether-activity__glyph/);
+    assert.match(css, /aether-shimmer|aether-activity__label/);
+    assert.match(css, /var\(--motion-ease\)/);
+    assert.match(css, /var\(--motion-base\)/);
     assert.match(css, /aether-composer-dock/);
     assert.match(css, /aether-activity__chip/);
     assert.match(css, /flex-wrap:\s*nowrap/);
@@ -830,8 +894,13 @@ describe("thread / composer copy stays honest", () => {
     assert.match(thread, /aether-composer-dock/);
     assert.doesNotMatch(thread, /ToolApprovalToggle/);
     assert.doesNotMatch(strip, /Mulling|Untangling|Churning/);
-    assert.match(strip, /Working for/);
-    assert.match(strip, /aether-activity__spinner/);
+    assert.match(strip, /shouldRevealActivityElapsed/);
+    assert.match(strip, /aether-activity__glyph/);
+    assert.match(strip, /aether-activity__label/);
+    assert.doesNotMatch(strip, /Working for/);
+    assert.match(strip, /aria-live="polite"/);
+    assert.match(strip, /aria-expanded/);
+    assert.match(strip, /aria-controls/);
     assert.match(strip, /activityClockShouldRun/);
     assert.match(strip, /shouldShowComposerActivity/);
     assert.match(strip, /sourceChipLabel/);

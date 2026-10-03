@@ -82,6 +82,8 @@ describe("probe failure detectors", () => {
 
   it("flags duplicate Working strips but allows a single Working plus an answer", () => {
     assert.equal(countWorkingStrips("Working\nWorking for 12s"), 2);
+    assert.equal(countWorkingStrips("Thinking\nThinking 5s"), 2);
+    assert.equal(countWorkingStrips("Thinking about the weather today"), 0);
     const dup = detectFailures(
       snap({
         visibleText: "Working\nWorking for 8s",

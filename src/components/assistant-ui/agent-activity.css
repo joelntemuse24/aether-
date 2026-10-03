@@ -1,7 +1,7 @@
 /*
  * Aether activity chrome.
- * Narration: honest named work (Grok-inspired). One column: Working →
- * current tool one-liner → Worked for Ns. No ChatGPT thinking theater.
+ * One live line: glyph + shimmering label + elapsed seconds after 3s.
+ * Collapses to a muted summary when the answer starts.
  * Look: cream canvas, Inter, terracotta / wine.
  */
 
@@ -36,22 +36,73 @@
   min-height: 1.25rem;
 }
 
-@keyframes aether-spin {
-  to {
-    transform: rotate(360deg);
+@keyframes aether-glyph {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.08);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
   }
 }
 
-.aether-activity__spinner {
-  box-sizing: border-box;
-  width: 12px;
-  height: 12px;
+@keyframes aether-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@keyframes aether-label-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.aether-activity__glyph {
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
-  border: 1.5px solid color-mix(in oklab, var(--accent) 22%, transparent);
-  border-top-color: var(--accent);
-  border-radius: 999px;
-  background: transparent;
-  animation: aether-spin 700ms linear infinite;
+  color: var(--accent);
+  transform-origin: center;
+}
+
+.aether-activity__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.aether-activity--live .aether-activity__label {
+  background-image: linear-gradient(
+    100deg,
+    var(--text-secondary) 0%,
+    var(--text-secondary) 36%,
+    color-mix(in oklab, var(--canvas) 28%, var(--text)) 50%,
+    var(--text-secondary) 64%,
+    var(--text-secondary) 100%
+  );
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.aether-activity__elapsed {
+  flex-shrink: 0;
+  margin-inline-start: 2px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  color: var(--muted);
 }
 
 .aether-activity__steps {
@@ -102,11 +153,21 @@
   border-radius: 8px;
   background: transparent;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
   text-align: start;
   cursor: pointer;
   transition-property: color, background-color;
-  transition-duration: 160ms;
-  transition-timing-function: ease-out;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--motion-ease);
+}
+
+span.aether-activity__summary-btn {
+  cursor: default;
+}
+
+span.aether-activity__summary-btn:hover {
+  color: var(--muted);
+  background: transparent;
 }
 
 .aether-activity__summary-btn:hover {
@@ -124,8 +185,8 @@
   /* Optical hang next to Inter 12px. */
   transform: translateY(0.5px);
   transition-property: transform, opacity;
-  transition-duration: 200ms;
-  transition-timing-function: ease-out;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--motion-ease);
 }
 
 .aether-activity__summary-btn[aria-expanded="true"] .aether-activity__caret {
@@ -194,8 +255,8 @@
   cursor: pointer;
   list-style: none;
   transition-property: color, background-color;
-  transition-duration: 160ms;
-  transition-timing-function: ease-out;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--motion-ease);
 }
 
 .aether-tool-trace__summary::-webkit-details-marker {
@@ -497,8 +558,8 @@
   color: #fff;
   pointer-events: none;
   transition-property: background-color, transform;
-  transition-duration: 200ms;
-  transition-timing-function: ease-out;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--motion-ease);
 }
 
 .aether-send-stop:hover .aether-send-stop__face {
@@ -540,21 +601,19 @@
   inset: 0;
   display: grid;
   place-items: center;
-  transition-property: opacity, transform, filter;
-  transition-duration: 200ms;
-  transition-timing-function: ease-out;
+  transition-property: opacity, transform;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--motion-ease);
 }
 
 .aether-send-stop__glyph[data-active="false"] {
   opacity: 0;
-  transform: scale(0.25);
-  filter: blur(4px);
+  transform: scale(0.92);
 }
 
 .aether-send-stop__glyph[data-active="true"] {
   opacity: 1;
   transform: scale(1);
-  filter: blur(0);
 }
 
 .aether-send-stop__glyph[data-nudge="send"] svg {
@@ -576,7 +635,17 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .aether-activity--enter {
-    animation: aether-line-enter 160ms ease-out both;
+    animation: aether-line-enter var(--motion-fast) var(--motion-ease) both;
+  }
+
+  .aether-activity--live .aether-activity__glyph {
+    animation: aether-glyph 2.8s var(--motion-ease) infinite;
+  }
+
+  .aether-activity--live .aether-activity__label {
+    animation:
+      aether-shimmer 1.4s linear infinite,
+      aether-label-in var(--motion-base) var(--motion-ease);
   }
 }
 
@@ -591,12 +660,11 @@
   display: none;
 }
 
-/* Streaming caret: terracotta pulse, not a solid black disc. */
+/* The live glyph is the working indicator. No bullet caret beside it. */
 .prose-aether.aui-md[data-status="running"]::after,
-.prose-aether.aui-md[data-status="running"] > :last-child::after {
-  color: var(--accent);
-  font-size: 0.65em;
-  opacity: 0.75;
+.prose-aether.aui-md[data-status="running"] *::after {
+  content: none;
+  animation: none;
 }
 
 @media (max-width: 640px) {
@@ -609,9 +677,9 @@
     min-height: 1.1rem;
   }
 
-  .aether-activity__spinner {
-    width: 10px;
-    height: 10px;
+  .aether-activity__glyph {
+    width: 12px;
+    height: 12px;
   }
 
   .aether-activity__steps {
@@ -627,7 +695,8 @@
   .aether-activity--enter,
   .aether-activity__named-item,
   .aether-activity__chip,
-  .aether-activity__spinner {
+  .aether-activity__glyph,
+  .aether-activity__label {
     animation: none;
   }
 
@@ -642,7 +711,6 @@
 
   .aether-send-stop__glyph[data-active="false"] {
     transform: none;
-    filter: none;
   }
 
   .aether-send-stop:active .aether-send-stop__face {

@@ -293,7 +293,7 @@ export function SettingsDialog() {
           <div
             ref={connectedRef}
             className={cn(
-              "space-y-3 transition-[box-shadow,background-color] duration-500",
+              "space-y-3 transition-[box-shadow,background-color] duration-slow ease-aether",
               focusConnectedAccounts &&
                 "-mx-2 rounded-xl bg-[var(--accent-muted)] px-2 py-3 ring-1 ring-[var(--accent)]/25",
             )}

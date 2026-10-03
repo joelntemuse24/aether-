@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { SpeedTier } from "../../src/lib/hosted/speed-tiers";
 import type { ProbeAuth } from "./client";
 import type { ProbeCategory } from "./types";
+import { textLooksSettled } from "./detectors";
 import {
   detectUiFailures,
   isWelcomePhrase,
@@ -65,6 +66,7 @@ type PlaywrightLocator = {
   isVisible: () => Promise<boolean>;
   textContent: () => Promise<string | null>;
   innerText: () => Promise<string>;
+  getAttribute: (name: string) => Promise<string | null>;
   inputValue: () => Promise<string>;
   fill: (text: string) => Promise<void>;
   click: (opts?: { timeout?: number }) => Promise<void>;
@@ -104,12 +106,15 @@ async function collectUiDom(page: PlaywrightPage): Promise<Omit<
   let workedForVisible = false;
   for (const node of activityNodes) {
     const text = ((await node.innerText().catch(() => "")) || "").trim();
-    if (/worked for /i.test(text)) workedForVisible = true;
+    const mode = await node.getAttribute("data-activity-mode").catch(() => null);
+    if (mode === "collapsed" || textLooksSettled(text)) workedForVisible = true;
     const liveLines = text
       .split(/\n/)
       .map((line) => line.trim())
-      .filter((line) => /^working(?: for \S+)?$/i.test(line));
-    if (liveLines.length > 0) workingStripCount += 1;
+      .filter((line) => /^(?:working(?: for \S+)?|thinking(?:\s+\d+\S*)?)$/i.test(line));
+    if (mode === "live" || mode === "elapsed" || liveLines.length > 0) {
+      workingStripCount += 1;
+    }
   }
 
   const liveStepCount = await page.locator(".aether-activity--live .aether-activity__step").count();

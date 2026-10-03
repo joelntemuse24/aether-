@@ -35,6 +35,11 @@
   --error-text: #991b1b;
   --hljs-theme: "highlight.js/styles/github.css";
 
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --motion-slow: 380ms;
+  --motion-ease: cubic-bezier(0.23, 1, 0.32, 1);
+
   --background: var(--canvas);
   --foreground: var(--text);
   /* only light — do not follow OS dark for native widgets */
@@ -135,6 +140,12 @@
   /* Reading font is applied via CSS var — never Tailwind font-serif */
   --font-reading: var(--font-serif);
   --font-sc: var(--font-sc);
+  --ease-aether: cubic-bezier(0.23, 1, 0.32, 1);
+  --duration-fast: 140ms;
+  --duration-base: 220ms;
+  --duration-slow: 380ms;
+  --default-transition-duration: 140ms;
+  --default-transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 * {
@@ -270,12 +281,27 @@ body::before {
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+@keyframes aether-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.aether-message-enter {
+  animation: aether-fade-up var(--motion-base) var(--motion-ease) both;
 }
 
 @keyframes slideIn {
@@ -328,12 +354,20 @@ textarea:focus-visible,
   border-color: transparent !important;
 }
 
-/* assistant-ui streaming caret */
+/* assistant-ui streaming caret — the status glyph is the working mark */
 .aui-md-running::after {
-  content: "▋";
-  margin-left: 1px;
-  animation: pulse 1s ease-in-out infinite;
-  color: var(--accent);
+  content: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Hide number input spinners if any */

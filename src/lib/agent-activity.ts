@@ -1,9 +1,9 @@
 /**
  * Honest in-progress activity for a chat turn.
  *
- * Status lines map 1:1 onto real tool / retrieval parts. Token-only
- * generation is at most a quiet elapsed clock — never a costume stack
- * of Thinking / Planning / search theater.
+ * One live status line. Before a tool exists the line says "Thinking".
+ * A real tool replaces that word in place. Token text collapses the
+ * line into a muted summary. Never a costume stack or a second Working row.
  */
 
 import { collectSourceCitations } from "./citations";
@@ -56,7 +56,17 @@ export type ActivityView = {
   summaryLabel: string | null;
 };
 
-const WORKING_CLOCK_LINE = /^(?:working(?: for \S+)?)$/i;
+const WORKING_CLOCK_LINE = /^(?:working(?: for \S+)?|thinking)$/i;
+
+/** First live word, before a real tool step exists. Not a costume stack. */
+export const THINKING_WORD = "Thinking";
+
+/** Elapsed seconds stay off the line until the turn has been going this long. */
+export const ACTIVITY_ELAPSED_REVEAL_SECONDS = 3;
+
+export function shouldRevealActivityElapsed(seconds: number): boolean {
+  return seconds >= ACTIVITY_ELAPSED_REVEAL_SECONDS;
+}
 
 /** Decorative ChatGPT-style status — never an Aether live line. */
 export const THINKING_THEATER =
@@ -72,7 +82,7 @@ export function looksLikeThinkingTheater(text: string | null | undefined): boole
 
 /**
  * Live column shows at most the current real step. Completed steps wait
- * behind Worked for Ns so the thread never stacks ChatGPT theater.
+ * behind the collapsed summary so the thread never stacks a second row.
  */
 export function compactLiveSteps(view: ActivityView): ActivityStep[] {
   if (view.mode === "collapsed") return view.steps;
@@ -224,11 +234,8 @@ export function activityLabelForTool(
   running: boolean,
 ): string {
   switch (toolName) {
-    case "web_search": {
-      const query = clipPhrase(args.query);
-      if (running) return query ? `Searching ${query}` : "Searching";
-      return "Searched the web";
-    }
+    case "web_search":
+      return running ? "Searching the web" : "Searched the web";
     case "memory_search": {
       const query = clipPhrase(args.query);
       if (running) return query ? `Searching memory for ${query}` : "Searching memory";
@@ -377,6 +384,34 @@ export function collectActivitySteps(
   return steps;
 }
 
+function revealedElapsedLabel(seconds: number): string | null {
+  if (!shouldRevealActivityElapsed(seconds)) return null;
+  return formatActivityElapsed(seconds);
+}
+
+function thoughtSummary(elapsedSeconds: number): string {
+  return `Thought for ${formatActivityElapsed(Math.max(elapsedSeconds, 1))}`;
+}
+
+function collapsedSummary(
+  steps: ActivityStep[],
+  elapsedSeconds: number,
+  sourceCount: number,
+): string {
+  if (steps.some((step) => step.toolName === "web_search")) {
+    if (sourceCount === 1) return "Searched the web · 1 source";
+    if (sourceCount > 1) return `Searched the web · ${sourceCount} sources`;
+    return "Searched the web";
+  }
+  if (steps.length > 0) {
+    const last =
+      [...steps].reverse().find((step) => step.state === "complete") ??
+      steps[steps.length - 1];
+    return last?.label ?? thoughtSummary(elapsedSeconds);
+  }
+  return thoughtSummary(elapsedSeconds);
+}
+
 function latestAssistant(
   messages: ActivityMessage[],
 ): ActivityMessage | undefined {
@@ -414,7 +449,8 @@ export function deriveAgentActivity(
         : steps.length > 0
           ? recalledActivityElapsed(assistant?.id)
           : 0;
-  const elapsedText = elapsed > 0 ? formatActivityElapsed(elapsed) : null;
+  const prose = assistantHasVisibleProse(assistant);
+  const sourceCount = collectWebSearchHits(assistant?.parts).length;
 
   if (
     input.continuePhase === "continuing" &&
@@ -455,10 +491,10 @@ export function deriveAgentActivity(
     };
   }
 
-  if (steps.length > 0) {
-    if (input.isRunning || live) {
-      const current =
-        live?.label ?? steps[steps.length - 1]?.label ?? null;
+  const answerStarted = prose && !live;
+  if ((input.isRunning || live) && !answerStarted) {
+    if (steps.length > 0) {
+      const current = live?.label ?? steps[steps.length - 1]?.label ?? null;
       return {
         visible: true,
         mode: "live",
@@ -467,43 +503,25 @@ export function deriveAgentActivity(
         liveLine: current,
         lineKey: live?.id ?? steps[steps.length - 1]!.id,
         elapsedSeconds: elapsed,
-        elapsedLabel: elapsedText ? `Working for ${elapsedText}` : "Working",
+        elapsedLabel: revealedElapsedLabel(elapsed),
         summaryLabel: null,
       };
     }
     return {
       visible: true,
-      mode: "collapsed",
-      steps,
-      liveStepId: null,
-      liveLine: null,
-      lineKey: "collapsed",
-      elapsedSeconds: elapsed,
-      elapsedLabel: elapsedText,
-      summaryLabel: elapsedText
-        ? `Worked for ${elapsedText}`
-        : (steps[0]?.label ?? null),
-    };
-  }
-
-  if (input.isRunning) {
-    // Keep the Grok-style clock up until the turn ends — tokens do not hide it.
-    return {
-      visible: true,
       mode: "elapsed",
       steps: [],
       liveStepId: null,
-      liveLine: "Working",
+      liveLine: THINKING_WORD,
       lineKey: "elapsed",
       elapsedSeconds: elapsed,
-      elapsedLabel: elapsedText ? `Working for ${elapsedText}` : "Working",
+      elapsedLabel: revealedElapsedLabel(elapsed),
       summaryLabel: null,
     };
   }
 
-  const emptyTranscript = assistant && !assistantHasVisibleProse(assistant);
-  if (emptyTranscript) {
-    const shown = Math.max(elapsed, 1);
+  if (steps.length > 0 || prose || (assistant && !prose) || elapsed > 0) {
+    const settledElapsed = assistant && !prose && elapsed <= 0 ? 1 : elapsed;
     return {
       visible: true,
       mode: "collapsed",
@@ -511,23 +529,10 @@ export function deriveAgentActivity(
       liveStepId: null,
       liveLine: null,
       lineKey: "collapsed",
-      elapsedSeconds: shown,
-      elapsedLabel: formatActivityElapsed(shown),
-      summaryLabel: `Worked for ${formatActivityElapsed(shown)}`,
-    };
-  }
-
-  if (elapsed > 0) {
-    return {
-      visible: true,
-      mode: "collapsed",
-      steps: [],
-      liveStepId: null,
-      liveLine: null,
-      lineKey: "collapsed",
-      elapsedSeconds: elapsed,
-      elapsedLabel: elapsedText,
-      summaryLabel: `Worked for ${elapsedText}`,
+      elapsedSeconds: settledElapsed,
+      elapsedLabel:
+        settledElapsed > 0 ? formatActivityElapsed(settledElapsed) : null,
+      summaryLabel: collapsedSummary(steps, settledElapsed, sourceCount),
     };
   }
 
@@ -610,7 +615,7 @@ export function collectWebSearchHits(
 
 const MAX_RENDERED_SOURCES = 8;
 
-/** Session-local elapsed clock so completed turns can say "Worked for Ns". */
+/** Session-local elapsed clock so a settled turn can say "Thought for Ns". */
 let liveStartedAt: number | null = null;
 const completedElapsed = new Map<string, number>();
 let lastClosedElapsed = 0;
