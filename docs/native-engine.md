@@ -1,0 +1,48 @@
+# Native agent engine
+
+`AETHER_AGENT_ENGINE` is unset in production. Chat stays on TrueForge (or the legacy in-process path). Set it to `native` only after the VM process below answers `/health`.
+
+The browser still posts `/api/chat` and still reads an AI SDK UI message stream. Vercel mints a short-lived turn token (user, conversation, allowed tool names, approval mode, expiry, request id), then proxies the VM's NDJSON `{ id, chunk }` stream. Chunk objects are the existing `UiChunk` values. No API key is written into the token, the JSON body, or a log line. An OpenRouter key arrives as the `x-openrouter-key` header for that request only.
+
+`AETHER_AGENT_TRANSPORT=direct` is rejected. The browser does not connect to the VM yet.
+
+This process does not execute tools and does not start a sandbox. Those are later changes. It also does not change `/opt/aether/sidecar-only.ts`.
+
+## Env
+
+Vercel, only when the VM process is up:
+
+| Name | Value |
+| --- | --- |
+| `AETHER_AGENT_ENGINE` | `native` |
+| `AETHER_AGENT_URL` | HTTPS origin that reaches the agent port. Not the TrueForge sidecar origin. |
+| `AETHER_TRUEFORGE_TOKEN` | Same bearer the VM checks. Already set for the sidecar. |
+| `AETHER_AGENT_TRANSPORT` | Omit or `proxy`. |
+
+VM process environment:
+
+| Name | Value |
+| --- | --- |
+| `AETHER_TRUEFORGE_TOKEN` | Required. The process refuses to listen without it. |
+| `AETHER_AGENT_HOST` | `127.0.0.1` (default). Do not publish this port on the public internet. |
+| `AETHER_AGENT_PORT` | `8792` (default). |
+| `AETHER_HOSTED_BUZZ_API_KEY` | Hosted model key. `AETHER_HOSTED_CLAUDE_API_KEY` is the legacy alias. |
+| `AETHER_HOSTED_BUZZ_BASE_URL` | Optional. Normalized to Buzz `/v1`. |
+
+Do not set `AETHER_TOOL_CONTEXT_KEY` on the VM. Do not put user API keys in the VM environment. The image command for the sidecar stays `npx tsx src/lib/trueforge/vm-server.ts`. The agent overrides that command.
+
+## VM deploy
+
+Do not run these from CI. The same pm2 daemon also runs `echomancer-takehome`. This repo does not start a second pm2 app.
+
+1. Deploy the sidecar the way it already ships: `/opt/aether/deploy.sh`, then `deploy/trueforge/health-gate.sh <previous-sha>`. That script only runs `pm2 reload aether`. It does not reload anything else and it does not restart systemd unit `pm2-aether`.
+2. Confirm before creating a pm2 process for the agent. The intended command, as user `aether` from `/opt/aether`, after that confirmation:
+
+```bash
+pm2 start npx --name aether-agent -- tsx src/agent-server/server.ts
+```
+
+3. Ready check (manual): `curl -sS http://127.0.0.1:8792/health` returns `{"ok":true}`. Other routes need `Authorization: Bearer <AETHER_TRUEFORGE_TOKEN>`.
+4. Put TLS in Caddy (or the existing tunnel) in front of `127.0.0.1:8792`. Point Vercel `AETHER_AGENT_URL` at that HTTPS origin. Then set `AETHER_AGENT_ENGINE=native`.
+
+`docker compose up` still starts only the TrueForge service. The agent service is the `agent` profile: `docker compose --profile agent up`. Its container listens on `0.0.0.0` inside the network namespace and publishes `127.0.0.1:8792` on the host.

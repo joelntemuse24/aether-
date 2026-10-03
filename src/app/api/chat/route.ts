@@ -1,4 +1,6 @@
 import type { UIMessage } from "ai";
+import { selectChatEngine } from "@/lib/agent/engine";
+import { NATIVE_PROVIDER_UNSUPPORTED, proxyNativeAgentChat } from "@/lib/agent/proxy";
 import { streamLegacyLocalChat } from "@/lib/harness/legacy-local-stream";
 import { updateAgentRunStatus } from "@/lib/harness/runs-store";
 import type { HarnessChatContext } from "@/lib/harness/types";
@@ -302,11 +304,13 @@ export async function POST(req: Request) {
       }
     }
 
-    // TrueForge runs hosted Expert turns when the sidecar is up. Otherwise the
-    // existing in-process / Hermes path handles the turn (Vercel has no sidecar).
+    // Native (AETHER_AGENT_ENGINE=native) proxies to the VM. Unset keeps
+    // TrueForge, then Hermes, then the in-process loop. `legacy` skips TrueForge.
     const { isOpenRouterModelId } = await import("@/lib/openrouter/models");
     const { openRouterChatResponse, textHistoryFromUiMessages } = await import("@/lib/openrouter/stream");
+    const { readAgentEngineFlag } = await import("@/lib/agent/engine");
     const history = textHistoryFromUiMessages(enrichedMessages);
+    const engineFlag = readAgentEngineFlag();
     if (hosted && isOpenRouterModelId(incomingModel || "")) {
       if (!openRouterKey) {
         return new Response(
@@ -314,6 +318,62 @@ export async function POST(req: Request) {
           { status: 401, headers: { "Content-Type": "application/json" } },
         );
       }
+    }
+    const hostedOpenRouter =
+      hosted && isOpenRouterModelId(incomingModel || "") && !!openRouterKey;
+    let trueforgeReachable = false;
+    if (engineFlag !== "native" && engineFlag !== "legacy" && hosted && !hostedOpenRouter) {
+      const { trueforgeSidecarReachable } = await import("@/lib/trueforge/config");
+      trueforgeReachable = await trueforgeSidecarReachable();
+    }
+    const engine = selectChatEngine({
+      env: process.env,
+      hostedOpenRouter,
+      trueforgeReachable,
+      hermesLive,
+    });
+
+    if (engine === "native") {
+      console.info("[api/chat] engine", { engine: "native", conversationId });
+      if (!hosted && provider !== "openrouter") {
+        return withGuestCookie(
+          new Response(JSON.stringify({ error: NATIVE_PROVIDER_UNSUPPORTED }), {
+            status: 503,
+            headers: { "Content-Type": "application/json" },
+          }),
+          guest.setCookie,
+        );
+      }
+      let modelId = requestedModel || incomingModel;
+      if (hosted) {
+        const { hostedBuzzModelChoice, listBuzzChatModels } = await import("@/lib/buzz/models");
+        modelId = hostedBuzzModelChoice({
+          bodyModel: typeof body.model === "string" ? body.model : null,
+          headerModel,
+          models: await listBuzzChatModels(),
+        });
+      }
+      const forwardedKey = openRouterKey || (!hosted && provider === "openrouter" ? apiKey : "");
+      return withGuestCookie(
+        proxyNativeAgentChat({
+          env: process.env,
+          conversationId: conversationId ?? "",
+          userId: userId || guest.id,
+          messages: enrichedMessages,
+          system,
+          modelId,
+          approvalMode,
+          depth: harnessDepth,
+          timeMinutes: timeBudget?.minutes ?? null,
+          abortSignal: req.signal,
+          openRouterKey: forwardedKey || null,
+          tools: [],
+        }),
+        guest.setCookie,
+      );
+    }
+
+    if (engine === "openrouter") {
       console.info("[api/chat] engine", { engine: "openrouter", conversationId });
       return withGuestCookie(openRouterChatResponse({
         apiKey: openRouterKey,
@@ -325,8 +385,7 @@ export async function POST(req: Request) {
       }), guest.setCookie);
     }
 
-    const { trueforgeSidecarReachable } = await import("@/lib/trueforge/config");
-    if (hosted && (await trueforgeSidecarReachable())) {
+    if (engine === "trueforge") {
       const { streamTrueForgeHostedChat } = await import("@/lib/trueforge/chat-stream");
       const { hostedBuzzModelChoice, listBuzzChatModels } = await import("@/lib/buzz/models");
       const buzzModelId = hostedBuzzModelChoice({
@@ -358,9 +417,9 @@ export async function POST(req: Request) {
       }), guest.setCookie);
     }
 
-    // Hermes owns the hosted tool loop. BYOK (and hosted without Hermes)
-    // stay on the isolated local streamText path — user keys never leave Vercel.
-    if (hermesLive) {
+    // Hermes, when selected. BYOK on this branch stays in-process.
+    // The native branch above is the one that forwards an OpenRouter key.
+    if (engine === "hermes") {
       console.info("[api/chat] hermes proxy", {
         conversationId,
         model: requestedModel,

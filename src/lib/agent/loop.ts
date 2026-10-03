@@ -1,6 +1,7 @@
 /**
  * Model-agnostic tool loop. Callers pass a Vercel AI SDK model.
- * The chat route does not call this until AETHER_AGENT_ENGINE=native.
+ * The VM agent server calls this when AETHER_AGENT_ENGINE=native.
+ * The chat route stays on TrueForge / legacy until that flag is set.
  */
 
 import { budgetForDepthWithTime } from "@/lib/harness/budgets";

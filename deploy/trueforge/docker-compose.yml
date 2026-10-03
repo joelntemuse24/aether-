@@ -31,5 +31,25 @@ services:
       retries: 8
       start_period: 20s
 
+  # Separate process. Not started by `docker compose up` and not reloaded by health-gate.sh.
+  # `docker compose --profile agent up` only. Do not set AETHER_TOOL_CONTEXT_KEY here.
+  agent:
+    profiles: ["agent"]
+    build:
+      context: ../..
+      dockerfile: deploy/trueforge/Dockerfile
+    command: ["npx", "tsx", "src/agent-server/server.ts"]
+    ports:
+      - "127.0.0.1:8792:8792"
+    environment:
+      AETHER_TRUEFORGE_TOKEN: ${AETHER_TRUEFORGE_TOKEN:?set AETHER_TRUEFORGE_TOKEN}
+      AETHER_AGENT_HOST: 0.0.0.0
+      AETHER_AGENT_PORT: "8792"
+      AETHER_HOSTED_BUZZ_API_KEY: ${AETHER_HOSTED_BUZZ_API_KEY:-}
+      AETHER_HOSTED_BUZZ_BASE_URL: ${AETHER_HOSTED_BUZZ_BASE_URL:-}
+      AETHER_HOSTED_CLAUDE_API_KEY: ${AETHER_HOSTED_CLAUDE_API_KEY:-}
+      AETHER_HOSTED_CLAUDE_BASE_URL: ${AETHER_HOSTED_CLAUDE_BASE_URL:-}
+    restart: unless-stopped
+
 volumes:
   trueforge-data:

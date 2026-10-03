@@ -49,13 +49,15 @@ The chat shell stays the cream Aether UI. TrueForge events become AI SDK UI chun
 
 ## Native agent engine
 
-`src/lib/agent` is the model-agnostic loop. It is not on the live chat path. `AETHER_AGENT_ENGINE=native` opts in once a later change reads the flag. Unset or any other value keeps the current TrueForge / legacy router.
+`src/lib/agent` is the model-agnostic loop. `AETHER_AGENT_ENGINE=native` proxies `/api/chat` to the VM agent server (`src/agent-server`) and streams the same UI chunks back. Unset or `trueforge` keeps the current TrueForge / legacy router. `legacy` skips the TrueForge sidecar. The agent process is not pm2 app `aether`. `deploy/trueforge/health-gate.sh` still reloads only `aether`.
 
 | Rule | Status | Check |
 | --- | --- | --- |
 | Unset or unrecognised `AETHER_AGENT_ENGINE` does not select native. | deterministic | `src/lib/agent/engine.test.ts`, `src/lib/trueforge/harness-rules.test.ts` |
+| `legacy` does not select the TrueForge sidecar. | deterministic | `src/lib/agent/engine.test.ts` |
 | A native prompt names only the tools attached to that turn. | deterministic | `src/lib/agent/registry.test.ts` |
 | Claude is not sent a reasoning effort when the allowed list is empty. | deterministic | `src/lib/agent/profiles.test.ts` |
+| The agent server sources do not import Next, and the proxy forwards chunk objects unchanged. | deterministic | `src/lib/trueforge/harness-rules.test.ts`, `src/lib/agent/proxy.test.ts` |
 
 ## How to run the checks
 

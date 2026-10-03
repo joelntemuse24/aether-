@@ -33,6 +33,42 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+function resolveTs(base: string): string | null {
+  const candidates = [base, `${base}.ts`, `${base}.tsx`, path.join(base, "index.ts")];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
+    } catch {
+      // missing import
+    }
+  }
+  return null;
+}
+
+/** Follow relative and `@/` imports from the agent server. Next must not appear. */
+function agentServerImportsNext(): string[] {
+  const entryDir = path.join(root, "src/agent-server");
+  const starts = walk(entryDir);
+  const seen = new Set<string>();
+  const hits: string[] = [];
+  const queue = [...starts];
+  while (queue.length > 0) {
+    const file = queue.pop();
+    if (!file || seen.has(file)) continue;
+    seen.add(file);
+    const text = readFileSync(file, "utf8");
+    const specs = [...text.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map((match) => match[1] ?? "");
+    for (const spec of specs) {
+      if (spec === "next" || spec.startsWith("next/")) hits.push(`${path.relative(root, file)} -> ${spec}`);
+      let resolved: string | null = null;
+      if (spec.startsWith(".")) resolved = resolveTs(path.resolve(path.dirname(file), spec));
+      else if (spec.startsWith("@/")) resolved = resolveTs(path.join(root, "src", spec.slice(2)));
+      if (resolved && !seen.has(resolved)) queue.push(resolved);
+    }
+  }
+  return hits;
+}
+
 describe("harness rules", () => {
   it("names only the tools attached to the turn", () => {
     const catalog = AETHER_MCP_TOOL_NAMES;
@@ -127,6 +163,17 @@ describe("harness rules", () => {
     assert.equal(readAgentEngineFlag({}), null);
     assert.equal(readAgentEngineFlag({ AETHER_AGENT_ENGINE: "native" }), "native");
     assert.equal(readAgentEngineFlag({ AETHER_AGENT_ENGINE: "yes" }), null);
+    const route = read("src/app/api/chat/route.ts");
+    assert.match(route, /selectChatEngine\(/);
+    assert.match(route, /engine: "native"/);
+    assert.match(route, /proxyNativeAgentChat\(/);
+    const docker = read("deploy/trueforge/Dockerfile");
+    assert.match(docker, /src\/lib\/trueforge\/vm-server\.ts/);
+    assert.doesNotMatch(docker, /sidecar-only/);
+    const compose = read("deploy/trueforge/docker-compose.yml");
+    assert.doesNotMatch(compose, /AETHER_TOOL_CONTEXT_KEY\s*:/);
+    assert.match(compose, /profiles: \["agent"\]/);
+    assert.equal(agentServerImportsNext().length, 0);
   });
 
   it("reloads only the pm2 app aether", () => {
