@@ -397,7 +397,7 @@ export async function POST(req: Request) {
           timeMinutes: timeBudget?.minutes ?? null,
           abortSignal: req.signal,
           openRouterKey: forwardedKey || null,
-          tools: nativeToolNames(accountReady),
+          tools: nativeToolNames(accountReady, toolsEnabled),
           projectId: projectId ?? null,
         }),
         guest.setCookie,

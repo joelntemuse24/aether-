@@ -60,6 +60,7 @@ The chat shell stays the cream Aether UI. TrueForge events become AI SDK UI chun
 | A streamed native attempt forwards text and tool chunks as they are produced. Control chunks stay held until that progress exists, so a transient failure before the first token still retries. After text or tools are forwarded, a transient failure emits an `error` chunk and does not append another attempt. | deterministic | `src/lib/agent/loop.test.ts`, `src/agent-server/handler.test.ts` |
 | The agent server sources do not import Next, and the proxy forwards chunk objects unchanged. | deterministic | `src/lib/trueforge/harness-rules.test.ts`, `src/lib/agent/proxy.test.ts` |
 | Native web tools and `current_time` run on the VM. Account tools call Vercel with the turn token only. Drive and GitHub tokens stay on Vercel. A private callback origin is refused. | deterministic | `src/lib/agent/catalog.test.ts`, `src/lib/agent/web-exec.test.ts`, `src/lib/agent/account-callback.test.ts`, `src/lib/agent/account-on-vercel.test.ts`, `src/agent-server/run-turn.test.ts` |
+| `sandbox_exec` and `sandbox_files` use bubblewrap with no network, CPU/memory/pid/time limits, and kill-on-abort. Stale workspaces are removed with `pruneOldSandboxes`. A missing `bwrap` returns "The sandbox is unavailable this turn." | deterministic | `src/lib/agent/sandbox.test.ts`, `src/agent-server/run-turn.test.ts` |
 
 ## How to run the checks
 

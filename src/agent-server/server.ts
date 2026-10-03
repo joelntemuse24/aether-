@@ -6,9 +6,10 @@
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { pruneNativeSandboxes } from "@/lib/agent/sandbox";
+import { loadLocalEnvFiles } from "@/lib/trueforge/load-env";
 import { createAgentServer } from "./handler";
 import { runNativeTurn } from "./run-turn";
-import { loadLocalEnvFiles } from "@/lib/trueforge/load-env";
 
 function readPort(name: string, fallback: number): number {
   const raw = Number(process.env[name] || fallback);
@@ -26,6 +27,9 @@ export function startAgentServer(): void {
   const server = createAgentServer({
     token,
     runTurn: (body, signal, onChunk) => runNativeTurn(body, signal, { onChunk }),
+  });
+  void pruneNativeSandboxes().catch(() => {
+    // Stale workspace cleanup must not stop the process from listening.
   });
   server.listen(port, host, () => {
     console.info(`[agent-server] listening on ${host}:${port}`);

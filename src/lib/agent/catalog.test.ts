@@ -6,6 +6,7 @@ import {
   definitionsForAllowList,
   nativeToolNames,
   NATIVE_ACCOUNT_TOOL_NAMES,
+  NATIVE_SANDBOX_TOOL_NAMES,
   NATIVE_WEB_TOOL_NAMES,
 } from "./catalog";
 
@@ -20,6 +21,10 @@ describe("native tool catalog", () => {
     assert.equal(signedIn.includes("gmail_send"), false);
     assert.equal(signedIn.includes("github_merge_pull_request"), false);
     assert.equal(signedIn.includes("sandbox_exec"), false);
+    const withSandbox = nativeToolNames(true, true);
+    assert.deepEqual(withSandbox.slice(0, 6), [...NATIVE_WEB_TOOL_NAMES, ...NATIVE_SANDBOX_TOOL_NAMES]);
+    assert.equal(withSandbox.at(-1), "github_list_issues");
+    assert.equal(withSandbox.length, 16);
   });
 
   it("drops names this engine cannot run", () => {
@@ -31,10 +36,11 @@ describe("native tool catalog", () => {
     ]);
     assert.deepEqual(
       definitions.map((definition) => definition.name),
-      ["web_search", "memory_search"],
+      ["web_search", "sandbox_exec", "memory_search"],
     );
     assert.equal(definitions[0]?.runsOn, "vm");
-    assert.equal(definitions[1]?.runsOn, "vercel");
+    assert.equal(definitions[1]?.runsOn, "vm");
+    assert.equal(definitions[2]?.runsOn, "vercel");
     assert.equal(agentToolGroup("current_time"), "web");
   });
 
@@ -57,5 +63,17 @@ describe("native tool catalog", () => {
     const luna = providerToolDefinitions(all, agentModelProfile("gpt-5.6-luna"));
     assert.equal(luna.length, all.length);
     assert.equal(luna.length <= 16, true);
+    const withSandbox = definitionsForAllowList(nativeToolNames(true, true));
+    const lunaSandbox = providerToolDefinitions(withSandbox, agentModelProfile("gpt-5.6-luna"));
+    assert.equal(lunaSandbox.length, 16);
+    assert.equal(lunaSandbox.some((tool) => tool.name === "sandbox_exec"), true);
+    const gemini = providerToolDefinitions(withSandbox, agentModelProfile("google/gemini-2.5-pro"));
+    assert.equal(gemini.length, 12);
+    assert.equal(gemini.some((tool) => tool.name === "sandbox_exec"), true);
+    assert.equal(gemini.some((tool) => tool.name === "drive_read"), true);
+    assert.equal(gemini.some((tool) => tool.name === "github_get_repo"), false);
+    const unknown = providerToolDefinitions(withSandbox, agentModelProfile("mystery-model"));
+    assert.equal(unknown.length, 4);
+    assert.equal(unknown.some((tool) => tool.name === "sandbox_exec"), false);
   });
 });

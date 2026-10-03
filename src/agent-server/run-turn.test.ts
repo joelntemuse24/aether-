@@ -4,7 +4,7 @@ import type { UIMessage } from "ai";
 import { scriptedMockModel } from "@/lib/agent/mock-provider";
 import { visibleTextFromEvents } from "@/lib/agent/events";
 import type { AgentTurnRequest } from "./handler";
-import { runNativeTurn } from "./run-turn";
+import { attachNativeTools, runNativeTurn } from "./run-turn";
 
 describe("runNativeTurn", () => {
   it("logs the native engine and does not log the per-turn key", async () => {
@@ -88,5 +88,25 @@ describe("runNativeTurn", () => {
     assert.match(body, /memory_search/);
     assert.equal(body.includes("header-turn-token"), false);
     assert.match(visibleTextFromEvents(events), /You like tea/);
+  });
+
+  it("drops sandbox tools when bubblewrap is unavailable and keeps them when it is", () => {
+    const off = attachNativeTools(["web_search", "sandbox_exec", "sandbox_files", "memory_search"], {
+      callbackOk: false,
+      sandboxOk: false,
+    });
+    assert.deepEqual(
+      off.map((tool) => tool.name),
+      ["web_search"],
+    );
+    const on = attachNativeTools(["web_search", "sandbox_exec", "memory_search"], {
+      callbackOk: true,
+      sandboxOk: true,
+    });
+    assert.deepEqual(
+      on.map((tool) => tool.name),
+      ["web_search", "sandbox_exec", "memory_search"],
+    );
+    assert.equal(on.find((tool) => tool.name === "sandbox_exec")?.risk, "write");
   });
 });
