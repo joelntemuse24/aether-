@@ -62,6 +62,16 @@ describe("buildChatHeaders", () => {
       toolApprovalMode: "auto",
     });
     assert.equal(auto["x-tool-approval-mode"], "auto");
+    assert.equal(
+      buildChatHeaders({ ...DEFAULT_SETTINGS, accessMode: "hosted", openrouterKey: "sk-or-test" })[
+        "x-openrouter-key"
+      ],
+      "sk-or-test",
+    );
+    assert.equal(
+      "x-openrouter-key" in buildChatHeaders({ ...DEFAULT_SETTINGS, accessMode: "hosted" }),
+      false,
+    );
   });
 
   it("reads the Buzz picker at header-build time", () => {
