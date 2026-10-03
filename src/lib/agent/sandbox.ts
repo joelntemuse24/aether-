@@ -293,17 +293,18 @@ export function bubblewrapAvailable(options?: {
         return;
       }
       let settled = false;
-      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        if (child.pid != null && !options?.spawn) defaultKill(child.pid);
+        resolve(false);
+      }, 5_000);
       const finish = (available: boolean) => {
         if (settled) return;
         settled = true;
-        if (timer) clearTimeout(timer);
+        clearTimeout(timer);
         resolve(available);
       };
-      timer = setTimeout(() => {
-        if (child.pid != null && !options?.spawn) defaultKill(child.pid);
-        finish(false);
-      }, 5_000);
       let stderr = "";
       child.stdout?.resume();
       child.stderr?.on("data", (chunk: Buffer | string) => {
