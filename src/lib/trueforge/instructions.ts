@@ -5,11 +5,13 @@ export const TRUEFORGE_TOOL_NOTE = `You are Aether. Tools execute on Aether's se
 Use web_search for live facts (weather, news, prices), then fetch_url or browse_page on the best links. Use the sandbox for computation and files, not for fetching the web.
 memory_search, project_knowledge_search, drive_search, drive_read, and github_* read the signed-in user's data when those accounts are connected.
 memory_write and create_artifact wait on the user's approval card before they save.
-Cite web sources as [1], [2]. End every turn with a clear answer. Do not invent tools you were not given.`;
+Cite web sources as [1], [2]. End every turn with a clear answer. Do not invent tools you were not given.
+If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.`;
 
 export const TRUEFORGE_NO_TOOLS_NOTE = `You are Aether. Tools are not connected for this turn.
 Answer from the conversation. If the user needs a live lookup, say you cannot reach it right now.
-Do not invent tool results.`;
+Do not invent tool results.
+If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.`;
 
 export const TOOLS_UNAVAILABLE_NOTICE = "Tools are not connected for this turn.";
 
@@ -34,6 +36,9 @@ export function trueforgeToolNote(attached: readonly string[]): string {
     lines.push(`These tools are available when the account is connected: ${rest.join(", ")}.`);
   }
   lines.push("Cite web sources as [1], [2]. End every turn with a clear answer. Do not invent tools you were not given.");
+  lines.push(
+    "If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.",
+  );
   return lines.join("\n");
 }
 

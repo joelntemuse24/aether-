@@ -27,7 +27,13 @@ import {
 import { sandboxEnabledFromCapabilities } from "./config";
 import { connectorTokensForToolCall } from "./connector-tokens";
 import { readTrueForgeToolContext, signTrueForgeToolContext } from "./tool-context";
-import { TOOLS_UNAVAILABLE_NOTICE, instructionsForRegisteredTools, trueforgeInstructions } from "./instructions";
+import {
+  TOOLS_UNAVAILABLE_NOTICE,
+  TRUEFORGE_NO_TOOLS_NOTE,
+  instructionsForRegisteredTools,
+  trueforgeInstructions,
+  trueforgeToolNote,
+} from "./instructions";
 import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
 import { withLocalMcpHosts } from "./outbound-hosts";
 
@@ -120,6 +126,7 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
     });
     assert.equal(on.spec.model.params?.reasoningEffort, "none");
     assert.equal(on.spec.config.sandbox.enabled, true);
+    assert.equal(on.spec.config.ask_user_questions.enabled, false);
     assert.equal("skills" in on.spec, false);
     assert.equal(on.spec.mcpServers?.length, 1);
     const off = buildTrueForgeAgentSpec({
@@ -137,6 +144,7 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
       sandboxEnabled: true,
     });
     assert.equal(claude.spec.model.params, undefined);
+    assert.equal(claude.spec.config.ask_user_questions.enabled, false);
     const astra = buildTrueForgeAgentSpec({
       modelName: "buzz/gpt-6-astra",
       instructions: "Answer.",
@@ -144,6 +152,15 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
       sandboxEnabled: true,
     });
     assert.equal(astra.spec.model.params?.reasoningEffort, "low");
+    assert.equal(astra.spec.config.ask_user_questions.enabled, false);
+  });
+
+  it("tells every attached tool set to assume instead of asking the user to choose", () => {
+    const assume = /make a reasonable assumption and state it/;
+    assert.match(trueforgeToolNote(["web_search", "fetch_url", "browse_page"]), assume);
+    assert.match(trueforgeToolNote(["web_search", "memory_search"]), assume);
+    assert.match(TRUEFORGE_NO_TOOLS_NOTE, assume);
+    assert.match(trueforgeInstructions(`${TOOLS_SYSTEM_PROMPT}\n\nMemory: likes tea`), assume);
   });
 
   it("upserts one preloaded server and skips aetherx", async () => {
