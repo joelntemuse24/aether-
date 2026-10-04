@@ -43,6 +43,8 @@ export const prose = {
   lineHeight: "1.58",
   measure: "66ch",
   strongWeight: 650,
+  /* Text grade. opsz 17 (the CSS px size) is the loose caption cut. */
+  opsz: 22,
   light: {
     textPrimary: "#14110e",
     codeBg: "#e3dcd0",

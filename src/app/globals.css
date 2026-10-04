@@ -203,9 +203,8 @@ body::before {
   background-size: 180px 180px;
 }
 
-/* Optical sizing for display and answer serifs when available */
+/* Display serif only. Assistant prose sets its own opsz below. */
 .font-reading,
-.prose-aether,
 [class*="font-serif"],
 [style*="--font-serif"] {
   font-optical-sizing: auto;
@@ -216,6 +215,11 @@ body::before {
  * Source Serif 4 at body size, near-black (light) or warm cream (dark).
  * Headings stay in the same serif at 600–650: Inter semibold was compared
  * and read as chrome labels against the body.
+ *
+ * opsz is a point size. font-optical-sizing:auto sets it to the CSS pixel
+ * size, so 17px lands on the caption cut (wide sidebearings: "ser if",
+ * "writ ing"). The even text grade at this size is opsz 22. Do not put
+ * wght in font-variation-settings — that would override font-weight 650.
  */
 .prose-aether {
   max-width: 66ch;
@@ -225,8 +229,13 @@ body::before {
   font-size: 17px;
   font-weight: 400;
   line-height: 1.58;
-  letter-spacing: -0.004em;
-  font-optical-sizing: auto;
+  letter-spacing: normal;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures contextual;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  text-rendering: optimizeLegibility;
+  font-optical-sizing: none;
+  font-variation-settings: "opsz" 22;
   text-wrap: pretty;
 }
 
@@ -247,7 +256,7 @@ body::before {
 .prose-aether p {
   margin-block: 0.95em;
   line-height: 1.58;
-  letter-spacing: -0.004em;
+  letter-spacing: normal;
 }
 
 .prose-aether li > p {
@@ -269,7 +278,10 @@ body::before {
   color: var(--color-text-primary);
   font-family: var(--font-prose), "Source Serif 4", Georgia, serif;
   font-weight: 650;
-  letter-spacing: -0.015em;
+  letter-spacing: normal;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures contextual;
+  font-optical-sizing: none;
   line-height: 1.25;
   margin-top: 1.15em;
   margin-bottom: 0.4em;
@@ -277,10 +289,14 @@ body::before {
 
 .prose-aether h1 {
   font-size: 1.35em;
+  /* 1.35em of 17–18px is about 23–24px. */
+  font-variation-settings: "opsz" 24;
 }
 
 .prose-aether h2 {
   font-size: 1.22em;
+  /* 1.22em of 17–18px is about 21–22px. */
+  font-variation-settings: "opsz" 22;
 }
 
 .prose-aether h3 {
@@ -294,7 +310,8 @@ body::before {
 .prose-aether strong {
   color: var(--color-text-primary);
   font-weight: 650;
-  letter-spacing: -0.01em;
+  letter-spacing: normal;
+  font-kerning: normal;
 }
 
 .prose-aether em {
@@ -367,6 +384,9 @@ body::before {
   font-weight: 500;
   line-height: 1.45;
   letter-spacing: 0;
+  font-variation-settings: normal;
+  font-feature-settings: normal;
+  font-variant-ligatures: normal;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
@@ -381,6 +401,9 @@ body::before {
   font-size: 0.82em;
   line-height: 1.55;
   letter-spacing: 0;
+  font-variation-settings: normal;
+  font-feature-settings: normal;
+  font-variant-ligatures: normal;
 }
 
 .prose-aether pre code {

@@ -101,6 +101,14 @@ describe("assistant prose tokens", () => {
     assert.match(body, /font-family:\s*var\(--font-prose\)/);
     assert.match(body, /font-size:\s*17px/);
     assert.match(body, /line-height:\s*1\.58/);
+    assert.match(body, /letter-spacing:\s*normal/);
+    assert.match(body, /font-kerning:\s*normal/);
+    assert.match(body, /font-optical-sizing:\s*none/);
+    assert.match(
+      body,
+      new RegExp(`font-variation-settings:\\s*"opsz"\\s*${prose.opsz}`),
+    );
+    assert.doesNotMatch(body, /font-variation-settings:[^;]*wght/);
     assert.match(body, /color:\s*var\(--color-text-primary\)/);
     assert.match(body, /max-width:\s*(6[0-9]|7[0-5])ch/);
     assert.match(body, new RegExp(`max-width:\\s*${prose.measure}`));
@@ -112,7 +120,23 @@ describe("assistant prose tokens", () => {
     assert.equal(prose.desktopSize, "18px");
     assert.equal(prose.lineHeight, "1.58");
     assert.ok(prose.strongWeight >= 600 && prose.strongWeight <= 700);
-    assert.match(css, new RegExp(`\\.prose-aether strong \\{[\\s\\S]*font-weight:\\s*${prose.strongWeight}`));
+    assert.match(
+      css,
+      new RegExp(
+        `\\.prose-aether strong \\{[\\s\\S]*font-weight:\\s*${prose.strongWeight}`,
+      ),
+    );
+    assert.match(
+      css,
+      /\.prose-aether strong \{[^}]*letter-spacing:\s*normal/,
+    );
+    assert.match(
+      css,
+      /\.prose-aether h1,[\s\S]*?\.prose-aether h4 \{[^}]*letter-spacing:\s*normal/,
+    );
+    assert.match(css, /\.prose-aether h1 \{[^}]*font-variation-settings:\s*"opsz" 24/);
+    assert.match(css, /\.prose-aether h2 \{[^}]*font-variation-settings:\s*"opsz" 22/);
+    assert.equal(prose.opsz, 22);
     assert.match(
       css,
       /\.prose-aether li::marker \{[^}]*color:\s*var\(--color-text-primary\)/,
