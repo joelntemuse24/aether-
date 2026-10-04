@@ -4,6 +4,7 @@ import {
   Cormorant_SC,
   Inter,
   JetBrains_Mono,
+  Source_Serif_4,
 } from "next/font/google";
 import { SessionProvider } from "@/providers/session-provider";
 import { ThemeProvider } from "@/providers/theme-provider";
@@ -38,6 +39,18 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+/** Body serif for assistant answers. Cormorant stays display-only. */
+const sourceSerif = Source_Serif_4({
+  variable: "--font-prose",
+  subsets: ["latin"],
+  weight: "variable",
+  style: ["normal", "italic"],
+  display: "swap",
+  axes: ["opsz"],
+  fallback: ["Georgia", "Cambria", "Times New Roman", "Times", "serif"],
+  adjustFontFallback: true,
+});
+
 export const metadata: Metadata = {
   title: "Aether",
   description:
@@ -59,7 +72,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${cormorant.variable} ${cormorantSC.variable} ${inter.variable} ${jetbrainsMono.variable} antialiased`}
+        className={`${cormorant.variable} ${cormorantSC.variable} ${sourceSerif.variable} ${inter.variable} ${jetbrainsMono.variable} antialiased`}
       >
         <SessionProvider>
           <ThemeProvider>{children}</ThemeProvider>

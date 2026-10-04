@@ -106,7 +106,7 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   };
 
   return (
-    <div className="mt-3 flex items-center justify-between rounded-t-xl border border-b-0 border-[var(--border)] bg-[var(--elevated)] px-3.5 py-1.5 text-xs">
+    <div className="mt-3 flex items-center justify-between rounded-t-xl border border-b-0 border-[var(--border)] bg-[var(--color-prose-code-block-bg)] px-3.5 py-1.5 font-[family-name:var(--font-ui)] text-xs">
       <span className="font-medium lowercase text-[var(--muted)]">
         {language || "code"}
       </span>
@@ -156,7 +156,7 @@ const defaultComponents = memoizeMarkdownComponents({
   h1: ({ className, ...props }) => (
     <h1
       className={cn(
-        "mb-2 mt-5 scroll-m-20 text-xl font-semibold first:mt-0 last:mb-0",
+        "scroll-m-20 first:mt-0 last:mb-0",
         className,
       )}
       {...props}
@@ -165,7 +165,7 @@ const defaultComponents = memoizeMarkdownComponents({
   h2: ({ className, ...props }) => (
     <h2
       className={cn(
-        "mb-2 mt-5 scroll-m-20 text-lg font-semibold first:mt-0 last:mb-0",
+        "scroll-m-20 first:mt-0 last:mb-0",
         className,
       )}
       {...props}
@@ -174,7 +174,7 @@ const defaultComponents = memoizeMarkdownComponents({
   h3: ({ className, ...props }) => (
     <h3
       className={cn(
-        "mb-1.5 mt-4 scroll-m-20 text-base font-semibold first:mt-0 last:mb-0",
+        "scroll-m-20 first:mt-0 last:mb-0",
         className,
       )}
       {...props}
@@ -183,7 +183,7 @@ const defaultComponents = memoizeMarkdownComponents({
   h4: ({ className, ...props }) => (
     <h4
       className={cn(
-        "mb-1 mt-3.5 scroll-m-20 text-base font-medium first:mt-0 last:mb-0",
+        "scroll-m-20 first:mt-0 last:mb-0",
         className,
       )}
       {...props}
@@ -191,7 +191,7 @@ const defaultComponents = memoizeMarkdownComponents({
   ),
   p: ({ className, ...props }) => (
     <p
-      className={cn("my-3 first:mt-0 last:mb-0", className)}
+      className={cn("first:mt-0 last:mb-0", className)}
       {...props}
     />
   ),
@@ -226,17 +226,14 @@ const defaultComponents = memoizeMarkdownComponents({
   },
   blockquote: ({ className, ...props }) => (
     <blockquote
-      className={cn(
-        "my-3 border-s-2 border-[var(--border)] ps-4 text-[var(--muted)]",
-        className,
-      )}
+      className={cn(className)}
       {...props}
     />
   ),
   ul: ({ className, ...props }) => (
     <ul
       className={cn(
-        "my-3 ms-5 list-disc marker:text-[var(--muted)] [&>li]:mt-1",
+        "list-disc",
         className,
       )}
       {...props}
@@ -245,7 +242,7 @@ const defaultComponents = memoizeMarkdownComponents({
   ol: ({ className, ...props }) => (
     <ol
       className={cn(
-        "my-3 ms-5 list-decimal marker:text-[var(--muted)] [&>li]:mt-1",
+        "list-decimal",
         className,
       )}
       {...props}
@@ -261,7 +258,7 @@ const defaultComponents = memoizeMarkdownComponents({
     <div className="my-3 w-full overflow-x-auto">
       <table
         className={cn(
-          "w-full border-separate border-spacing-0 text-[0.95em]",
+          "w-full border-separate border-spacing-0",
           className,
         )}
         {...props}
@@ -271,7 +268,7 @@ const defaultComponents = memoizeMarkdownComponents({
   th: ({ className, ...props }) => (
     <th
       className={cn(
-        "bg-[var(--elevated)] px-3 py-1.5 text-start font-medium first:rounded-ss-lg last:rounded-se-lg",
+        "bg-[var(--color-prose-code-block-bg)] px-3 py-1.5 text-start first:rounded-ss-lg last:rounded-se-lg",
         className,
       )}
       {...props}
@@ -290,15 +287,15 @@ const defaultComponents = memoizeMarkdownComponents({
     <tr className={cn("m-0 p-0", className)} {...props} />
   ),
   li: ({ className, ...props }) => (
-    <li className={cn("leading-[1.65]", className)} {...props} />
+    <li className={cn(className)} {...props} />
   ),
   strong: ({ className, ...props }) => (
-    <strong className={cn("font-semibold", className)} {...props} />
+    <strong className={cn(className)} {...props} />
   ),
   pre: ({ className, ...props }) => (
     <pre
       className={cn(
-        "overflow-x-auto rounded-b-xl rounded-t-none border border-t-0 border-[var(--border)] bg-[var(--code-bg)] p-3.5 font-[family-name:var(--font-mono)] text-[13px] leading-relaxed text-[var(--text)]",
+        "overflow-x-auto rounded-b-xl rounded-t-none border border-t-0 border-[var(--border)] bg-[var(--color-prose-code-block-bg)] p-3.5 font-[family-name:var(--font-mono)] text-[var(--color-text-primary)]",
         className,
       )}
       {...props}
@@ -310,7 +307,7 @@ const defaultComponents = memoizeMarkdownComponents({
       <code
         className={cn(
           !isCodeBlock &&
-            "rounded-md bg-[var(--elevated)] px-1.5 py-0.5 font-[family-name:var(--font-mono)] text-[0.85em]",
+            "rounded-[0.38em] bg-[var(--color-prose-code-bg)] px-[0.4em] py-[0.1em] font-[family-name:var(--font-mono)] text-[0.84em] font-medium text-[var(--color-text-primary)]",
           className,
         )}
         {...props}
