@@ -34,6 +34,10 @@
   --overlay: rgba(0, 0, 0, 0.3);
   --error-text: #991b1b;
   --hljs-theme: "highlight.js/styles/github.css";
+  /* Assistant prose ink and code surfaces. Chrome keeps --text. */
+  --color-text-primary: #14110e;
+  --color-prose-code-bg: #e3dcd0;
+  --color-prose-code-block-bg: #efe8dc;
 
   --motion-fast: 140ms;
   --motion-base: 220ms;
@@ -73,6 +77,10 @@
   --error-text: #f87171;
   --overlay: rgba(10, 9, 6, 0.6);
   --hljs-theme: "highlight.js/styles/github-dark.css";
+  /* Cream ink on charcoal. Code chips lift slightly; they do not invert. */
+  --color-text-primary: #f3eee3;
+  --color-prose-code-bg: #322d24;
+  --color-prose-code-block-bg: #241f18;
   color-scheme: only dark;
 }
 
@@ -137,8 +145,8 @@
   --color-muted-fg: var(--muted);
   --font-sans: var(--font-ui);
   --font-mono: var(--font-mono);
-  /* Reading font is applied via CSS var — never Tailwind font-serif */
-  --font-reading: var(--font-serif);
+  /* Display stays Cormorant (--font-serif). Assistant prose uses --font-prose. */
+  --font-reading: var(--font-prose);
   --font-sc: var(--font-sc);
   --ease-aether: cubic-bezier(0.23, 1, 0.32, 1);
   --duration-fast: 140ms;
@@ -195,21 +203,194 @@ body::before {
   background-size: 180px 180px;
 }
 
-/* Optical sizing for reading serif when available */
+/* Optical sizing for display and answer serifs when available */
 .font-reading,
+.prose-aether,
 [class*="font-serif"],
 [style*="--font-serif"] {
   font-optical-sizing: auto;
 }
 
-/* Assistant markdown body rhythm */
+/*
+ * Assistant answer prose.
+ * Source Serif 4 at body size, near-black (light) or warm cream (dark).
+ * Headings stay in the same serif at 600–650: Inter semibold was compared
+ * and read as chrome labels against the body.
+ */
 .prose-aether {
+  max-width: 66ch;
+  color: var(--color-text-primary);
+  font-family: var(--font-prose), "Source Serif 4", Georgia, Cambria,
+    "Times New Roman", Times, serif;
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.58;
+  letter-spacing: -0.004em;
   font-optical-sizing: auto;
+  text-wrap: pretty;
+}
+
+@media (min-width: 768px) {
+  .prose-aether {
+    font-size: 18px;
+  }
+}
+
+.prose-aether > :first-child {
+  margin-top: 0;
+}
+
+.prose-aether > :last-child {
+  margin-bottom: 0;
 }
 
 .prose-aether p {
-  line-height: 1.7;
-  letter-spacing: -0.011em;
+  margin-block: 0.95em;
+  line-height: 1.58;
+  letter-spacing: -0.004em;
+}
+
+.prose-aether li > p {
+  margin-block: 0.25em;
+}
+
+.prose-aether li > p:first-child {
+  margin-top: 0;
+}
+
+.prose-aether li > p:last-child {
+  margin-bottom: 0;
+}
+
+.prose-aether h1,
+.prose-aether h2,
+.prose-aether h3,
+.prose-aether h4 {
+  color: var(--color-text-primary);
+  font-family: var(--font-prose), "Source Serif 4", Georgia, serif;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  margin-top: 1.15em;
+  margin-bottom: 0.4em;
+}
+
+.prose-aether h1 {
+  font-size: 1.35em;
+}
+
+.prose-aether h2 {
+  font-size: 1.22em;
+}
+
+.prose-aether h3 {
+  font-size: 1.08em;
+}
+
+.prose-aether h4 {
+  font-size: 1em;
+}
+
+.prose-aether strong {
+  color: var(--color-text-primary);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.prose-aether em {
+  font-style: italic;
+}
+
+.prose-aether ul,
+.prose-aether ol {
+  margin-block: 0.9em;
+  padding-inline-start: 1.2em;
+}
+
+.prose-aether ul {
+  list-style: disc;
+}
+
+.prose-aether ol {
+  list-style: decimal;
+}
+
+.prose-aether li {
+  padding-inline-start: 0.4em;
+  line-height: 1.58;
+}
+
+.prose-aether li + li {
+  margin-top: 0.45em;
+}
+
+.prose-aether li::marker {
+  color: var(--color-text-primary);
+}
+
+.prose-aether blockquote {
+  margin-block: 1em;
+  padding-inline-start: 0.9em;
+  border-inline-start: 2.5px solid
+    color-mix(in srgb, var(--color-text-primary) 42%, transparent);
+  color: var(--color-text-primary);
+}
+
+.prose-aether blockquote p {
+  margin-block: 0.35em;
+}
+
+.prose-aether table {
+  color: var(--color-text-primary);
+  font-size: 0.94em;
+  line-height: 1.45;
+}
+
+.prose-aether th {
+  font-weight: 650;
+  background: var(--color-prose-code-block-bg);
+  color: var(--color-text-primary);
+}
+
+.prose-aether td {
+  color: var(--color-text-primary);
+}
+
+.prose-aether :not(pre) > code {
+  border-radius: 0.38em;
+  background: var(--color-prose-code-bg);
+  padding: 0.1em 0.4em;
+  color: var(--color-text-primary);
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
+  font-size: 0.84em;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: 0;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.prose-aether pre {
+  margin-top: 0;
+  margin-bottom: 1em;
+  background: var(--color-prose-code-block-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
+  font-size: 0.82em;
+  line-height: 1.55;
+  letter-spacing: 0;
+}
+
+.prose-aether pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+  font-size: inherit;
+  font-weight: 450;
+  letter-spacing: 0;
 }
 
 .aether-thread-enter,

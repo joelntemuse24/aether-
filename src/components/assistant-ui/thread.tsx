@@ -1347,9 +1347,7 @@ const AssistantMessage: FC = () => {
     >
       <div
         className={cn(
-          "aether-assistant-copy px-1 text-[var(--text)]",
-          "font-[family-name:var(--font-serif)] text-[18px] leading-[1.7] tracking-[-0.011em]",
-          "[&_.prose-aether]:font-[family-name:var(--font-serif)]",
+          "aether-assistant-copy px-1 font-[family-name:var(--font-ui)] text-[var(--text)]",
         )}
       >
         <ChatRenderErrorBoundary>
