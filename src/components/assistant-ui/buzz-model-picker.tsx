@@ -2,23 +2,36 @@
 
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { BUZZ_MODEL_STORAGE_KEY, BUZZ_UNAVAILABLE_KEY } from "@/lib/buzz/models";
 import {
-  BUZZ_MODEL_STORAGE_KEY,
-  BUZZ_UNAVAILABLE_KEY,
-  DEFAULT_BUZZ_MODEL,
-  buzzModelLabel,
-  knownBuzzChatModels,
-  type BuzzChatModel,
-} from "@/lib/buzz/models";
+  HOSTED_DEFAULT_MODEL_ID,
+  HOSTED_DEFAULT_MODEL_LABEL,
+  hostedDefaultPickerModel,
+} from "@/lib/hosted/default-model";
 import { OPENROUTER_CURATED_MODELS } from "@/lib/openrouter/models";
 import { loadSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 
-type PickerModel = { id: string; label: string; group: "OpenAI" | "Anthropic" | "OpenRouter" };
+type PickerGroup = "Default" | "OpenAI" | "Anthropic" | "OpenRouter";
+type PickerModel = { id: string; label: string; group: PickerGroup };
+
+/** Group headings shown in the picker. Provider names stay internal. */
+const GROUP_LABELS: Record<PickerGroup, string> = {
+  Default: "Included",
+  OpenAI: "OpenAI",
+  Anthropic: "Anthropic",
+  OpenRouter: "Your key",
+};
 
 function readStoredModel(): string {
-  if (typeof window === "undefined") return DEFAULT_BUZZ_MODEL;
-  return localStorage.getItem(BUZZ_MODEL_STORAGE_KEY) || DEFAULT_BUZZ_MODEL;
+  if (typeof window === "undefined") return HOSTED_DEFAULT_MODEL_ID;
+  return localStorage.getItem(BUZZ_MODEL_STORAGE_KEY) || HOSTED_DEFAULT_MODEL_ID;
+}
+
+function withoutHostedDefault(rows: { id: string; label: string }[]): PickerModel[] {
+  return rows
+    .filter((model) => model.id !== HOSTED_DEFAULT_MODEL_ID)
+    .map((model) => ({ ...model, group: "OpenRouter" as const }));
 }
 
 function readUnavailable(): string[] {
@@ -39,9 +52,9 @@ function rememberUnavailable(id: string) {
 
 export function BuzzModelPicker() {
   const [open, setOpen] = useState(false);
-  const [models, setModels] = useState<PickerModel[]>(knownBuzzChatModels);
+  const [models, setModels] = useState<PickerModel[]>(() => [hostedDefaultPickerModel()]);
   const [openRouterModels, setOpenRouterModels] = useState<PickerModel[]>([]);
-  const [selected, setSelected] = useState(DEFAULT_BUZZ_MODEL);
+  const [selected, setSelected] = useState(HOSTED_DEFAULT_MODEL_ID);
   const [unavailable, setUnavailable] = useState<string[]>([]);
   const [active, setActive] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -53,7 +66,7 @@ export function BuzzModelPicker() {
     let cancelled = false;
     fetch("/api/hosted/models")
       .then((res) => (res.ok ? res.json() : null))
-      .then((body: { models?: BuzzChatModel[] } | null) => {
+      .then((body: { models?: PickerModel[] } | null) => {
         if (cancelled || !body?.models?.length) return;
         setModels(body.models);
       })
@@ -65,14 +78,12 @@ export function BuzzModelPicker() {
         .then((body: { models?: { id: string; label: string }[] } | null) => {
           const rows = body?.models?.length ? body.models : OPENROUTER_CURATED_MODELS;
           if (!cancelled) {
-            setOpenRouterModels(rows.map((model) => ({ ...model, group: "OpenRouter" as const })));
+            setOpenRouterModels(withoutHostedDefault(rows));
           }
         })
         .catch(() => {
           if (!cancelled) {
-            setOpenRouterModels(
-              OPENROUTER_CURATED_MODELS.map((model) => ({ ...model, group: "OpenRouter" as const })),
-            );
+            setOpenRouterModels(withoutHostedDefault(OPENROUTER_CURATED_MODELS));
           }
         });
     }
@@ -109,18 +120,21 @@ export function BuzzModelPicker() {
   }, [open]);
 
   const ordered = [
+    ...models.filter((model) => model.group === "Default"),
     ...models.filter((model) => model.group === "OpenAI"),
     ...models.filter((model) => model.group === "Anthropic"),
     ...openRouterModels,
   ];
   const current = ordered.find((model) => model.id === selected) ?? ordered[0];
-  const label = current?.label ?? buzzModelLabel(selected);
-  const groups = ["OpenAI", "Anthropic", "OpenRouter"] as const;
+  const label = current?.label ?? HOSTED_DEFAULT_MODEL_LABEL;
+  // A stored id that is no longer listed (e.g. a hidden model) shows as the default.
+  const effectiveSelected = current?.id ?? selected;
+  const groups = ["Default", "OpenAI", "Anthropic", "OpenRouter"] as const;
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (!open && (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ")) {
       event.preventDefault();
-      setActive(Math.max(0, ordered.findIndex((model) => model.id === selected)));
+      setActive(Math.max(0, ordered.findIndex((model) => model.id === effectiveSelected)));
       setOpen(true);
       return;
     }
@@ -154,7 +168,7 @@ export function BuzzModelPicker() {
         aria-expanded={open}
         aria-controls={listId}
         onClick={() => {
-          setActive(Math.max(0, ordered.findIndex((model) => model.id === selected)));
+          setActive(Math.max(0, ordered.findIndex((model) => model.id === effectiveSelected)));
           setOpen((value) => !value);
         }}
       >
@@ -174,12 +188,12 @@ export function BuzzModelPicker() {
             return (
               <div key={group} className="py-1">
                 <div className="px-2.5 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--muted-soft)]">
-                  {group}
+                  {GROUP_LABELS[group]}
                 </div>
                 {rows.map((model) => {
                   const index = ordered.indexOf(model);
                   const disabled = unavailable.includes(model.id);
-                  const checked = model.id === selected;
+                  const checked = model.id === effectiveSelected;
                   return (
                     <button
                       key={model.id}

@@ -1,3 +1,4 @@
+import { HOSTED_DEFAULT_MODEL_ID } from "@/lib/hosted/default-model";
 import { normalizeBuzzBaseUrl } from "@/lib/trueforge/providers";
 
 export const DEFAULT_BUZZ_MODEL = "gpt-5.6-luna";
@@ -102,11 +103,11 @@ export function filterBuzzChatModelIds(ids: string[]): string[] {
   return out.sort((a, b) => a.localeCompare(b));
 }
 
-/** Picker id stored in the browser. Server renders fall back to Luna. */
+/** Hosted picker id stored in the browser. Defaults to the hosted default model. */
 export function readStoredBuzzModel(): string {
-  if (typeof window === "undefined") return DEFAULT_BUZZ_MODEL;
+  if (typeof window === "undefined") return HOSTED_DEFAULT_MODEL_ID;
   const stored = localStorage.getItem(BUZZ_MODEL_STORAGE_KEY)?.trim();
-  return stored || DEFAULT_BUZZ_MODEL;
+  return stored || HOSTED_DEFAULT_MODEL_ID;
 }
 
 /** Hosted TrueForge model: requested id if it is in the Buzz catalog, otherwise Luna. */

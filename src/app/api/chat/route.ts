@@ -312,16 +312,31 @@ export async function POST(req: Request) {
     const { readAgentEngineFlag } = await import("@/lib/agent/engine");
     const history = textHistoryFromUiMessages(enrichedMessages);
     const engineFlag = readAgentEngineFlag();
-    if (hosted && isOpenRouterModelId(incomingModel || "")) {
-      if (!openRouterKey) {
-        return new Response(
-          JSON.stringify({ error: "Add an OpenRouter key in Settings to use that model." }),
-          { status: 401, headers: { "Content-Type": "application/json" } },
-        );
-      }
+    const {
+      HOSTED_DEFAULT_MODEL_ID,
+      HOSTED_DEFAULT_MODEL_LABEL,
+      buzzModelsEnabled,
+      resolveHostedTurnModel,
+    } = await import("@/lib/hosted/default-model");
+    const { isBuzzChatModelId } = await import("@/lib/buzz/models");
+    // Hosted turns use the hosted default unless the user picked a model on
+    // their own key (or a Buzz model while Buzz is enabled).
+    const hostedChoice = hosted
+      ? resolveHostedTurnModel({
+          requested: incomingModel,
+          buzzEnabled: buzzModelsEnabled(),
+          isByokOpenRouterId: isOpenRouterModelId,
+          isBuzzId: isBuzzChatModelId,
+        })
+      : null;
+    const hostedDefault = hostedChoice?.kind === "default";
+    if (hostedChoice?.kind === "byok-openrouter" && !openRouterKey) {
+      return new Response(
+        JSON.stringify({ error: "Add your own key in Settings to use that model." }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      );
     }
-    const hostedOpenRouter =
-      hosted && isOpenRouterModelId(incomingModel || "") && !!openRouterKey;
+    const hostedOpenRouter = hostedChoice?.kind === "byok-openrouter" && !!openRouterKey;
     let trueforgeReachable = false;
     if (engineFlag !== "native" && engineFlag !== "legacy" && hosted && !hostedOpenRouter) {
       const { trueforgeSidecarReachable } = await import("@/lib/trueforge/config");
@@ -333,6 +348,21 @@ export async function POST(req: Request) {
       trueforgeReachable,
       hermesLive,
     });
+
+    // The hosted default runs on the sidecar so its tools attach. If the sidecar
+    // is down, say so instead of answering with a different model.
+    if (hostedDefault && engine !== "trueforge" && engine !== "native") {
+      console.info("[api/chat] engine", { engine: "unavailable", conversationId });
+      return withGuestCookie(
+        new Response(
+          JSON.stringify({
+            error: `${HOSTED_DEFAULT_MODEL_LABEL} isn't reachable right now. Try again in a minute.`,
+          }),
+          { status: 503, headers: { "Content-Type": "application/json" } },
+        ),
+        guest.setCookie,
+      );
+    }
 
     if (engine === "native") {
       console.info("[api/chat] engine", { engine: "native", conversationId });
@@ -346,7 +376,9 @@ export async function POST(req: Request) {
         );
       }
       let modelId = requestedModel || incomingModel;
-      if (hosted) {
+      if (hostedDefault) {
+        modelId = HOSTED_DEFAULT_MODEL_ID;
+      } else if (hosted) {
         const { hostedBuzzModelChoice, listBuzzChatModels } = await import("@/lib/buzz/models");
         modelId = hostedBuzzModelChoice({
           bodyModel: typeof body.model === "string" ? body.model : null,
@@ -421,11 +453,13 @@ export async function POST(req: Request) {
     if (engine === "trueforge") {
       const { streamTrueForgeHostedChat } = await import("@/lib/trueforge/chat-stream");
       const { hostedBuzzModelChoice, listBuzzChatModels } = await import("@/lib/buzz/models");
-      const buzzModelId = hostedBuzzModelChoice({
-        bodyModel: typeof body.model === "string" ? body.model : null,
-        headerModel,
-        models: await listBuzzChatModels(),
-      });
+      const buzzModelId = hostedDefault
+        ? HOSTED_DEFAULT_MODEL_ID
+        : hostedBuzzModelChoice({
+            bodyModel: typeof body.model === "string" ? body.model : null,
+            headerModel,
+            models: await listBuzzChatModels(),
+          });
       console.info("[api/chat] engine", { engine: "trueforge", conversationId });
       return withGuestCookie(streamTrueForgeHostedChat({
         conversationId,

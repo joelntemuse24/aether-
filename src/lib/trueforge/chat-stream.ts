@@ -18,6 +18,48 @@ import { planHostedTurnResume, resolveHostedConversationId } from "./conversatio
 import { buildTrueForgeUserContent } from "./user-content";
 import { openRouterFallbackModel, redactSecret } from "@/lib/openrouter/models";
 import { shouldBackupBuzzWithOpenRouter, writeOpenRouterAnswer } from "@/lib/openrouter/stream";
+import {
+  HOSTED_DEFAULT_MODEL_FQN,
+  HOSTED_DEFAULT_MODEL_ID,
+  HOSTED_DEFAULT_MODEL_LABEL,
+  isHostedDefaultModel,
+} from "@/lib/hosted/default-model";
+
+/** A short pause before the hosted default's single retry, so a rate-limit window can pass. */
+export const HOSTED_RETRY_DELAY_MS = 1_500;
+
+/** Sidecar model name for a hosted model id. */
+export function hostedModelFqn(modelId: string): string {
+  return isHostedDefaultModel(modelId) ? HOSTED_DEFAULT_MODEL_FQN : buzzModelFqn(modelId);
+}
+
+/**
+ * The hosted default gets exactly one retry for any failure before output
+ * (rate limits included), then an honest error. Buzz keeps its transient-only rule.
+ */
+export function shouldRetryHostedTurn(input: {
+  modelId: string;
+  failedBeforeOutput: boolean;
+  errorText: string;
+  userAborted: boolean;
+  attempt: number;
+}): boolean {
+  if (isHostedDefaultModel(input.modelId)) {
+    return !input.userAborted && input.failedBeforeOutput && input.attempt === 0;
+  }
+  return shouldRetryBuzzTurn(input);
+}
+
+/** Only a Buzz turn may be backed up with the user's own OpenRouter key. */
+export function shouldBackupHostedTurn(input: {
+  modelId: string;
+  failedBeforeOutput: boolean;
+  userAborted: boolean;
+  hasKey: boolean;
+}): boolean {
+  if (isHostedDefaultModel(input.modelId)) return false;
+  return shouldBackupBuzzWithOpenRouter(input);
+}
 
 export function shouldRetryBuzzTurn(input: {
   failedBeforeOutput: boolean;
@@ -298,6 +340,15 @@ export function isTurnActivityChunk(chunk: UiChunk): boolean {
 
 /** Short copy for the existing error chunk. Keeps the model-unavailable sentence. */
 export function hostedTurnErrorCopy(message: string, modelId: string): string {
+  if (isHostedDefaultModel(modelId)) {
+    if (/\b429\b|rate.?limit|too many requests/i.test(message)) {
+      return `${HOSTED_DEFAULT_MODEL_LABEL} is busy right now. Wait a minute, then use Retry.`;
+    }
+    if (/timed out|time limit|\btimeout\b|aborted/i.test(message)) {
+      return `${HOSTED_DEFAULT_MODEL_LABEL} timed out. Use Retry to try this turn again.`;
+    }
+    return `${HOSTED_DEFAULT_MODEL_LABEL} didn't answer. Use Retry to try this turn again.`;
+  }
   if (isBuzzModelUnavailableError(message)) return buzzModelUnavailableCopy(modelId);
   if (/timed out|time limit|\btimeout\b|aborted/i.test(message)) {
     return "The provider timed out. Use Retry to try this turn again.";
@@ -336,7 +387,7 @@ export async function streamTrueForgeHostedChat(input: {
   const instructions = trueforgeInstructions(input.system, new Date(), {
     timeZone: input.timeZone,
   });
-  const modelId = input.modelId || "gpt-5.6-luna";
+  const modelId = input.modelId || HOSTED_DEFAULT_MODEL_ID;
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
       const write = (chunk: UiChunk) => {
@@ -346,7 +397,7 @@ export async function streamTrueForgeHostedChat(input: {
       const session = await trueforgeSessionId({
         conversationId,
         owner: input.owner,
-        modelName: buzzModelFqn(modelId),
+        modelName: hostedModelFqn(modelId),
         instructions,
         toolContext: input.toolContext,
       });
@@ -425,7 +476,8 @@ export async function streamTrueForgeHostedChat(input: {
         if (sawByte || !outcome.failedBeforeOutput) break;
         if (input.abortSignal?.aborted) break;
         if (
-          !shouldRetryBuzzTurn({
+          !shouldRetryHostedTurn({
+            modelId,
             failedBeforeOutput: true,
             errorText: outcome.errorText || "aborted",
             userAborted: false,
@@ -435,11 +487,13 @@ export async function streamTrueForgeHostedChat(input: {
           break;
         }
         await cancelSidecarTurn(session.id);
+        if (isHostedDefaultModel(modelId)) await new Promise((resolve) => setTimeout(resolve, HOSTED_RETRY_DELAY_MS));
       }
       input.abortSignal?.removeEventListener("abort", onClientStop);
       const openRouterKey = input.openRouterKey?.trim() ?? "";
       if (
-        shouldBackupBuzzWithOpenRouter({
+        shouldBackupHostedTurn({
+          modelId,
           failedBeforeOutput: outcome.failedBeforeOutput,
           userAborted: !!input.abortSignal?.aborted,
           hasKey: !!openRouterKey,
@@ -453,7 +507,7 @@ export async function streamTrueForgeHostedChat(input: {
           history: input.history,
           write,
           abortSignal: input.abortSignal,
-          statusLine: "Buzz failed, answering via OpenRouter.",
+          statusLine: "The first model failed, answering with a backup model.",
         });
         if (!backup.ok) {
           write({

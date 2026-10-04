@@ -488,7 +488,7 @@ export function SettingsDialog() {
                       OpenRouter key
                     </label>
                     <p className="text-[12px] leading-relaxed text-[var(--muted-soft)]">
-                      Optional. Adds OpenRouter models and a backup if the hosted model fails.
+                      Optional. Adds more models to the picker.
                       The key stays in this browser and is sent only with your chat request.
                     </p>
                     <input

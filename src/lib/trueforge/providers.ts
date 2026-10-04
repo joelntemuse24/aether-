@@ -1,3 +1,11 @@
+import {
+  HOSTED_DEFAULT_CONTEXT_LENGTH,
+  HOSTED_DEFAULT_MAX_OUTPUT_TOKENS,
+  HOSTED_DEFAULT_MODEL_ID,
+  HOSTED_DEFAULT_MODEL_RESOURCE,
+  HOSTED_OPENROUTER_PROVIDER,
+} from "@/lib/hosted/default-model";
+
 /**
  * Hosted Expert providers for the TrueForge sidecar.
  * Keys stay in server env. This is not a customer BYOK path.
@@ -63,6 +71,13 @@ function bareModelId(id: string): string {
 /** Family defaults. Unknown ids stay conservative so a bad effort cannot 400 the turn. */
 export function modelProfile(id: string): ModelProfile {
   const bare = bareModelId(id);
+  if (bare.startsWith("qwen")) {
+    return {
+      contextLength: HOSTED_DEFAULT_CONTEXT_LENGTH,
+      maxOutputTokens: HOSTED_DEFAULT_MAX_OUTPUT_TOKENS,
+      reasoningEfforts: [],
+    };
+  }
   if (bare.includes("claude")) {
     const haiku = bare.includes("haiku");
     const opus = bare.includes("opus");
@@ -176,17 +191,38 @@ function buzzModel(modelId: string, name: string): AetherConfiguredModel {
 }
 
 /**
- * Buzz chat models for the sidecar. GPT uses the OpenAI-compatible host.
- * Claude uses the Anthropic-compatible host. OpenRouter is not seeded here.
+ * Hosted OpenRouter provider for the default model. Seeded only from the
+ * explicit hosted key AETHER_HOSTED_OPENROUTER_API_KEY, never from
+ * OPENROUTER_API_KEY or a user's key.
+ */
+export function hostedOpenRouterManifest(
+  env: Record<string, string | undefined> = process.env,
+): AetherProviderManifest | null {
+  const key = envSecret(env, "AETHER_HOSTED_OPENROUTER_API_KEY");
+  if (!key) return null;
+  return {
+    type: "custom",
+    name: HOSTED_OPENROUTER_PROVIDER,
+    baseUrl: DEFAULT_OPENROUTER_BASE_URL,
+    auth: { apiKey: key },
+    models: [buzzModel(HOSTED_DEFAULT_MODEL_ID, HOSTED_DEFAULT_MODEL_RESOURCE)],
+  };
+}
+
+/**
+ * Sidecar providers: the hosted default (OpenRouter, hosted key only) plus Buzz.
+ * Buzz GPT uses the OpenAI-compatible host. Buzz Claude uses the
+ * Anthropic-compatible host. A user's OpenRouter key is never seeded here.
  */
 export function aetherProviderManifests(
   env: Record<string, string | undefined> = process.env,
   modelIds: readonly string[] = KNOWN_CHAT_MODEL_IDS,
 ): AetherProviderManifest[] {
+  const hostedOpenRouter = hostedOpenRouterManifest(env);
   const buzzKey =
     envSecret(env, "AETHER_HOSTED_BUZZ_API_KEY") ||
     envSecret(env, "AETHER_HOSTED_CLAUDE_API_KEY");
-  if (!buzzKey) return [];
+  if (!buzzKey) return hostedOpenRouter ? [hostedOpenRouter] : [];
   const ids = chatModelIds(modelIds);
   const gpt = ids.filter((id) => id.startsWith("gpt-"));
   const claude = ids.filter((id) => id.startsWith("claude-"));
@@ -194,7 +230,7 @@ export function aetherProviderManifests(
     envPlain(env, "AETHER_HOSTED_BUZZ_BASE_URL") ||
       envPlain(env, "AETHER_HOSTED_CLAUDE_BASE_URL"),
   );
-  const manifests: AetherProviderManifest[] = [];
+  const manifests: AetherProviderManifest[] = hostedOpenRouter ? [hostedOpenRouter] : [];
   if (gpt.length) {
     manifests.push({
       type: "custom",

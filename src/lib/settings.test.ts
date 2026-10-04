@@ -8,6 +8,7 @@ import {
 } from "./settings";
 import { BUZZ_MODEL_STORAGE_KEY } from "./buzz/models";
 import { EXPERT_PRIMARY_MODEL } from "./hosted/speed-tiers";
+import { HOSTED_DEFAULT_MODEL_ID } from "@/lib/hosted/default-model";
 
 function installLocalStorage() {
   const map = new Map<string, string>();
@@ -112,7 +113,7 @@ describe("buildChatHeaders", () => {
         model: "anthropic/claude-sonnet-5",
         speedTier: "fast",
       })["x-model"],
-      EXPERT_PRIMARY_MODEL,
+      HOSTED_DEFAULT_MODEL_ID,
     );
   });
 });
