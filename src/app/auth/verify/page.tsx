@@ -12,6 +12,8 @@ function safeCallbackUrl(raw: string | null): string {
   return "/";
 }
 
+const VERIFY_TIMEOUT_MS = 20000;
+
 function VerifyInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -22,13 +24,20 @@ function VerifyInner() {
 
   useEffect(() => {
     if (!token) {
-      setError("Missing verification token.");
+      setError("This sign-in link is incomplete. Request a new link to continue.");
       return;
     }
     // Guard against React Strict Mode double-invoking effects.
     // Do not cancel the in-flight signIn — the first attempt must finish.
     if (started.current) return;
     started.current = true;
+
+    // Never leave the spinner running forever on a stalled request.
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      setError("Sign-in is taking too long. Check your connection and try again.");
+    }, VERIFY_TIMEOUT_MS);
 
     (async () => {
       try {
@@ -37,13 +46,19 @@ function VerifyInner() {
           redirect: false,
           callbackUrl,
         });
-        if (result?.error) {
-          setError("This link is invalid or has expired.");
+        settled = true;
+        clearTimeout(timeout);
+        if (!result || result.error) {
+          setError(
+            "This sign-in link is invalid or has expired. Request a new link to continue.",
+          );
           return;
         }
-        router.replace(result?.url || callbackUrl || "/");
+        router.replace(result.url || callbackUrl || "/");
       } catch {
-        setError("Could not complete sign-in. Please try again.");
+        settled = true;
+        clearTimeout(timeout);
+        setError("Could not complete sign-in. Check your connection and try again.");
       }
     })();
   }, [token, callbackUrl, router]);
@@ -56,7 +71,7 @@ function VerifyInner() {
           href="/auth/signin"
           className="text-sm text-[var(--accent)] hover:underline"
         >
-          Back to sign in
+          Request a new link
         </Link>
       </div>
     );
