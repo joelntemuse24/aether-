@@ -154,6 +154,13 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
       sandboxEnabled: true,
     });
     assert.equal(astra.spec.model.params?.reasoningEffort, "low");
+    const qwen = buildTrueForgeAgentSpec({
+      modelName: "openrouter/qwen3-8-27b-free",
+      instructions: "Answer.",
+      mcp: null,
+      sandboxEnabled: true,
+    });
+    assert.equal(qwen.spec.model.params?.reasoningEffort, "low");
     assert.equal(astra.spec.config.ask_user_questions.enabled, false);
     assert.equal(astra.spec.config.generative_ui.enabled, false);
   });
