@@ -98,7 +98,7 @@ export async function writeOpenRouterAnswer(input: {
     const detail = await response.text().catch(() => "");
     return {
       ok: false,
-      errorText: redactSecret(`OpenRouter request failed (${response.status}). ${detail}`.trim(), input.apiKey),
+      errorText: redactSecret(`Request failed (${response.status}). ${detail}`.trim(), input.apiKey),
     };
   }
   input.write({ type: "text-start", id: "or-answer" });
