@@ -1674,6 +1674,87 @@ const BrowserActToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   );
 };
 
+type QuestionOutput = { question?: string; options?: string[]; needs_response?: boolean; confirmation_id?: string };
+
+const UserQuestionToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const output = part.result as QuestionOutput | undefined;
+  const input = part.args as QuestionOutput | undefined;
+  const [answer, setAnswer] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
+  const pending = output?.needs_response === true && !submitted;
+  const options = output?.options ?? input?.options ?? [];
+  const submit = async () => {
+    if (!answer.trim() || busy || !output?.confirmation_id) return;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/harness/confirm", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmationId: output.confirmation_id, response: answer.trim() }),
+      });
+      if (!response.ok) throw new Error("response failed");
+      const data = await response.json() as { assistantText?: string };
+      setSubmitted(true);
+      if (data.assistantText?.trim()) {
+        window.dispatchEvent(new CustomEvent("aether:trueforge-followup", { detail: data.assistantText }));
+      }
+    } catch {
+      setError("Your answer could not be sent. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!output) return null;
+  return (
+    <section className="aether-pause-card" aria-label="Question">
+      <p className="aether-pause-card__title">{output.question ?? input?.question ?? "What would you like to do next?"}</p>
+      {pending ? (
+        <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+          <div className="aether-pause-card__options">
+            {options.map((option, index) => (
+              <button type="button" key={`${index}-${option}`} disabled={busy} aria-pressed={answer === option}
+                className="aether-pause-card__option" onClick={() => setAnswer(option)}>{option}</button>
+            ))}
+          </div>
+          <label className="aether-pause-card__label">
+            Your answer
+            <input value={answer} disabled={busy} onChange={(event) => setAnswer(event.target.value)} placeholder="Choose an option or write your own answer" />
+          </label>
+          {output.confirmation_id ? (
+            <div className="aether-confirm-actions">
+              <button type="submit" className="aether-confirm-actions__btn aether-confirm-actions__confirm" disabled={busy || !answer.trim()}>{busy ? "Sending…" : "Submit"}</button>
+            </div>
+          ) : <p className="aether-confirm-actions__status">Reply in the composer to continue.</p>}
+          {error && <p role="alert" className="aether-pause-card__error">{error}</p>}
+        </form>
+      ) : <p role="status" className="aether-confirm-actions__status">Answer sent{answer ? `: ${answer}` : ""}</p>}
+    </section>
+  );
+};
+
+const McpAuthConnectToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const output = part.result as { servers?: { name: string; authUrl: string }[] } | undefined;
+  const servers = (output?.servers ?? []).filter((server) => {
+    try { return ["https:", "http:"].includes(new URL(server.authUrl).protocol); } catch { return false; }
+  });
+  if (!servers.length) return null;
+  return (
+    <section className="aether-pause-card" aria-label="Connect services">
+      <p className="aether-pause-card__title">Connect a service to continue</p>
+      <div className="aether-confirm-actions">
+        {servers.map((server, index) => (
+          <a key={`${index}-${server.name}`} href={server.authUrl} target="_blank" rel="noopener noreferrer"
+            className="aether-confirm-actions__btn aether-confirm-actions__confirm">
+            Connect {server.name}
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+};
+
 /* ─── Generic fallback ─── */
 
 const GenericToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
@@ -1702,6 +1783,10 @@ const GenericToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
 
 export const ToolCallPart: FC<{ part: ToolPartLike }> = ({ part }) => {
   switch (part.toolName) {
+    case "ask_user_question":
+      return <UserQuestionToolCall part={part} />;
+    case "mcp_auth_connect":
+      return <McpAuthConnectToolCall part={part} />;
     case TOOL_NAMES.executePython:
       return <PythonToolCall part={part} />;
     case TOOL_NAMES.webSearch:
