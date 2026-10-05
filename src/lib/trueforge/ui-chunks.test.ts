@@ -295,3 +295,26 @@ describe("TrueForge UI chunks", () => {
     );
   });
 });
+
+it("turns response_required into a question card with options without reopening tool inputs", () => {
+  const state = createTrueForgeUiState();
+  const input = chunksForTrueForgeEvent({ type: "model.message", threadId: "main", toolCalls: [{ id: "q1", function: { name: "ask_user_question", arguments: JSON.stringify({ question: "Which format?", options: ["HTML", "PDF"] }) } }] }, state);
+  const chunks = chunksForTrueForgeEvent({ type: "tool.response_required", threadId: "main", sessionId: "ses1", toolCalls: [{ id: "q1", confirmationId: "tf_response" }] }, state);
+  assert.equal(input.filter((chunk) => chunk.type === "tool-input-available").length, 1);
+  assert.equal(chunks.some((chunk) => chunk.type === "tool-input-available"), false);
+  assert.deepEqual(chunks[0]?.output, { needs_response: true, confirmation_id: "tf_response", question: "Which format?", options: ["HTML", "PDF"], session_id: "ses1", thread_id: "main" });
+  assert.equal(closeTrueForgeUi(state).some((chunk) => chunk.type === "tool-output-available"), false);
+});
+
+it("renders a fallback question when arguments are missing", () => {
+  const chunks = chunksForTrueForgeEvent({ type: "tool.response_required", toolCalls: [{ id: "missing" }] }, createTrueForgeUiState());
+  assert.equal(chunks[0]?.toolName, "ask_user_question");
+  assert.equal((chunks[1]?.output as { needs_response: boolean }).needs_response, true);
+});
+
+it("turns MCP auth requirements into a connect card", () => {
+  const chunks = chunksForTrueForgeEvent({ type: "mcp.auth_required", id: "auth1", mcpServers: [{ name: "Research", authUrl: "https://example.com/oauth" }] }, createTrueForgeUiState());
+  assert.equal(chunks[0]?.toolName, "mcp_auth_connect");
+  assert.deepEqual(chunks[1]?.output, { servers: [{ name: "Research", authUrl: "https://example.com/oauth" }] });
+  assert.equal(chunks.some((chunk) => chunk.type === "text-delta"), false);
+});

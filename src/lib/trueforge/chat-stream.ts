@@ -211,7 +211,7 @@ export async function driveTrueForgeTurn(input: {
         if (typeof id === "string" && id) turnId = id;
       }
       let payload = event;
-      if (event.type === "tool.approval_required" && Array.isArray(event.toolCalls)) {
+      if ((event.type === "tool.approval_required" || event.type === "tool.response_required") && Array.isArray(event.toolCalls)) {
         payload = {
           ...event,
           sessionId: input.sessionId,
@@ -222,7 +222,8 @@ export async function driveTrueForgeTurn(input: {
               ...row,
               confirmationId: encodeTrueForgeApproval({
                 sessionId: input.sessionId,
-                threadId: String(event.threadId ?? ""),
+                threadId: String(event.threadId ?? event.thread_id ?? ""),
+                kind: event.type === "tool.response_required" ? "response" : "approval",
                 toolCallId: String(row.id ?? ""),
               }),
             };

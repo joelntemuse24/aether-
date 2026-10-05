@@ -1,3 +1,5 @@
+import { ASK_USER_QUESTIONS_ENABLED } from "./question-policy";
+import { mountedTrueForgeSkills } from "./skills";
 import { TrueForge } from "@truefoundry/trueforge-sdk";
 import {
   trueforgeAuthHeaders,
@@ -179,11 +181,10 @@ async function findSession(owner: string, conversationId: string): Promise<Cache
   return null;
 }
 
-/** The question tool never renders. Models assume and state the assumption. */
-export const ASK_USER_QUESTIONS_ENABLED = false;
+export { ASK_USER_QUESTIONS_ENABLED } from "./question-policy";
 
 export function hostedRuntimeKey(sandboxEnabled: boolean): string {
-  return `${sandboxEnabled ? "1" : "0"}:ask${ASK_USER_QUESTIONS_ENABLED ? "1" : "0"}`;
+  return `${sandboxEnabled ? "1" : "0"}:ask${ASK_USER_QUESTIONS_ENABLED ? "1" : "0"}:skills${mountedTrueForgeSkills(sandboxEnabled).join(",")}`;
 }
 
 export function buildTrueForgeAgentSpec(input: {
@@ -191,8 +192,10 @@ export function buildTrueForgeAgentSpec(input: {
   instructions: string;
   mcp: { direct: string; includeAccountTools: boolean } | null;
   sandboxEnabled: boolean;
+  seededSkillNames?: readonly string[];
 }) {
   const reasoningEffort = modelProfile(input.modelName).reasoningEffort;
+  const skills = mountedTrueForgeSkills(input.sandboxEnabled, process.env, input.seededSkillNames);
   return {
     spec: {
       model: {
@@ -200,6 +203,7 @@ export function buildTrueForgeAgentSpec(input: {
         ...(reasoningEffort ? { params: { reasoningEffort } } : {}),
       },
       instructions: input.instructions,
+      ...(skills.length ? { skills: skills.map((name) => ({ name })) } : {}),
       config: {
         sandbox: { enabled: input.sandboxEnabled },
         dynamic_sub_agents: { enabled: true },
