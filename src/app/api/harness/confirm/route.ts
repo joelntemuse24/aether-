@@ -73,9 +73,19 @@ export async function POST(req: Request) {
       if (typeof content !== "string" || !content.trim()) {
         return NextResponse.json({ error: "A response is required." }, { status: 400 });
       }
-      return await resumeTrueForgeToolResponse(confirmationId, content);
+      const toolResponse = await resumeTrueForgeToolResponse(confirmationId, content);
+      if (!toolResponse) {
+        return NextResponse.json({ error: "Confirmation expired or not found." }, { status: 404 });
+      }
+      return toolResponse;
     }
-    if (typeof body.approved === "boolean") return await resumeTrueForgeApproval(confirmationId, body.approved);
+    if (typeof body.approved === "boolean") {
+      const approvalResponse = await resumeTrueForgeApproval(confirmationId, body.approved);
+      if (!approvalResponse) {
+        return NextResponse.json({ error: "Confirmation expired or not found." }, { status: 404 });
+      }
+      return approvalResponse;
+    }
   }
   if (typeof body.approved !== "boolean") {
     return NextResponse.json({ error: "approved must be true or false." }, { status: 400 });
