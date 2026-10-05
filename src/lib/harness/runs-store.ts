@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, type SQL } from "drizzle-orm";
 import { getDb, isCloudDbConfigured } from "@/lib/db";
 import { agentRunEvents, agentRuns } from "@/lib/db/schema";
 import type {
@@ -47,32 +47,67 @@ export async function createAgentRun(input: {
   }
 }
 
-export async function updateAgentRunStatus(input: {
+type RunUpdateInput = {
   id: string;
   userId: string;
   status: HarnessRunStatus;
   eventType?: string;
   eventPayload?: Record<string, unknown>;
-}): Promise<void> {
-  if (!isCloudDbConfigured()) return;
+};
+
+/** Narrow view of the db; the Neon/PGlite union has no single callable `returning`. */
+export type RunUpdateDb = {
+  update: (table: typeof agentRuns) => {
+    set: (values: { status: string; updatedAt: Date }) => {
+      where: (cond: SQL | undefined) => {
+        returning: (fields: { id: typeof agentRuns.id }) => PromiseLike<Array<{ id: string }>>;
+      };
+    };
+  };
+  insert: (table: typeof agentRunEvents) => {
+    values: (row: typeof agentRunEvents.$inferInsert) => PromiseLike<unknown>;
+  };
+};
+
+/**
+ * Updates the run and appends its event only when the run exists and belongs
+ * to the user. Client-minted or foreign run ids match no row and are skipped,
+ * which avoids an FK violation on agent_run_events.run_id.
+ */
+export async function applyAgentRunUpdate(
+  db: RunUpdateDb,
+  input: RunUpdateInput,
+): Promise<boolean> {
+  const now = new Date();
+  const updated = await db
+    .update(agentRuns)
+    .set({ status: input.status, updatedAt: now })
+    .where(and(eq(agentRuns.id, input.id), eq(agentRuns.userId, input.userId)))
+    .returning({ id: agentRuns.id });
+  if (updated.length === 0) return false;
+  if (input.eventType) {
+    await db.insert(agentRunEvents).values({
+      id: crypto.randomUUID(),
+      runId: input.id,
+      type: input.eventType,
+      payloadJson: input.eventPayload ?? null,
+      createdAt: now,
+    });
+  }
+  return true;
+}
+
+/** Returns true when the run was found and updated. */
+export async function updateAgentRunStatus(
+  input: RunUpdateInput,
+): Promise<boolean> {
+  if (!isCloudDbConfigured()) return false;
   try {
     const db = await getDb();
-    const now = new Date();
-    await db
-      .update(agentRuns)
-      .set({ status: input.status, updatedAt: now })
-      .where(and(eq(agentRuns.id, input.id), eq(agentRuns.userId, input.userId)));
-    if (input.eventType) {
-      await db.insert(agentRunEvents).values({
-        id: crypto.randomUUID(),
-        runId: input.id,
-        type: input.eventType,
-        payloadJson: input.eventPayload ?? null,
-        createdAt: now,
-      });
-    }
+    return await applyAgentRunUpdate(db as unknown as RunUpdateDb, input);
   } catch (err) {
     console.warn("[harness/runs] update failed", err);
+    return false;
   }
 }
 
