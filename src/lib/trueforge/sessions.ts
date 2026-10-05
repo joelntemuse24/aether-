@@ -231,6 +231,34 @@ function sessionResult(row: CachedSession, created: boolean): TrueForgeSessionRe
   return { ...row, created };
 }
 
+const UNKNOWN_MODEL_PATTERN = /Unknown model .* not configured/i;
+export const UNKNOWN_MODEL_RETRY_MS = 3000;
+
+/** The sidecar answers 422 "Unknown model ... not configured" while it re-seeds after a reload. */
+export function isUnknownModelError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const status = (err as { statusCode?: unknown }).statusCode;
+  if (status != null && status !== 422) return false;
+  const body = (err as { body?: unknown }).body;
+  const text = `${err.message}\n${body == null ? "" : JSON.stringify(body)}`;
+  return UNKNOWN_MODEL_PATTERN.test(text);
+}
+
+/** Retry once after a short wait when the sidecar has not finished seeding the model. */
+export async function retryOnUnknownModel<T>(
+  run: () => Promise<T>,
+  waitMs = UNKNOWN_MODEL_RETRY_MS,
+): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    if (!isUnknownModelError(err)) throw err;
+    console.warn("[trueforge] model not configured yet; retrying once in", waitMs, "ms");
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    return run();
+  }
+}
+
 /** One TrueForge session per Aether conversation id. Skips update when nothing changed. */
 export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<TrueForgeSessionResult> {
   await pruneTrueForgeCaches();
@@ -278,26 +306,30 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
     existing.mcpKey = mcpKey;
     existing.toolsAttached = mcp != null;
     existing.at = Date.now();
-    await client().sessions.update(existing.id, {
+    await retryOnUnknownModel(() =>
+      client().sessions.update(existing.id, {
+        agent: buildTrueForgeAgentSpec({
+          modelName: model,
+          instructions,
+          mcp,
+          sandboxEnabled,
+        }),
+      }),
+    );
+    rememberTrueForgeSession(trueforgeSessionCacheKey(input.owner, input.conversationId), existing);
+    return sessionResult(existing, false);
+  }
+  const created = await retryOnUnknownModel(() =>
+    client().sessions.create({
       agent: buildTrueForgeAgentSpec({
-        modelName: model,
+        modelName: input.modelName,
         instructions,
         mcp,
         sandboxEnabled,
       }),
-    });
-    rememberTrueForgeSession(trueforgeSessionCacheKey(input.owner, input.conversationId), existing);
-    return sessionResult(existing, false);
-  }
-  const created = await client().sessions.create({
-    agent: buildTrueForgeAgentSpec({
-      modelName: input.modelName,
-      instructions,
-      mcp,
-      sandboxEnabled,
+      metadata: { aetherConversationId: input.conversationId, aetherOwner: input.owner },
     }),
-    metadata: { aetherConversationId: input.conversationId, aetherOwner: input.owner },
-  });
+  );
   const row: CachedSession = {
     id: created.data.id,
     model: input.modelName,

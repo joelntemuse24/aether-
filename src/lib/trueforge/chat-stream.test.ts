@@ -14,6 +14,7 @@ import {
   shouldRetryBuzzTurn,
   TURN_BUDGET_MS,
 } from "./chat-stream";
+import { HOSTED_DEFAULT_MODEL_ID } from "@/lib/hosted/default-model";
 import type { UiChunk } from "./ui-chunks";
 
 describe("TrueForge Buzz retry", () => {
@@ -223,6 +224,69 @@ describe("TrueForge live stream", () => {
     assert.equal(writes.filter((chunk) => chunk.type === "text-delta").length, 1);
   });
 
+  it("keeps streamed text on a rate limit mid-answer and writes no error chunk", async () => {
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield { type: "model.message.delta", content: "Partial findings" };
+      yield { type: "turn.done", state: { status: "error", message: "429 rate limit" } };
+    }
+    const outcome = await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses",
+      modelId: HOSTED_DEFAULT_MODEL_ID,
+    });
+    assert.equal(outcome.failedBeforeOutput, false);
+    assert.equal(writes.some((chunk) => chunk.type === "error"), false);
+    assert.equal(writes.at(-1)?.type, "text-end");
+  });
+
+  it("settles open tools and keeps the busy error when tools ran but no text came", async () => {
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield {
+        type: "model.message",
+        toolCalls: [{ id: "call_1", function: { name: "web_search", arguments: "{}" } }],
+      };
+      yield { type: "turn.done", state: { status: "error", message: "429 rate limit" } };
+    }
+    const outcome = await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses",
+      modelId: HOSTED_DEFAULT_MODEL_ID,
+    });
+    assert.equal(outcome.failedBeforeOutput, false);
+    assert.equal(writes.filter((chunk) => chunk.type === "tool-input-available").length, 1);
+    const settled = writes.find((chunk) => chunk.type === "tool-output-available");
+    assert.equal(settled?.toolCallId, "call_1");
+    assert.match(
+      String(writes.find((chunk) => chunk.type === "error")?.errorText),
+      /Qwen3\.8 27B is busy right now/,
+    );
+  });
+
+  it("settles an open tool and keeps earlier text when the turn fails", async () => {
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield { type: "model.message.delta", content: "Searching now", finishReason: "tool_calls" };
+      yield {
+        type: "model.message",
+        toolCalls: [{ id: "call_1", function: { name: "web_search", arguments: "{}" } }],
+      };
+      yield { type: "turn.done", state: { status: "error", message: "429 rate limit" } };
+    }
+    await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses",
+      modelId: HOSTED_DEFAULT_MODEL_ID,
+    });
+    assert.equal(writes.filter((chunk) => chunk.type === "text-delta").length, 1);
+    assert.equal(writes.some((chunk) => chunk.type === "error"), false);
+    assert.equal(writes.filter((chunk) => chunk.type === "tool-output-available").length, 1);
+  });
+
   it("publishes the housing deck instead of the sandbox path", async () => {
     const deck =
       "/home/aether/.local/share/trueforge-aether/sandboxes/abc/abc/artifacts/irish_housing_crisis.pptx";
@@ -403,5 +467,70 @@ describe("TrueForge live stream", () => {
     assert.equal(text.includes("command"), false);
     assert.ok(writes.some((chunk) => chunk.type === "reasoning-delta"));
     assert.equal(outcome.failedBeforeOutput, false);
+  });
+
+  const toolOpen = {
+    type: "model.message",
+    toolCalls: [
+      {
+        id: "call_page",
+        function: { name: "browse_page", arguments: "{\"url\":\"https://example.com\"}" },
+      },
+    ],
+  };
+
+  it("settles an open tool when the stream errors after content", async () => {
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield toolOpen;
+      throw new Error("socket closed");
+    }
+    const outcome = await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses",
+    });
+    assert.equal(outcome.wroteError, true);
+    const outputs = writes.filter((chunk) => chunk.type === "tool-output-available");
+    assert.equal(outputs.length, 1);
+    assert.equal(outputs[0]?.toolCallId, "call_page");
+    assert.match(String((outputs[0]?.output as { error?: string }).error), /did not finish/);
+  });
+
+  
+  it("settles an open tool when the turn ends without a tool response", async () => {
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield toolOpen;
+      yield { type: "turn.done", state: { status: "done" } };
+    }
+    await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses",
+    });
+    const outputs = writes.filter((chunk) => chunk.type === "tool-output-available");
+    assert.equal(outputs.length, 1);
+    assert.equal(outputs[0]?.toolCallId, "call_page");
+    const types = writes.map((chunk) => chunk.type);
+    assert.ok(types.indexOf("tool-input-available") < types.indexOf("tool-output-available"));
+  });
+
+  
+  it("does not close a tool twice when its response arrives", async () => {
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield toolOpen;
+      yield { type: "tool.response", toolCallId: "call_page", content: JSON.stringify({ ok: true }) };
+      yield { type: "model.message", content: "Done." };
+    }
+    await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses",
+    });
+    const outputs = writes.filter((chunk) => chunk.type === "tool-output-available");
+    assert.equal(outputs.length, 1);
+    assert.deepEqual(outputs[0]?.output, { ok: true });
   });
 });

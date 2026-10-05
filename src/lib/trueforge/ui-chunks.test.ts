@@ -185,4 +185,67 @@ describe("TrueForge UI chunks", () => {
     const card = chunks.find((chunk) => chunk.toolName === "request_confirmation");
     assert.equal((card?.input as { title?: string }).title, "Save memory");
   });
+
+  it("settles a tool that never got a response when the turn closes", () => {
+    const state = createTrueForgeUiState();
+    chunksForTrueForgeEvent(
+      {
+        type: "model.message",
+        content: "Reading the page.",
+        toolCalls: [{ id: "call_a", function: { name: "fetch_url", arguments: "{}" } }],
+      },
+      state,
+    );
+    assert.equal(state.openTools.size, 1);
+    const closing = closeTrueForgeUi(state);
+    const outputs = closing.filter((chunk) => chunk.type === "tool-output-available");
+    assert.equal(outputs.length, 1);
+    assert.equal(outputs[0]?.toolCallId, "call_a");
+    assert.deepEqual(outputs[0]?.output, { ok: false, error: "This step did not finish." });
+    assert.equal(state.openTools.size, 0);
+    assert.deepEqual(closeTrueForgeUi(state), []);
+  });
+
+  it("does not close a tool that already has a response", () => {
+    const state = createTrueForgeUiState();
+    chunksForTrueForgeEvent(
+      {
+        type: "model.message",
+        toolCalls: [{ id: "call_b", function: { name: "fetch_url", arguments: "{}" } }],
+      },
+      state,
+    );
+    const response = chunksForTrueForgeEvent(
+      { type: "tool.response", toolCallId: "call_b", content: JSON.stringify({ ok: true }) },
+      state,
+    );
+    assert.equal(response.filter((chunk) => chunk.type === "tool-output-available").length, 1);
+    assert.equal(state.openTools.size, 0);
+    const closing = closeTrueForgeUi(state);
+    assert.equal(closing.some((chunk) => chunk.type === "tool-output-available"), false);
+  });
+
+  it("does not re-close a tool already parked for approval", () => {
+    const state = createTrueForgeUiState();
+    chunksForTrueForgeEvent(
+      {
+        type: "model.message",
+        toolCalls: [{ id: "call_c", function: { name: "exec", arguments: "{}" } }],
+      },
+      state,
+    );
+    chunksForTrueForgeEvent(
+      {
+        type: "tool.approval_required",
+        threadId: "main",
+        confirmationId: "tf_c",
+        toolCalls: [{ id: "call_c" }],
+      },
+      state,
+    );
+    assert.equal(
+      closeTrueForgeUi(state).some((chunk) => chunk.type === "tool-output-available"),
+      false,
+    );
+  });
 });
