@@ -54,7 +54,8 @@ Approvals use the existing confirm card. Approving or declining resumes the paus
 - Hosted Postgres + Redis (this cut is standalone SQLite)
 - Running TrueForge inside a Vercel function. Point `AETHER_TRUEFORGE_URL` at the VM instead. If that URL is unset or the VM does not answer, hosted chat uses the in-process loop.
 - Customer BYOK inside TrueForge (hosted Expert keys only)
-- Source chips and a structured ask-user card. `tool.response_required` is a sentence in the thread; connect-to-continue is text for `mcp.auth_required`
+- Source chips
+- Compaction and dynamic subagents are pinned on in the agent config. A structured ask-user card remains deferred pending a product decision; assume-not-ask remains (`ask_user_questions.enabled=false`). Connect-to-continue is text for `mcp.auth_required`.
 
 ## Tools
 
