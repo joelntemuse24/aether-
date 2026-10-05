@@ -16,6 +16,7 @@ import { loadLocalEnvFiles } from "./load-env";
 import { withLocalMcpHosts } from "./outbound-hosts";
 import { seedAetherModelProviders } from "./seed";
 import { prepareSidecar } from "./sidecar-bootstrap";
+import { buildTrueForgeUpstreamEnv } from "./runtime-mode";
 
 function cliPath(): string {
   return path.join(process.cwd(), "node_modules/@truefoundry/trueforge/dist/cli.js");
@@ -59,8 +60,7 @@ async function ensureSidecar(): Promise<ChildProcess | null> {
   const port = trueforgePort();
   const child = spawn(process.execPath, [cli, "--port", String(port)], {
     env: {
-      ...process.env,
-      STANDALONE: "true",
+      ...buildTrueForgeUpstreamEnv(process.env),
       HOST: "127.0.0.1",
       PORT: String(port),
       APP_DATA_DIR_SUFFIX: process.env.APP_DATA_DIR_SUFFIX || "aether",

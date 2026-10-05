@@ -14,6 +14,7 @@ import { loadLocalEnvFiles } from "./load-env";
 import { withLocalMcpHosts } from "./outbound-hosts";
 import { seedAetherModelProviders } from "./seed";
 import { prepareSidecar } from "./sidecar-bootstrap";
+import { buildTrueForgeUpstreamEnv } from "./runtime-mode";
 
 function readPort(name: string, fallback: number): number {
   const raw = Number(process.env[name] || fallback);
@@ -52,8 +53,7 @@ function startUpstream(upstreamPort: number): ChildProcess {
   if (!fs.existsSync(cli)) throw new Error(`TrueForge CLI missing at ${cli}.`);
   return spawn(process.execPath, [cli, "--port", String(upstreamPort)], {
     env: {
-      ...process.env,
-      STANDALONE: "true",
+      ...buildTrueForgeUpstreamEnv(process.env),
       HOST: "127.0.0.1",
       PORT: String(upstreamPort),
       APP_DATA_DIR_SUFFIX: process.env.APP_DATA_DIR_SUFFIX || "aether",
