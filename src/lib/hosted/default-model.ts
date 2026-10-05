@@ -12,6 +12,15 @@ export const HOSTED_OPENROUTER_PROVIDER = "openrouter";
 /** TrueForge resource names cannot contain dots, slashes, or colons. */
 export const HOSTED_DEFAULT_MODEL_RESOURCE = "qwen3-8-27b-free";
 export const HOSTED_DEFAULT_MODEL_FQN = `${HOSTED_OPENROUTER_PROVIDER}/${HOSTED_DEFAULT_MODEL_RESOURCE}`;
+/**
+ * Free hosted fallback for a rate-limited default. Same hosted provider and
+ * key, tools supported, never a paid or user-keyed model.
+ */
+export const HOSTED_FREE_FALLBACK_MODEL_ID = "google/gemma-4-31b-it:free";
+export const HOSTED_FREE_FALLBACK_MODEL_RESOURCE = "gemma-4-31b-it-free";
+export const HOSTED_FREE_FALLBACK_MODEL_FQN = `${HOSTED_OPENROUTER_PROVIDER}/${HOSTED_FREE_FALLBACK_MODEL_RESOURCE}`;
+export const HOSTED_FREE_FALLBACK_CONTEXT_LENGTH = 262_144;
+export const HOSTED_FREE_FALLBACK_MAX_OUTPUT_TOKENS = 32_768;
 export const HOSTED_DEFAULT_CONTEXT_LENGTH = 262_144;
 export const HOSTED_DEFAULT_MAX_OUTPUT_TOKENS = 32_768;
 /**
