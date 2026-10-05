@@ -13,6 +13,7 @@ type ChildThread = { toolCallId: string; text: string };
 
 export type TrueForgeUiState = {
   textSeq: number;
+  compactionSeq: number;
   textId: string | null;
   reasoningId: string | null;
   tools: Map<number, ToolBuf>;
@@ -28,6 +29,7 @@ export type TrueForgeUiState = {
 export function createTrueForgeUiState(): TrueForgeUiState {
   return {
     textSeq: 0,
+    compactionSeq: 0,
     textId: null,
     reasoningId: null,
     tools: new Map(),
@@ -293,6 +295,29 @@ export function chunksForTrueForgeEvent(
     const toolCallId = parentToolCallId(event);
     if (threadId) rememberChildThread(state, threadId, toolCallId);
     flushPendingTools(state, chunks);
+    return chunks;
+  }
+  if (type === "agent.context.overwrite") {
+    const reason = event.reason ?? event.overwrite_reason ?? event.overwriteReason;
+    if (reason === "compaction") {
+      closeOpenText(state, chunks);
+      state.compactionSeq += 1;
+      const eventId = stringField(event.id) ?? `event-${state.compactionSeq}`;
+      const toolCallId = `context-compaction-${eventId}`;
+      chunks.push({
+        type: "tool-input-available",
+        toolCallId,
+        toolName: "context_compaction",
+        input: {},
+        providerExecuted: true,
+      });
+      chunks.push({
+        type: "tool-output-available",
+        toolCallId,
+        output: "Summarized earlier context",
+        providerExecuted: true,
+      });
+    }
     return chunks;
   }
   if (threadId && !state.rootThreadId && !state.childThreads.has(threadId)) {

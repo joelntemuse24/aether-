@@ -49,6 +49,52 @@ describe("TrueForge UI chunks", () => {
     assert.equal((output?.output as { needs_confirmation?: boolean }).needs_confirmation, true);
   });
 
+  it("shows compaction as a completed status step without leaking compacted context", () => {
+    const state = createTrueForgeUiState();
+    chunksForTrueForgeEvent(
+      { type: "model.message.delta", content: "Before compaction" },
+      state,
+    );
+    const chunks = chunksForTrueForgeEvent(
+      {
+        type: "agent.context.overwrite",
+        id: "compact-1",
+        reason: "compaction",
+        context: [{ role: "user", content: "SECRET COMPACTED CONTEXT" }],
+      },
+      state,
+    );
+    assert.deepEqual(
+      chunks.map((chunk) => chunk.type),
+      ["text-end", "tool-input-available", "tool-output-available"],
+    );
+    assert.equal(chunks[1]?.toolName, "context_compaction");
+    assert.deepEqual(chunks[1]?.input, {});
+    assert.equal(chunks[2]?.output, "Summarized earlier context");
+    assert.equal(JSON.stringify(chunks).includes("SECRET COMPACTED CONTEXT"), false);
+    const secondCompaction = chunksForTrueForgeEvent(
+      { type: "agent.context.overwrite", reason: "compaction", context: [{ content: "also hidden" }] },
+      state,
+    );
+    assert.notEqual(secondCompaction[0]?.toolCallId, chunks[1]?.toolCallId);
+    for (const reasonField of ["overwrite_reason", "overwriteReason"]) {
+      const alias = chunksForTrueForgeEvent(
+        { type: "agent.context.overwrite", [reasonField]: "compaction" },
+        state,
+      );
+      assert.equal(alias[0]?.toolName, "context_compaction");
+      assert.notEqual(alias[0]?.toolCallId, secondCompaction[0]?.toolCallId);
+    }
+    assert.deepEqual(
+      chunksForTrueForgeEvent({ type: "agent.context.overwrite", context: [{ content: "ignored" }] }, state),
+      [],
+    );
+    assert.deepEqual(
+      chunksForTrueForgeEvent({ type: "agent.context.overwrite", reason: "other", context: [{ content: "ignored" }] }, state),
+      [],
+    );
+  });
+
   it("starts a new text part after a tool step", () => {
     const state = createTrueForgeUiState();
     chunksForTrueForgeEvent(

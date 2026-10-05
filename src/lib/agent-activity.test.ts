@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it, mock } from "node:test";
 import {
   activityClockShouldRun,
+  activityLabelForTool,
   closeActivityClock,
   collectActivitySteps,
   collectWebSearchHits,
@@ -22,6 +23,44 @@ import {
   sourceTrayPills,
   syncActivityClock,
 } from "./agent-activity";
+
+describe("activity labels", () => {
+  it("labels delegation with a clipped task and handles empty delegation", () => {
+    assert.equal(
+      activityLabelForTool("create_sub_agent", { task: "Find the relevant implementation" }, true),
+      "Delegating: Find the relevant implementation",
+    );
+    assert.equal(
+      activityLabelForTool("create_sub_agent", { instruction: "Inspect tests" }, false),
+      "Delegated: Inspect tests",
+    );
+    assert.equal(activityLabelForTool("create_sub_agent", {}, true), "Delegating work");
+    assert.equal(activityLabelForTool("create_sub_agent", {}, false), "Delegated work");
+    assert.equal(
+      activityLabelForTool("create_sub_agent", { task: " ", title: "Check references" }, true),
+      "Delegating: Check references",
+    );
+    assert.equal(
+      activityLabelForTool("create_sub_agent", { task: "x".repeat(120) }, true),
+      `Delegating: ${"x".repeat(87)}…`,
+    );
+  });
+
+  it("shows compaction as a completed activity step during a running turn", () => {
+    const steps = collectActivitySteps(
+      [{ type: "tool-context_compaction", toolCallId: "compact-1", input: {}, output: "Summarized earlier context", state: "output-available" }],
+      true,
+    );
+    assert.equal(steps.length, 1);
+    assert.equal(steps[0]?.label, "Summarized earlier context");
+    assert.equal(steps[0]?.state, "complete");
+  });
+
+  it("labels the future question tool", () => {
+    assert.equal(activityLabelForTool("ask_user_question", {}, true), "Asking a question");
+    assert.equal(activityLabelForTool("ask_user_question", {}, false), "Asked a question");
+  });
+});
 
 describe("deriveAgentActivity — honesty", () => {
   it("does not invent a search line when no search tool ran", () => {

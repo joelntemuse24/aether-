@@ -254,6 +254,15 @@ export function activityLabelForTool(
   running: boolean,
 ): string {
   switch (toolName) {
+    case "create_sub_agent": {
+      const phrase = clipPhrase(args.task) ?? clipPhrase(args.instruction) ?? clipPhrase(args.title);
+      if (running) return phrase ? `Delegating: ${phrase}` : "Delegating work";
+      return phrase ? `Delegated: ${phrase}` : "Delegated work";
+    }
+    case "ask_user_question":
+      return running ? "Asking a question" : "Asked a question";
+    case "context_compaction":
+      return running ? "Summarizing earlier context" : "Summarized earlier context";
     case "web_search":
       return running ? "Searching the web" : "Searched the web";
     case "memory_search": {

@@ -202,6 +202,8 @@ export function buildTrueForgeAgentSpec(input: {
       instructions: input.instructions,
       config: {
         sandbox: { enabled: input.sandboxEnabled },
+        dynamic_sub_agents: { enabled: true },
+        context_management: { compaction: { enabled: true } },
         ask_user_questions: { enabled: ASK_USER_QUESTIONS_ENABLED },
         generative_ui: { enabled: false },
       },
