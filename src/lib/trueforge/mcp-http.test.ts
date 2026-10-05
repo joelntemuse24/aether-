@@ -126,6 +126,8 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
     });
     assert.equal(on.spec.model.params?.reasoningEffort, "none");
     assert.equal(on.spec.config.sandbox.enabled, true);
+    assert.equal(on.spec.config.dynamic_sub_agents.enabled, true);
+    assert.equal(on.spec.config.context_management.compaction.enabled, true);
     assert.equal(on.spec.config.ask_user_questions.enabled, false);
     assert.equal(on.spec.config.generative_ui.enabled, false);
     assert.equal("skills" in on.spec, false);
