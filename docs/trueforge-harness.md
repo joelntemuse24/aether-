@@ -47,11 +47,18 @@ Approvals use the existing confirm card. Approving or declining resumes the paus
 - `AETHER_TRUEFORGE=0` sends hosted turns through Trigger when `TRIGGER_SECRET_KEY` and `TRIGGER_PROJECT_ID` are set, otherwise the in-process loop.
 - Auth.js, Neon / PGlite conversations, Drive, and GitHub connectors stay on the Next app.
 
+## Hosted Postgres + Redis (opt-in)
+
+Contabo can opt into hosted TrueForge storage by setting both `TRUEFORGE_DATABASE_URL` and `REDIS_URL` on the sidecar environment. `TRUEFORGE_DATABASE_URL` avoids the Neon `DATABASE_URL` used by Vercel. The launcher derives `STANDALONE=false` only when both values are non-empty, maps them to the package's `DATABASE_URL` and `REDIS_URL`, and passes through `TRUEFORGE_API_KEY`. With either value absent or empty, the default remains standalone SQLite.
+
+Provision Postgres 16 and Redis 7 through the hosted compose profile or managed services. TrueForge 0.2.1 migrates Postgres on hosted boot; use the first health-gated hosted reload for the published runtime, or run the package migrate script once from a full source installation before cutover. Deploy with `bash deploy/trueforge/health-gate.sh "$PREV"`, then run `bash deploy/trueforge/hosted-health-check.sh` and smoke-test capabilities and one turn. The health gate still reloads pm2 app `aether` only. The external `/opt/aether/sidecar-only.ts` must use the same runtime helper or derive `STANDALONE=false` only when both hosted variables are present.
+
+TrueForge sessions do not migrate from SQLite; they are empty after cutover. Neon conversations remain in the Next app. Ask-user stays off, skills stay unset, and the native engine stays off. See [the Contabo cutover procedure](../deploy/trueforge/contabo-hosted-cutover.md) for migration, environment propagation, smoke checks, and rollback.
+
 ## Deferred
 
 - Sandbox provider credentials (Daytona and others)
 - Full MCP OAuth redirect parity when the public origin differs from the sidecar bind address
-- Hosted Postgres + Redis (this cut is standalone SQLite)
 - Running TrueForge inside a Vercel function. Point `AETHER_TRUEFORGE_URL` at the VM instead. If that URL is unset or the VM does not answer, hosted chat uses the in-process loop.
 - Customer BYOK inside TrueForge (hosted Expert keys only)
 - Source chips

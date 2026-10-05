@@ -10,6 +10,8 @@ Read this before changing Aether. It lists the rules that keep the product true.
 
 Aether is a Next.js 15 app. Production is Vercel project `aether-seven-theta` plus the Contabo VM sidecar. The VM process is `tsx /opt/aether/sidecar-only.ts` under pm2 app `aether`. Trigger.dev is not the live chat path. Railway and the root `Dockerfile` are unused.
 
+TrueForge defaults to `STANDALONE=true` with SQLite. Hosted Postgres + Redis activates only when both database and Redis environment variables are set. Deploy through the health gate only, which reloads pm2 app `aether`; never touch `echomancer-takehome`.
+
 | Rule | Status | Check |
 | --- | --- | --- |
 | Production is Vercel plus the VM sidecar. Do not treat Railway or the root Dockerfile as the deploy path. | agent | `README.md`, `docs/trueforge-harness.md` |
