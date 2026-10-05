@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FC } from "react";
 import { useAui, useAuiState } from "@assistant-ui/react";
-import { CheckIcon, PencilIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import { conversationLabel } from "@/lib/conversation-title";
 import { cn } from "@/lib/utils";
 
@@ -40,8 +40,8 @@ export const ThreadHeader: FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-10 -mx-4 mb-4 border-b border-[var(--border-subtle)] bg-[var(--canvas)]/90 px-4 backdrop-blur-md sm:-mx-6 sm:px-6">
-      <div className="mx-auto flex h-11 max-w-[var(--thread-max-width)] items-center gap-2">
+    <header className="sticky top-0 z-10 -mx-4 mb-4 bg-[var(--canvas)]/90 px-4 backdrop-blur-md sm:-mx-6 sm:px-5">
+      <div className="flex h-12 w-full items-center gap-2">
         {editing ? (
           <form
             className="flex min-w-0 flex-1 items-center gap-1.5"
@@ -89,7 +89,7 @@ export const ThreadHeader: FC = () => {
               >
                 {title}
               </h2>
-              <PencilIcon className="size-3 shrink-0 text-[var(--muted-soft)] opacity-0 transition-opacity group-hover:opacity-100" />
+              <ChevronDownIcon className="size-3.5 shrink-0 text-[var(--muted)]" />
             </button>
           </>
         )}

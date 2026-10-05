@@ -459,14 +459,14 @@ span.aether-activity__summary-btn:hover {
   align-items: center;
   gap: 8px;
   max-width: 100%;
-  height: 30px;
+  height: 28px;
   margin-top: 0.65rem;
   padding: 0 12px 0 6px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--elevated);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   line-height: 1;
   cursor: pointer;
@@ -583,18 +583,27 @@ span.aether-activity__summary-btn:hover {
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--elevated);
+  border-radius: 12px;
+  background: transparent;
   color: var(--text);
+  overflow-wrap: anywhere;
+  transition-property: background-color, border-color;
+  transition-duration: 140ms;
+}
+
+@media (hover: hover) {
+  .aether-web-result:hover {
+    background: var(--elevated);
+  }
 }
 
 .aether-web-result .aether-inline-source__title {
   display: -webkit-box;
   overflow: hidden;
   color: var(--text);
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
   line-height: 1.35;
   white-space: normal;
@@ -605,8 +614,8 @@ span.aether-activity__summary-btn:hover {
 .aether-web-result__snippet {
   display: -webkit-box;
   overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 12.5px;
   line-height: 1.4;
   white-space: normal;
   -webkit-box-orient: vertical;

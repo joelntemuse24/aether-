@@ -376,7 +376,7 @@ export const MessageSourceCards: FC = () => {
           <button
             type="button"
             className="aether-web-results__backdrop"
-            aria-label="Close web results"
+            aria-label="Close sources"
             onClick={() => setOpen(false)}
           />
           <div
@@ -387,7 +387,7 @@ export const MessageSourceCards: FC = () => {
           >
             <header className="aether-web-results__header">
               <h2 id={titleId} className="aether-web-results__title">
-                Web results
+                Sources <span className="tabular-nums text-[var(--muted-soft)]">{hits.length}</span>
               </h2>
               <button
                 ref={closeRef}
