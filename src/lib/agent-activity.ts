@@ -471,9 +471,10 @@ function searchClause(sourceCount: number): string {
 }
 
 /**
- * One headline for the whole turn. Search turns that ran long enough
- * lead with "Thought for Ns". Every other completed step joins that
- * same line. A lone tool stays its own past-tense label.
+ * One headline for the whole turn. Turns that ran long enough lead
+ * with "Thought for Ns", with or without search. Every completed step
+ * joins that same line. A lone tool on a short turn stays its own
+ * past-tense label.
  */
 function collapsedSummary(
   steps: ActivityStep[],
@@ -488,8 +489,7 @@ function collapsedSummary(
     phrases.push(phrase);
   };
 
-  const searched = steps.some((step) => step.toolName === "web_search");
-  if (searched && shouldRevealActivityElapsed(elapsedSeconds)) {
+  if (shouldRevealActivityElapsed(elapsedSeconds)) {
     push(thoughtSummary(elapsedSeconds));
   }
 
@@ -575,6 +575,16 @@ export function collectReasoningSummary(
   if (!joined) return null;
   if (joined.length <= 700) return joined;
   return `${joined.slice(0, 699).trimEnd()}…`;
+}
+
+/**
+ * Reasoning to show in the live "Thinking…" disclosure. Null when the
+ * turn is settled or the provider sent no reasoning, so the strip
+ * renders no expand control.
+ */
+export function liveReasoningDisclosure(view: ActivityView): string | null {
+  if (!view.visible || view.mode === "collapsed") return null;
+  return view.reasoning?.trim() ? view.reasoning : null;
 }
 
 function latestAssistant(

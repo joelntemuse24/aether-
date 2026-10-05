@@ -11,6 +11,7 @@ import {
   deriveAgentActivity,
   formatActivityElapsed,
   isWorkingClockLine,
+  liveReasoningDisclosure,
   liveWorkOneLiner,
   looksLikeThinkingTheater,
   recalledActivityElapsed,
@@ -737,7 +738,7 @@ describe("deriveAgentActivity — honesty", () => {
       elapsedSeconds: 7,
     });
     assert.equal(done.mode, "collapsed");
-    assert.equal(done.summaryLabel, "Looked up tools");
+    assert.equal(done.summaryLabel, "Thought for 7s · Looked up tools");
   });
 
   it("keeps Worked for Ns after the live clock is interrupted", () => {
@@ -1012,7 +1013,7 @@ describe("one disclosure per finished turn", () => {
     });
 
     assert.equal(view.mode, "collapsed");
-    assert.equal(view.summaryLabel, "Checked the time");
+    assert.equal(view.summaryLabel, "Thought for 4s · Checked the time");
     assert.equal(view.steps.length, 1);
     assert.equal(view.reasoning, "The user wants Dublin local time.");
     assert.equal(view.summaryLabel?.includes("Dublin local time"), false);
@@ -1097,7 +1098,7 @@ describe("one disclosure per finished turn", () => {
       elapsedSeconds: 5,
     });
 
-    assert.equal(view.summaryLabel, "Ran Python");
+    assert.equal(view.summaryLabel, "Thought for 5s · Ran Python");
     assert.equal(view.steps[0]?.code, "print(1 + 1)");
     assert.equal(JSON.stringify(view).includes('"stdout"'), false);
   });
@@ -1401,5 +1402,128 @@ describe("thread / composer copy stays honest", () => {
       true,
     );
     assert.notEqual(timedOut.mode, "live");
+  });
+});
+
+describe("live Thinking disclosure", () => {
+  const reasoningPart = {
+    type: "reasoning",
+    text: "Weighing the two options before answering.",
+  };
+
+  it("exposes reasoning mid-turn while the strip is still live", () => {
+    const view = deriveAgentActivity({
+      messages: [{ id: "live-cot", role: "assistant", parts: [reasoningPart] }],
+      isRunning: true,
+      elapsedSeconds: 2,
+    });
+    assert.equal(view.mode, "elapsed");
+    assert.equal(
+      liveReasoningDisclosure(view),
+      "Weighing the two options before answering.",
+    );
+
+    const grown = deriveAgentActivity({
+      messages: [
+        {
+          id: "live-cot",
+          role: "assistant",
+          parts: [{ ...reasoningPart, text: `${reasoningPart.text} Option A wins.` }],
+        },
+      ],
+      isRunning: true,
+      elapsedSeconds: 3,
+    });
+    assert.match(liveReasoningDisclosure(grown) ?? "", /Option A wins\.$/);
+  });
+
+  it("exposes reasoning during a live tool step", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          id: "live-cot-tool",
+          role: "assistant",
+          parts: [
+            reasoningPart,
+            {
+              type: "tool-call",
+              toolName: "web_search",
+              args: { query: "dublin weather" },
+              status: { type: "running" },
+            },
+          ],
+        },
+      ],
+      isRunning: true,
+      elapsedSeconds: 4,
+    });
+    assert.equal(view.mode, "live");
+    assert.ok(liveReasoningDisclosure(view));
+  });
+
+  it("offers no expand without reasoning", () => {
+    const empty = deriveAgentActivity({
+      messages: [{ id: "no-cot", role: "assistant", parts: [] }],
+      isRunning: true,
+      elapsedSeconds: 5,
+    });
+    assert.equal(liveReasoningDisclosure(empty), null);
+
+    const blank = deriveAgentActivity({
+      messages: [
+        {
+          id: "blank-cot",
+          role: "assistant",
+          parts: [{ type: "reasoning", text: "   " }],
+        },
+      ],
+      isRunning: true,
+      elapsedSeconds: 5,
+    });
+    assert.equal(blank.reasoning, null);
+    assert.equal(liveReasoningDisclosure(blank), null);
+  });
+
+  it("leaves reasoning to the collapsed disclosure once the turn settles", () => {
+    const view = deriveAgentActivity({
+      messages: [
+        {
+          id: "done-cot",
+          role: "assistant",
+          parts: [reasoningPart, { type: "text", text: "Option A." }],
+        },
+      ],
+      isRunning: false,
+      elapsedSeconds: 6,
+    });
+    assert.equal(view.mode, "collapsed");
+    assert.equal(liveReasoningDisclosure(view), null);
+    assert.equal(view.reasoning, "Weighing the two options before answering.");
+  });
+
+  it("leads the collapsed summary with Thought for Ns on long non-search turns", () => {
+    const parts = [
+      {
+        type: "tool-call",
+        toolName: "execute_python",
+        args: { code: "print(1)" },
+        result: { ok: true },
+        status: { type: "complete" },
+      },
+      { type: "text", text: "Done." },
+    ];
+    const long = deriveAgentActivity({
+      messages: [{ id: "long", role: "assistant", parts }],
+      isRunning: false,
+      elapsedSeconds: 9,
+    });
+    assert.equal(long.summaryLabel, "Thought for 9s · Ran Python");
+
+    const short = deriveAgentActivity({
+      messages: [{ id: "short", role: "assistant", parts }],
+      isRunning: false,
+      elapsedSeconds: 1,
+    });
+    assert.equal(short.summaryLabel, "Ran Python");
   });
 });
