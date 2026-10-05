@@ -355,3 +355,11 @@ describe("hidden automatic continue turns", () => {
     assert.match(thread, /s\.message\.role === "user"/);
   });
 });
+
+it("blocks open needs_response cards and clears resolved cards", () => {
+  const messages = [{ id: "q", role: "assistant", parts: [{ type: "tool-custom", toolCallId: "q1", state: "output-available", input: {}, output: { needs_response: true } }] }] as unknown as UIMessage[];
+  assert.equal(waitsForUserQuestion(messages), true);
+  assert.equal(shouldAutoContinue({ messages, isAbort: false, isDisconnect: true, isError: false, runDurationMs: 60000, continueCount: 0 }), false);
+  (messages[0].parts[0] as unknown as { output: unknown }).output = { needs_response: false };
+  assert.equal(waitsForUserQuestion(messages), false);
+});

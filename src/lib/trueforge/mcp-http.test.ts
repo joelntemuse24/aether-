@@ -114,7 +114,7 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
     assert.equal(signedIn[0]?.enableTools.includes("current_time"), false);
   });
 
-  it("enables the sandbox only when capabilities say it is ready and leaves skills unset", () => {
+  it("enables the sandbox only when capabilities say it is ready and mounts only safe sandbox skills", () => {
     assert.equal(sandboxEnabledFromCapabilities({ data: { sandbox: { enabled: true } } }), true);
     assert.equal(sandboxEnabledFromCapabilities({ data: { sandbox: { enabled: false } } }), false);
     assert.equal(sandboxEnabledFromCapabilities(null), false);
@@ -128,9 +128,9 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
     assert.equal(on.spec.config.sandbox.enabled, true);
     assert.equal(on.spec.config.dynamic_sub_agents.enabled, true);
     assert.equal(on.spec.config.context_management.compaction.enabled, true);
-    assert.equal(on.spec.config.ask_user_questions.enabled, false);
+    assert.equal(on.spec.config.ask_user_questions.enabled, true);
     assert.equal(on.spec.config.generative_ui.enabled, false);
-    assert.equal("skills" in on.spec, false);
+    assert.deepEqual(on.spec.skills, [{ name: "web-artifacts-builder" }]);
     assert.equal(on.spec.mcpServers?.length, 1);
     const off = buildTrueForgeAgentSpec({
       modelName: "buzz/gpt-5-6-luna",
@@ -139,6 +139,7 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
       sandboxEnabled: false,
     });
     assert.equal(off.spec.config.sandbox.enabled, false);
+    assert.equal("skills" in off.spec, false);
     assert.equal(off.spec.mcpServers, undefined);
     const claude = buildTrueForgeAgentSpec({
       modelName: "anthropic/claude-haiku-4-5",
@@ -147,7 +148,7 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
       sandboxEnabled: true,
     });
     assert.equal(claude.spec.model.params, undefined);
-    assert.equal(claude.spec.config.ask_user_questions.enabled, false);
+    assert.equal(claude.spec.config.ask_user_questions.enabled, true);
     assert.equal(claude.spec.config.generative_ui.enabled, false);
     const astra = buildTrueForgeAgentSpec({
       modelName: "buzz/gpt-6-astra",
@@ -163,12 +164,13 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
       sandboxEnabled: true,
     });
     assert.equal(qwen.spec.model.params?.reasoningEffort, "low");
-    assert.equal(astra.spec.config.ask_user_questions.enabled, false);
+    assert.equal(astra.spec.config.ask_user_questions.enabled, true);
     assert.equal(astra.spec.config.generative_ui.enabled, false);
   });
 
-  it("tells every attached tool set to assume instead of asking the user to choose", () => {
-    const assume = /make a reasonable assumption and state it/;
+  it("allows clear material choices and assumes minor missing details", () => {
+    const assume = /For minor missing details, make a reasonable assumption and state it/;
+    assert.match(trueforgeToolNote(["web_search"]), /ask_user_question when a choice materially changes the outcome/);
     assert.match(trueforgeToolNote(["web_search", "fetch_url", "browse_page"]), assume);
     assert.match(trueforgeToolNote(["web_search", "memory_search"]), assume);
     assert.match(TRUEFORGE_NO_TOOLS_NOTE, assume);

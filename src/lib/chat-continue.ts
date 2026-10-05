@@ -131,6 +131,12 @@ export function waitsForUserQuestion(messages: UIMessage[]): boolean {
       const rec = asPartRecord(part);
       const type = typeof part.type === "string" ? part.type : "";
       const name = typeof rec.toolName === "string" ? rec.toolName : "";
+      const output = rec.output ?? rec.result;
+      if (output && typeof output === "object") {
+        const row = output as { needs_response?: boolean };
+        if (row.needs_response === true) return true;
+        if (row.needs_response === false) continue;
+      }
       if (type === `tool-${USER_QUESTION_TOOL}` || name === USER_QUESTION_TOOL) return true;
       if (
         part.type === "text" &&

@@ -13,6 +13,7 @@ import { bearerMatches } from "./auth";
 import { loadLocalEnvFiles } from "./load-env";
 import { withLocalMcpHosts } from "./outbound-hosts";
 import { seedAetherModelProviders } from "./seed";
+import { seedAetherSkills } from "./skills";
 import { prepareSidecar } from "./sidecar-bootstrap";
 import { buildTrueForgeUpstreamEnv } from "./runtime-mode";
 
@@ -122,6 +123,7 @@ async function main() {
   await waitForUpstream(child, upstreamPort);
   const seeded = await seedAetherModelProviders(`http://127.0.0.1:${upstreamPort}`);
   console.info("[aether] TrueForge providers", seeded);
+    console.info("[aether] registered skills", await seedAetherSkills(`http://127.0.0.1:${upstreamPort}`));
   const server = listen(token, publicPort, upstreamPort);
   const stop = () => {
     server.close();

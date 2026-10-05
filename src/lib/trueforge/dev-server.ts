@@ -15,6 +15,7 @@ import {
 import { loadLocalEnvFiles } from "./load-env";
 import { withLocalMcpHosts } from "./outbound-hosts";
 import { seedAetherModelProviders } from "./seed";
+import { seedAetherSkills } from "./skills";
 import { prepareSidecar } from "./sidecar-bootstrap";
 import { buildTrueForgeUpstreamEnv } from "./runtime-mode";
 
@@ -82,6 +83,7 @@ async function main() {
   } else if (sidecar || (trueforgeSidecarEnabled() && (await isUp(trueforgeOrigin())))) {
     const seeded = await seedAetherModelProviders(trueforgeOrigin());
     console.info("[aether] TrueForge providers", seeded);
+    console.info("[aether] registered skills", await seedAetherSkills(trueforgeOrigin()));
   }
 
   const nextBin = path.join(process.cwd(), "node_modules/next/dist/bin/next");

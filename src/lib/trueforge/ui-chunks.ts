@@ -473,32 +473,39 @@ export function chunksForTrueForgeEvent(
     return chunks;
   }
 
-  if (type === "tool.response_required") {
+  if (type === "tool.response_required" && Array.isArray(event.toolCalls)) {
     flushPendingTools(state, chunks);
-    const id = ensureText(state, chunks);
-    chunks.push({
-      type: "text-delta",
-      id,
-      delta: "\n\nThis step needs an answer in the composer before it can continue.",
-    });
+    for (const call of event.toolCalls) {
+      if (!call || typeof call !== "object") continue;
+      const row = call as { id?: string; confirmationId?: string };
+      if (!row.id) continue;
+      const tool = [...state.tools.values()].find((tool) => tool.id === row.id);
+      const args = parseToolInput(tool?.args ?? "") as { question?: unknown; options?: unknown };
+      const question = typeof args.question === "string" ? args.question : "What would you like to do next?";
+      const options = Array.isArray(args.options) ? args.options.filter((option): option is string => typeof option === "string") : [];
+      if (!state.opened.has(row.id)) {
+        state.opened.add(row.id);
+        chunks.push({ type: "tool-input-available", toolCallId: row.id, toolName: "ask_user_question", input: { question, options }, providerExecuted: true });
+      }
+      state.openTools.delete(row.id);
+      chunks.push({ type: "tool-output-available", toolCallId: row.id, providerExecuted: true, output: { needs_response: true, confirmation_id: row.confirmationId ?? event.confirmationId ?? "", question, options, session_id: event.sessionId ?? "", thread_id: event.threadId ?? event.thread_id ?? "" } });
+    }
     return chunks;
   }
 
   if (type === "mcp.auth_required" && Array.isArray(event.mcpServers)) {
-    const lines = event.mcpServers
-      .map((server) => {
-        if (!server || typeof server !== "object") return "";
-        const row = server as { name?: string; authUrl?: string };
-        return [row.name, row.authUrl].filter(Boolean).join(" ");
-      })
-      .filter(Boolean);
-    if (lines.length) {
-      const id = ensureText(state, chunks);
-      chunks.push({
-        type: "text-delta",
-        id,
-        delta: `\n\nConnect to continue: ${lines.join(", ")}`,
-      });
+    const servers = event.mcpServers.flatMap((server) => {
+      if (!server || typeof server !== "object") return [];
+      const row = server as { name?: unknown; authUrl?: unknown };
+      if (typeof row.name !== "string" || typeof row.authUrl !== "string") return [];
+      return [{ name: row.name, authUrl: row.authUrl }];
+    });
+    if (servers.length) {
+      closeOpenText(state, chunks);
+      const toolCallId = `mcp-auth-${String(event.id ?? state.opened.size)}`;
+      state.opened.add(toolCallId);
+      chunks.push({ type: "tool-input-available", toolCallId, toolName: "mcp_auth_connect", input: {}, providerExecuted: true });
+      chunks.push({ type: "tool-output-available", toolCallId, output: { servers }, providerExecuted: true });
     }
     return chunks;
   }

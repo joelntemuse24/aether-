@@ -1,3 +1,4 @@
+import { userQuestionPolicy } from "./question-policy";
 import { TOOLS_SYSTEM_PROMPT } from "@/lib/tools";
 
 /** How a downloadable sandbox file reaches the thread. Paths stay off the answer. */
@@ -28,7 +29,7 @@ Use web_search for live facts (weather, news, prices), then fetch_url or browse_
 memory_search, project_knowledge_search, drive_search, drive_read, and github_* read the signed-in user's data when those accounts are connected.
 memory_write and create_artifact wait on the user's approval card before they save.
 Cite web sources as [1], [2]. End every turn with a clear answer. Do not invent tools you were not given.
-If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.
+${userQuestionPolicy()}
 ${CHART_LINE}
 ${SANDBOX_FILE_LINE}
 ${sandboxFactsLine(["web_search", "fetch_url", "browse_page"])}
@@ -37,7 +38,7 @@ If a command times out, answer with what you already have. Do not start another 
 export const TRUEFORGE_NO_TOOLS_NOTE = `You are Aether. Tools are not connected for this turn.
 Answer from the conversation. If the user needs a live lookup, say you cannot reach it right now.
 Do not invent tool results.
-If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.
+${userQuestionPolicy()}
 ${CHART_LINE}
 ${SANDBOX_FILE_LINE}
 If a command times out, answer with what you already have. Do not start another long command.`;
@@ -66,7 +67,7 @@ export function trueforgeToolNote(attached: readonly string[]): string {
   }
   lines.push("Cite web sources as [1], [2]. End every turn with a clear answer. Do not invent tools you were not given.");
   lines.push(
-    "If a detail is missing, make a reasonable assumption and state it. Do not stop to ask the user to choose.",
+    userQuestionPolicy(),
   );
   lines.push(CHART_LINE);
   if (attached.includes("create_artifact")) {
