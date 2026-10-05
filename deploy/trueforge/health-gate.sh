@@ -18,6 +18,7 @@ and 1 when it does not.
 
 The deploy reloads pm2 app aether only. Health URL defaults to
 http://127.0.0.1:8790/api/v1/capabilities (override with AETHER_SIDECAR_HEALTH_URL).
+After a hosted cutover reload, operators can run deploy/trueforge/hosted-health-check.sh.
 Pass when restart_time rises by at most 1 and then stays stable, the URL
 returns 200, and GET AETHER_SIDECAR_MODELS_URL (default
 http://127.0.0.1:8790/api/v1/models) lists AETHER_SIDECAR_REQUIRED_MODEL

@@ -1,0 +1,10 @@
+# Contabo TrueForge hosted-mode opt-in. Replace every placeholder before use.
+TRUEFORGE_DATABASE_URL=postgres://trueforge:REPLACE_WITH_DB_PASSWORD@127.0.0.1:5432/trueforge
+REDIS_URL=redis://127.0.0.1:6379
+TRUEFORGE_API_KEY=REPLACE_WITH_TRUEFORGE_API_KEY
+
+# Keep the VM transport token configured as before.
+AETHER_TRUEFORGE_TOKEN=REPLACE_WITH_AETHER_TRUEFORGE_TOKEN
+
+# STANDALONE is derived by the launcher from the database and Redis variables.
+# Do not set STANDALONE=true during a hosted cutover.
