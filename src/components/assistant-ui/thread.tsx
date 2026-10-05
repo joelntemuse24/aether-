@@ -29,6 +29,7 @@ import {
 import { BuzzModelPicker } from "@/components/assistant-ui/buzz-model-picker";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { composerFootnote, composerPlaceholder } from "@/lib/composer/composer-chrome";
 import { usePathname } from "next/navigation";
 import { useSettings } from "@/providers/settings-provider";
 import { useAttachments } from "@/providers/attachments-provider";
@@ -58,7 +59,7 @@ import {
   ImageIcon,
   Loader2Icon,
   MicIcon,
-  PaperclipIcon,
+  PlusIcon,
   PencilIcon,
   RefreshCwIcon,
   RotateCcwIcon,
@@ -156,8 +157,6 @@ export const Thread: FC = () => {
   const { isEmpty, isHydrating, hasMessages } = useThreadEmptyState();
   const showThread = hasMessages || isHydrating;
 
-  // Composer stays docked at the bottom (Grok motion). Welcome centers
-  // in the remaining scroll area so first send does not jump the input.
   return (
     <ThreadPrimitive.Root
       className="flex h-full flex-col bg-[var(--canvas)]"
@@ -167,12 +166,14 @@ export const Thread: FC = () => {
     >
       <ThreadPrimitive.Viewport
         turnAnchor="top"
-        className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth"
+        className={cn(
+          "relative flex flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth",
+        )}
       >
         {showThread && <ThreadHeader />}
         <div className="mx-auto flex w-full max-w-[var(--thread-max-width)] flex-1 flex-col px-4 pt-2 sm:px-6 sm:pt-4">
           {isEmpty ? (
-            <div className="flex flex-1 flex-col justify-center py-12">
+            <div className="flex flex-1 flex-col justify-end py-6">
               <ThreadWelcome />
             </div>
           ) : null}
@@ -191,7 +192,7 @@ export const Thread: FC = () => {
           )}
 
           {hasMessages && (
-            <div className="aether-thread-enter flex flex-col gap-y-8 pb-6 empty:hidden">
+            <div className="aether-thread-enter flex flex-col gap-y-6 pb-6 empty:hidden">
               <ThreadPrimitive.Messages>
                 {() => <ThreadMessage />}
               </ThreadPrimitive.Messages>
@@ -212,6 +213,7 @@ export const Thread: FC = () => {
         {showThread && <ThreadScrollToBottom />}
         <Composer />
       </div>
+      {isEmpty && <div className="flex-1" aria-hidden />}
     </ThreadPrimitive.Root>
   );
 };
@@ -255,22 +257,22 @@ const ThreadWelcome: FC = () => {
   const phrase = getWelcomePhrase();
 
   return (
-    <div className="aether-welcome flex w-full flex-col items-center">
-      <div className="mb-4 flex size-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--elevated)]">
+    <div className="aether-welcome flex w-full items-center justify-center gap-3">
+      <div className="flex size-8 shrink-0 items-center justify-center">
         <Image
           src="/logo.jpg"
           alt="Aether"
           width={36}
           height={36}
-          className="size-9 rounded-full object-cover"
+          className="size-8 rounded-full object-cover"
         />
       </div>
       <h1
-        className="mb-3 max-w-[28rem] text-center font-[family-name:var(--font-serif)] text-[var(--text)]"
+        className="max-w-[28rem] text-center font-[family-name:var(--font-serif)] text-[var(--text)]"
         style={{
-          fontSize: "clamp(1.35rem, 2.6vw, 1.75rem)",
+          fontSize: "clamp(1.75rem, 3.2vw, 2.25rem)",
           fontWeight: 400,
-          fontStyle: "italic",
+          fontStyle: "normal",
           letterSpacing: "-0.02em",
           lineHeight: 1.15,
         }}
@@ -779,12 +781,8 @@ const Composer: FC = () => {
     speechRef.current = session;
   };
 
-  const micPlaceholder =
-    micState === "listening"
-      ? "Listening…"
-      : micState === "transcribing"
-        ? "Transcribing…"
-        : "How can I help you today?";
+  const placeholder = composerPlaceholder({ micState, isFirstTurn });
+  const footnote = composerFootnote({ isFirstTurn });
 
   return (
     <ComposerPrimitive.Root className="relative flex w-full flex-col border-0 bg-transparent">
@@ -825,7 +823,7 @@ const Composer: FC = () => {
         }}
         onDrop={(e) => void onDrop(e)}
         className={cn(
-          "aether-composer relative flex w-full flex-col gap-1 rounded-[22px] border bg-[var(--elevated)] px-1.5 py-1.5 transition-[border-color,background-color,box-shadow] duration-[var(--motion-fast)]",
+          "aether-composer relative flex w-full flex-col gap-1 rounded-[20px] border bg-[var(--elevated)] px-1.5 py-1.5 transition-[border-color,background-color,box-shadow] duration-[var(--motion-fast)]",
           dragging
             ? "border-[var(--accent)]/50 bg-[var(--accent-muted)]"
             : "border-[var(--border)] shadow-[0_1px_0_rgba(40,32,24,0.04),0_12px_32px_rgba(40,32,24,0.04)]",
@@ -890,8 +888,11 @@ const Composer: FC = () => {
         )}
 
         <ComposerPrimitive.Input
-          placeholder={micPlaceholder}
-          className="max-h-40 min-h-[44px] w-full resize-none border-0 bg-transparent px-2.5 py-2 text-[15px] leading-relaxed text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)]"
+          placeholder={placeholder}
+          className={cn(
+            "max-h-40 w-full resize-none border-0 bg-transparent px-2.5 py-2 text-[15px] leading-relaxed text-[var(--text)] outline-none placeholder:text-[var(--muted-soft)]",
+            isFirstTurn ? "min-h-[56px]" : "min-h-[40px]",
+          )}
           rows={1}
           autoFocus
           aria-label="Message input"
@@ -984,6 +985,12 @@ const Composer: FC = () => {
           onHarnessSend={() => void sendWithHarness()}
         />
       </div>
+
+      {footnote ? (
+        <div className="mt-1.5 select-none text-center text-[11.5px] text-[var(--muted-soft)] [text-wrap:balance]">
+          {footnote}
+        </div>
+      ) : null}
 
       <input
         ref={fileInputRef}
@@ -1132,16 +1139,15 @@ const ComposerAction: FC<{
   return (
     <div className="flex items-center justify-between gap-2 px-0.5">
       <div className="flex min-w-0 items-center gap-1">
-        {settings.accessMode === "hosted" ? <BuzzModelPicker /> : null}
         <div className="relative" data-attach-menu>
           <TooltipIconButton
-            tooltip="Attach"
+            tooltip="Add files and apps"
             onClick={onAttachMenuToggle}
             className="size-7"
             aria-haspopup="menu"
             aria-expanded={attachOpen}
           >
-            <PaperclipIcon className="size-4" />
+            <PlusIcon className="size-4" />
           </TooltipIconButton>
           {attachOpen && (
             <div
@@ -1218,6 +1224,7 @@ const ComposerAction: FC<{
       </div>
 
       <div className="flex items-center gap-1.5">
+        {settings.accessMode === "hosted" ? <BuzzModelPicker /> : null}
         <button
           type="button"
           onClick={onMicToggle}
@@ -1626,7 +1633,7 @@ const UserMessage: FC = () => {
       className="group/message flex flex-col items-end gap-1"
     >
       <div className="aether-user-bubble relative max-w-[min(100%,28rem)]">
-        <div className="rounded-[1.35rem] border border-[var(--border)] bg-[var(--elevated)] px-4 py-2.5 font-[family-name:var(--font-ui)] text-[15px] leading-snug text-[var(--text)] wrap-break-word">
+        <div className="rounded-2xl bg-[var(--elevated-deep)] px-3.5 py-2 font-[family-name:var(--font-ui)] text-[15px] leading-relaxed text-[var(--text)] wrap-break-word">
           <MessagePrimitive.Parts />
         </div>
         <div className="absolute -left-16 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-100 transition-opacity max-sm:static max-sm:mt-1 max-sm:translate-y-0 md:opacity-0 md:group-hover/message:opacity-100">

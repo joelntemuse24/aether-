@@ -319,10 +319,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <button
               type="button"
               onClick={goNewChat}
-              className="flex w-full items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-[13px] text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)]"
+              className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--hover-overlay)]"
+              aria-label="New conversation"
             >
-              <PlusIcon className="size-3.5 shrink-0 text-[var(--accent)]" />
-              New conversation
+              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white">
+                <PlusIcon className="size-3" />
+              </span>
+              New chat
             </button>
           </ThreadListPrimitive.New>
         </div>
@@ -373,7 +376,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </div>
         </div>
 
-        <div className="mb-1 px-3 py-0.5 text-[12px] text-[var(--muted)]">
+        <div className="mb-1 px-3 pt-2 text-[11.5px] font-medium text-[var(--muted-soft)]">
           Recent
         </div>
         <div className="flex-1 overflow-y-auto px-2 pb-2">
@@ -489,10 +492,10 @@ function SidebarNavItem({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[var(--muted)] transition-colors hover:bg-[var(--hover-overlay)]"
+      className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[var(--text-secondary)] transition-colors hover:bg-[var(--hover-overlay)]"
     >
       <span>{icon}</span>
-      <span className="min-w-0 flex-1 text-[12px]">{label}</span>
+      <span className="min-w-0 flex-1 text-[13px]">{label}</span>
       {meta ? (
         <span className="text-[10px] text-[var(--muted-soft)]">{meta}</span>
       ) : null}
@@ -815,8 +818,8 @@ const ThreadListItem: FC = () => {
   }
 
   return (
-    <ThreadListItemPrimitive.Root className="group relative flex items-center rounded-md data-[active]:bg-[var(--elevated-deep)] hover:bg-[var(--hover-overlay)]">
-      <ThreadListItemPrimitive.Trigger className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left text-[13px] text-[var(--text)]">
+    <ThreadListItemPrimitive.Root className="group relative flex items-center rounded-lg data-[active]:bg-[var(--elevated-deep)] hover:bg-[var(--hover-overlay)]">
+      <ThreadListItemPrimitive.Trigger className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-[13px] text-[var(--text)]">
         <span className="truncate">{title}</span>
       </ThreadListItemPrimitive.Trigger>
 

@@ -724,25 +724,17 @@ export function ArtifactPanel() {
         "aether-artifact-panel flex w-full shrink-0 flex-col border-[var(--border)] bg-[var(--surface)]",
         expanded
           ? "fixed inset-0 z-50 h-full max-w-none rounded-none border-0"
-          : "fixed inset-x-0 bottom-0 z-[70] h-[min(88dvh,100%)] max-w-none rounded-t-[18px] border-t lg:static lg:z-auto lg:h-full lg:max-w-[min(100%,32rem)] lg:rounded-none lg:border-t-0 lg:border-l",
+          : "fixed inset-x-0 bottom-0 z-[70] h-[min(88dvh,100%)] max-w-none rounded-t-[18px] border-t lg:static lg:z-auto lg:h-full lg:w-1/2 lg:max-w-[48rem] lg:min-w-[22rem] lg:rounded-none lg:border-t-0 lg:border-l",
       )}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <KindIcon className="size-4 shrink-0 text-[var(--accent)]" />
           <div className="min-w-0">
-            <div className="truncate text-sm font-medium text-[var(--text)]">
-              {artifact.title}
+            <div className="truncate text-[13px] font-medium text-[var(--text)]">
+              {artifact.title} <span className="text-[var(--muted-soft)]">· {kind}{lang ? ` · ${lang}` : ""}</span>
             </div>
-            {producedBy.length > 0 && (
-              <div className="truncate text-[11px] text-[var(--muted-soft)]">
-                Produced by {producedBy.join(", ")}
-              </div>
-            )}
-            <div className="text-[11px] lowercase text-[var(--muted-soft)]">
-              {kind}
-              {kind === "code" && lang ? ` · ${lang}` : ""}
-              {isFileArtifactKind(kind) && lang ? ` · ${lang}` : ""}
+            <div className="truncate text-[11px] text-[var(--muted-soft)]">
               {saveState === "saving"
                 ? " · saving…"
                 : saveState === "saved"
@@ -756,6 +748,7 @@ export function ArtifactPanel() {
                       : artifact.local
                         ? " · this device"
                         : " · draft"}
+              {producedBy.length > 0 ? ` · Produced by ${producedBy.join(", ")}` : ""}
             </div>
           </div>
         </div>
