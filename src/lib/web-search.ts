@@ -215,7 +215,7 @@ async function searchDuckDuckGoHtml(
     body: `q=${encodeURIComponent(query)}`,
     redirect: "follow",
   });
-  if (!res.ok) return [];
+  if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
 
   const html = await res.text();
   if (!html || /anomaly|captcha|challenge/i.test(html.slice(0, 2000))) {
@@ -264,7 +264,7 @@ async function searchWikipediaOnce(
       Accept: "application/json",
     },
   });
-  if (!searchRes.ok) return [];
+  if (searchRes.status !== 200) throw new Error(`HTTP ${searchRes.status}`);
   const searchParsed = await readJsonObject(searchRes);
   if (!searchParsed.ok) return [];
 
@@ -323,7 +323,7 @@ async function searchDuckDuckGoInstant(
       Accept: "application/json",
     },
   });
-  if (!res.ok) return [];
+  if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
 
   const parsed = await readJsonObject(res);
   if (!parsed.ok) return [];

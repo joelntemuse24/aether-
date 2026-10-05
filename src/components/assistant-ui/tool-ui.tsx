@@ -18,6 +18,7 @@ import {
 } from "@/lib/tools";
 import { filePreviewKind } from "@/lib/artifacts/file-card";
 import { normalizeArtifactKind } from "@/lib/artifacts/kinds";
+import { sandboxFileCards } from "@/lib/agent/publish-files";
 import { safeStringifyToolResult } from "@/lib/tool-part";
 
 /** Structural view of an assistant-ui enriched tool-call part. */
@@ -1674,6 +1675,40 @@ const BrowserActToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
   );
 };
 
+const SandboxToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
+  const running = usePartRunning(part);
+  const files = sandboxFileCards(part.result);
+  const result = part.result as { ok?: boolean; error?: string; data?: { error?: string } } | undefined;
+  const rawError = typeof result?.error === "string" ? result.error : result?.data?.error;
+  const error =
+    rawError && !rawError.includes("/") && !rawError.includes("\\") && !/sandbox:/i.test(rawError)
+      ? rawError
+      : undefined;
+  return (
+    <ToolShell
+      name={part.toolName === "sandbox_files" ? "Sandbox files" : "Sandbox"}
+      running={running}
+      error={part.isError}
+      stayOpen={files.length > 0 || !!error}
+    >
+      {files.map((file) => (
+        <FileChip
+          key={`${file.filename}:${file.downloadPath ?? "thread"}`}
+          title={file.title}
+          filename={file.filename}
+          bytes={file.bytes}
+          downloadPath={file.downloadPath}
+          content={file.content}
+          persisted={file.persisted}
+          hint={file.hint}
+          running={running}
+        />
+      ))}
+      {error && !running ? <p className="text-[11px] text-[var(--error-text)]">{error}</p> : null}
+    </ToolShell>
+  );
+};
+
 /* ─── Generic fallback ─── */
 
 const GenericToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
@@ -1748,6 +1783,9 @@ export const ToolCallPart: FC<{ part: ToolPartLike }> = ({ part }) => {
       return <BrowserNavigateToolCall part={part} />;
     case TOOL_NAMES.browserAct:
       return <BrowserActToolCall part={part} />;
+    case "sandbox_exec":
+    case "sandbox_files":
+      return <SandboxToolCall part={part} />;
     default:
       return <GenericToolCall part={part} />;
   }

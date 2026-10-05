@@ -18,6 +18,22 @@ describe("agent tool results", () => {
     if (result.ok) assert.equal((result.data as { truncated?: boolean }).truncated, true);
   });
 
+  it("keeps a file data URL when the card metadata fits", () => {
+    const result = capToolResult(
+      toolOk({
+        filename: "charts/plot.png",
+        content: `data:image/png;base64,${"A".repeat(20_000)}`,
+      }),
+      500,
+    );
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      const data = result.data as { content?: string };
+      assert.match(data.content ?? "", /^data:image\/png;base64,/);
+      assert.equal((result as { truncated?: boolean }).truncated, undefined);
+    }
+  });
+
   it("caps a failure without dropping retryable", () => {
     const result = capToolResult(toolError("e".repeat(DEFAULT_TOOL_RESULT_CHARS), true), 120);
     assert.equal(result.ok, false);

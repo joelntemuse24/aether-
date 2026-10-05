@@ -87,6 +87,14 @@ describe("agent tool registry", () => {
       true,
     );
     assert.equal(
+      agentToolNeedsConfirmation({ name: "sandbox_exec", risk: "write", mode: "ask" }),
+      false,
+    );
+    assert.equal(
+      agentToolNeedsConfirmation({ name: "memory_write", risk: "write", mode: "ask" }),
+      true,
+    );
+    assert.equal(
       agentToolNeedsConfirmation({
         name: "memory_write",
         risk: "write",

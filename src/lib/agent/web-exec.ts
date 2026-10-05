@@ -5,14 +5,24 @@
 
 import { browsePage, fetchUrlText } from "@/lib/connectors/browse-page";
 import { resolveCurrentTime } from "@/lib/current-time";
-import { runWebSearch } from "@/lib/web-search";
 import { toolError, toolOk, type ToolResult } from "./results";
+import { postTurnCallback } from "./turn-callback";
+
+export const SEARCH_UNAVAILABLE = "Search is unavailable this turn.";
+export const SEARCH_FAILED = "Search failed.";
 
 export type WebExecDeps = {
   search?: (query: string) => Promise<unknown>;
   fetchUrl?: typeof fetchUrlText;
   browse?: typeof browsePage;
   now?: Date;
+  callback?: {
+    turnToken: string;
+    origin: string | null;
+    abortSignal?: AbortSignal;
+    fetchImpl?: typeof fetch;
+    checkOrigin?: (origin: string) => Promise<boolean>;
+  };
 };
 
 function record(input: unknown): Record<string, unknown> {
@@ -24,6 +34,15 @@ function record(input: unknown): Record<string, unknown> {
 
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function searchPayload(payload: unknown): ToolResult {
+  if (payload && typeof payload === "object" && (payload as { ok?: unknown }).ok === false) {
+    const error = (payload as { error?: unknown }).error;
+    const message = typeof error === "string" && error.trim() ? error.trim().slice(0, 400) : SEARCH_FAILED;
+    return toolError(message, true);
+  }
+  return toolOk(payload);
 }
 
 function safeError(error: unknown, fallback: string): string {
@@ -44,9 +63,26 @@ export async function executeWebTool(
     const query = text(args.query).trim();
     if (!query) return toolError("query is required.", false);
     try {
-      return toolOk(await (deps.search ?? runWebSearch)(query));
+      const payload = deps.search
+        ? await deps.search(query)
+        : deps.callback
+          ? await postTurnCallback({
+              name: "web_search",
+              args: { query },
+              turnToken: deps.callback.turnToken,
+              origin: deps.callback.origin,
+              abortSignal: deps.callback.abortSignal,
+              fetchImpl: deps.callback.fetchImpl,
+              checkOrigin: deps.callback.checkOrigin,
+              unavailable: SEARCH_UNAVAILABLE,
+              failed: SEARCH_FAILED,
+            })
+          : null;
+      if (!payload) return toolError(SEARCH_UNAVAILABLE, false);
+      if (deps.search) return searchPayload(payload);
+      return payload as ToolResult;
     } catch {
-      return toolError("Search failed.", true);
+      return toolError(SEARCH_FAILED, true);
     }
   }
   if (name === "fetch_url") {

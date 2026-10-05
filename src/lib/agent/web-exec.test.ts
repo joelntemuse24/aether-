@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { executeWebTool } from "./web-exec";
+import { executeNativeTool } from "./execute-native";
+import { SEARCH_UNAVAILABLE, executeWebTool } from "./web-exec";
 
 describe("native web tools", () => {
   it("returns the clock without a network call", async () => {
@@ -40,5 +41,47 @@ describe("native web tools", () => {
     );
     assert.equal(query, "seals");
     assert.equal(result.ok, true);
+  });
+
+  it("surfaces a failed search as an error the model can see", async () => {
+    const result = await executeWebTool(
+      "web_search",
+      { query: "eur usd" },
+      { search: async () => ({ ok: false, error: "No search results. (duckduckgo: HTTP 202)" }) },
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.error, /HTTP 202/);
+  });
+
+  it("does not scrape from the VM when search cannot call back", async () => {
+    const result = await executeWebTool("web_search", { query: "eur usd" });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error, SEARCH_UNAVAILABLE);
+  });
+
+  it("routes web_search through the Vercel turn token", async () => {
+    let auth = "";
+    let body = "";
+    const result = await executeNativeTool({
+      name: "web_search",
+      args: { query: "fed rate" },
+      turnToken: "header-turn-token",
+      callbackOrigin: "https://app.example",
+      checkOrigin: async () => true,
+      fetchImpl: async (url, init) => {
+        auth = new Headers(init?.headers).get("authorization") ?? "";
+        body = String(init?.body ?? "");
+        assert.equal(String(url), "https://app.example/api/hermes/aether-tools");
+        return new Response(
+          JSON.stringify({ ok: false, error: "No search results. (duckduckgo: HTTP 202)" }),
+          { status: 200 },
+        );
+      },
+    });
+    assert.equal(auth, "Bearer header-turn-token");
+    assert.match(body, /"name":"web_search"/);
+    assert.equal(body.includes("header-turn-token"), false);
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.error, /HTTP 202/);
   });
 });
