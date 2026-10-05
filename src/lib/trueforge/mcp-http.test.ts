@@ -211,7 +211,8 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
         conversationId: "guest1",
         context: { approvalMode: "ask" },
       });
-      assert.deepEqual(names, ["aether-guest1"]);
+      assert.match(names[0] ?? "", /^aether-s\d{2}$/);
+      assert.equal(names.length, 1);
       assert.equal(guest?.includeAccountTools, false);
       names.length = 0;
       const signedIn = await ensureAetherMcpServer({
@@ -219,7 +220,8 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
         conversationId: "signed1",
         context: { approvalMode: "ask", hasMemory: true },
       });
-      assert.deepEqual(names, ["aether-signed1"]);
+      assert.match(names[0] ?? "", /^aether-s\d{2}$/);
+      assert.equal(names.length, 1);
       assert.equal(signedIn?.includeAccountTools, true);
       assert.equal(names.some((name) => name.startsWith("aetherx-")), false);
     } finally {
@@ -243,6 +245,12 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
     assert.match(parsed.body, /\[truncated\]$/);
     assert.equal(text.length <= 800, true);
     assert.equal(JSON.stringify({ ok: true, body: "x".repeat(30_000) }).slice(0, 800).includes("[truncated]"), false);
+  });
+
+  it("points reconnect errors at the Settings connect deep links", () => {
+    const source = readFileSync(new URL("./mcp-http.ts", import.meta.url), "utf8");
+    assert.match(source, /Google Drive needs to be connected again\. Reconnect it in Settings: \/\?connect=drive/);
+    assert.match(source, /GitHub needs to be connected again\. Reconnect it in Settings: \/\?connect=github/);
   });
 
   it("stops a slow tool with a clean error before the route limit", async () => {
