@@ -75,6 +75,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const [query, setQuery] = useState("");
   const [projectsExpanded, setProjectsExpanded] = useState(false);
   const [artifactsExpanded, setArtifactsExpanded] = useState(false);
+  const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
 
   useEffect(() => {
     void refreshSaved();
@@ -91,6 +92,21 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       expandSidebar: collapsed ? onToggle : undefined,
     });
   };
+
+  const signOutConfirm = (
+    <SoftConfirm
+      open={signOutConfirmOpen}
+      title="Sign out?"
+      description="You'll need to sign in again. Drive and GitHub connections clear on this device."
+      confirmLabel="Sign out"
+      cancelLabel="Cancel"
+      destructive
+      onClose={() => setSignOutConfirmOpen(false)}
+      onConfirm={() => {
+        void signOut({ callbackUrl: "/" });
+      }}
+    />
+  );
 
   if (vault.vaultOpen && !collapsed) {
     return (
@@ -198,7 +214,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           {isAuthenticated ? (
             <button
               type="button"
-              onClick={() => void signOut({ callbackUrl: "/" })}
+              onClick={() => setSignOutConfirmOpen(true)}
               className="mb-1 flex size-7 items-center justify-center overflow-hidden rounded-full text-[11px] font-medium text-[var(--text)]"
               style={{ background: "var(--elevated-deep)" }}
               aria-label="Sign out"
@@ -248,6 +264,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             )}
           </button>
         </aside>
+        {signOutConfirm}
         {vault.vaultFloating && (
           <FloatingVault
             title={vault.title}
@@ -383,7 +400,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             ) : isAuthenticated ? (
               <button
                 type="button"
-                onClick={() => void signOut({ callbackUrl: "/" })}
+                onClick={() => setSignOutConfirmOpen(true)}
                 className="ml-1 flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full text-[10px] font-medium text-[var(--text)]"
                 style={{ background: "var(--elevated-deep)" }}
                 aria-label="Sign out"
@@ -434,6 +451,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </div>
         </div>
       </aside>
+      {signOutConfirm}
       {vault.vaultFloating && (
         <FloatingVault
           title={vault.title}
