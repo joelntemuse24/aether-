@@ -146,6 +146,9 @@ describe("harness rules", () => {
       assert.equal(hosted.includes(name), false, name);
     }
     assert.doesNotMatch(hosted, /SKILL\.md|\bskills\/[a-z0-9_.-]+/i);
+    assert.doesNotMatch(hosted, /clock tool/i);
+    assert.doesNotMatch(hosted, /extract\/preview tools/i);
+    assert.doesNotMatch(hosted, /confirmation-gated/i);
     assert.deepEqual(toolNamesInPrompt(hosted, catalog), [...web].sort());
     assert.match(hosted, /relative paths and do not guess absolute ones/);
     assert.match(hosted, /pypi\.org and github\.com/);

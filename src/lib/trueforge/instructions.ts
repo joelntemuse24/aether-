@@ -135,8 +135,21 @@ const UNATTACHED_GUIDE_NAMES = [
   "skill_downloader",
 ];
 
+/** Phrases that point at tools without a literal id, and the ids that make them valid. */
+const UNATTACHED_GUIDE_PHRASES: ReadonlyArray<{ pattern: RegExp; tools: readonly string[] }> = [
+  { pattern: /extract\/preview tools/i, tools: ["browser_act", "browser_navigate"] },
+  { pattern: /confirmation-gated/i, tools: ["request_confirmation"] },
+];
+
 function guideLineNamesUnattached(line: string, attached: readonly string[]): boolean {
   if (/SKILL\.md|\bskills\/[a-z0-9_.-]+/i.test(line)) return true;
+  if (
+    UNATTACHED_GUIDE_PHRASES.some(
+      ({ pattern, tools }) => pattern.test(line) && !tools.some((name) => attached.includes(name)),
+    )
+  ) {
+    return true;
+  }
   return UNATTACHED_GUIDE_NAMES.some(
     (name) => !attached.includes(name) && new RegExp(`\\b${name}\\b`).test(line),
   );
@@ -261,9 +274,7 @@ export function trueforgeClockLine(now = new Date(), timeZone?: string | null): 
   } else if (zone) {
     parts.push(`User timezone: ${zone}.`);
   }
-  parts.push(
-    "Use this date and time. Call a clock tool only if you need a time more precise than the second.",
-  );
+  parts.push("Use this date and time.");
   return parts.join(" ");
 }
 

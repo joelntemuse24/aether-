@@ -22,11 +22,31 @@ import {
   HOSTED_DEFAULT_MODEL_FQN,
   HOSTED_DEFAULT_MODEL_ID,
   HOSTED_DEFAULT_MODEL_LABEL,
+  HOSTED_FREE_FALLBACK_MODEL_FQN,
   isHostedDefaultModel,
 } from "@/lib/hosted/default-model";
 
-/** A short pause before the hosted default's single retry, so a rate-limit window can pass. */
-export const HOSTED_RETRY_DELAY_MS = 1_500;
+/** Pause before the hosted default's single retry. The shared upstream pool needs seconds to free up. */
+export const HOSTED_RETRY_DELAY_MS = 15_000;
+
+const RATE_LIMIT_RE = /\b429\b|rate.?limit|too many requests/i;
+
+/** True when the hosted default is still rate limited after its delayed retry. */
+export function shouldFailoverHostedTurn(input: {
+  modelId: string;
+  failedBeforeOutput: boolean;
+  errorText: string;
+  userAborted: boolean;
+  attempt: number;
+}): boolean {
+  return (
+    isHostedDefaultModel(input.modelId) &&
+    !input.userAborted &&
+    input.failedBeforeOutput &&
+    input.attempt === 1 &&
+    RATE_LIMIT_RE.test(input.errorText)
+  );
+}
 
 /** Sidecar model name for a hosted model id. */
 export function hostedModelFqn(modelId: string): string {
@@ -135,6 +155,8 @@ export async function driveTrueForgeTurn(input: {
   let failed = false;
   let errorText = "";
   let turnId = "";
+  // The hosted default keeps a streamed answer and drops the busy error. Other models still show theirs.
+  const keepsPartialAnswer = () => sawText && isHostedDefaultModel(input.modelId ?? "");
   const emit = (chunk: UiChunk) => {
     if (chunk.type === "text-delta") sawText = true;
     if (CONTENT_TYPES.has(String(chunk.type))) sawContent = true;
@@ -142,7 +164,7 @@ export async function driveTrueForgeTurn(input: {
       failed = true;
       const raw = String(chunk.errorText ?? "");
       if (raw) errorText = raw;
-      if (!sawContent) return;
+      if (!sawContent || keepsPartialAnswer()) return;
       input.write({
         ...chunk,
         errorText: hostedTurnErrorCopy(raw || errorText, input.modelId ?? ""),
@@ -158,6 +180,11 @@ export async function driveTrueForgeTurn(input: {
     })) {
       emit(chunk);
     }
+  };
+  // Tools still open after the turn ended would leave the client waiting. The answer text stays.
+  const settleOpenTools = () => {
+    const openTools = [...state.openTools.entries()].map(([id, name]) => ({ id, name }));
+    for (const chunk of settleCutOffChunks({ sawText: true, openTools })) emit(chunk);
   };
   const emitSandboxFiles = async () => {
     for (const chunk of flushSandboxHold(state)) emit(chunk);
@@ -214,8 +241,11 @@ export async function driveTrueForgeTurn(input: {
     const message = error instanceof Error ? error.message : "The harness turn failed.";
     await emitSandboxFiles();
     if (!sawContent) return { failedBeforeOutput: true, wroteError: false, errorText: message };
-    input.write({ type: "error", errorText: hostedTurnErrorCopy(message, input.modelId ?? "") });
     for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
+    settleOpenTools();
+    if (!keepsPartialAnswer()) {
+      input.write({ type: "error", errorText: hostedTurnErrorCopy(message, input.modelId ?? "") });
+    }
     return { failedBeforeOutput: false, wroteError: true, errorText: message };
   }
   await emitSandboxFiles();
@@ -226,6 +256,7 @@ export async function driveTrueForgeTurn(input: {
   }
   if (failed && !sawContent) return { failedBeforeOutput: true, wroteError: false, errorText };
   for (const chunk of closeTrueForgeUi(state)) input.write(chunk);
+  if (failed) settleOpenTools();
   return { failedBeforeOutput: false, wroteError: failed, errorText };
 }
 
@@ -349,7 +380,7 @@ export function isTurnActivityChunk(chunk: UiChunk): boolean {
 /** Short copy for the existing error chunk. Keeps the model-unavailable sentence. */
 export function hostedTurnErrorCopy(message: string, modelId: string): string {
   if (isHostedDefaultModel(modelId)) {
-    if (/\b429\b|rate.?limit|too many requests/i.test(message)) {
+    if (RATE_LIMIT_RE.test(message)) {
       return `${HOSTED_DEFAULT_MODEL_LABEL} is busy right now. Wait a minute, then use Retry.`;
     }
     if (/timed out|time limit|\btimeout\b|aborted/i.test(message)) {
@@ -433,7 +464,8 @@ export async function streamTrueForgeHostedChat(input: {
         void cancelSidecarTurn(session.id);
       };
       input.abortSignal?.addEventListener("abort", onClientStop);
-      for (let attempt = 0; attempt < 2; attempt++) {
+      // Attempt 0, one delayed retry, then one free-model failover for a rate-limited default.
+      for (let attempt = 0; attempt < 3; attempt++) {
         if (input.abortSignal?.aborted) break;
         const controller = new AbortController();
         const onUserAbort = () => controller.abort();
@@ -501,17 +533,26 @@ export async function streamTrueForgeHostedChat(input: {
         }
         if (sawByte || !outcome.failedBeforeOutput) break;
         if (input.abortSignal?.aborted) break;
-        if (
-          !shouldRetryHostedTurn({
-            modelId,
-            failedBeforeOutput: true,
-            errorText: outcome.errorText || "aborted",
-            userAborted: false,
-            attempt,
-          })
-        ) {
-          break;
+        const next = {
+          modelId,
+          failedBeforeOutput: true,
+          errorText: outcome.errorText || "aborted",
+          userAborted: false,
+          attempt,
+        };
+        if (shouldFailoverHostedTurn(next)) {
+          await cancelSidecarTurn(session.id);
+          // Same session and tools, free hosted model. Later sends start on the default again.
+          await trueforgeSessionId({
+            conversationId,
+            owner: input.owner,
+            modelName: HOSTED_FREE_FALLBACK_MODEL_FQN,
+            instructions,
+            toolContext: input.toolContext,
+          });
+          continue;
         }
+        if (!shouldRetryHostedTurn(next)) break;
         await cancelSidecarTurn(session.id);
         if (isHostedDefaultModel(modelId)) await new Promise((resolve) => setTimeout(resolve, HOSTED_RETRY_DELAY_MS));
       }

@@ -4,6 +4,10 @@ import {
   HOSTED_DEFAULT_MODEL_ID,
   HOSTED_DEFAULT_MODEL_RESOURCE,
   HOSTED_DEFAULT_REASONING_EFFORT,
+  HOSTED_FREE_FALLBACK_CONTEXT_LENGTH,
+  HOSTED_FREE_FALLBACK_MAX_OUTPUT_TOKENS,
+  HOSTED_FREE_FALLBACK_MODEL_ID,
+  HOSTED_FREE_FALLBACK_MODEL_RESOURCE,
   HOSTED_OPENROUTER_PROVIDER,
 } from "@/lib/hosted/default-model";
 
@@ -79,6 +83,13 @@ export function modelProfile(id: string): ModelProfile {
       // Declared so the sidecar accepts a session reasoning effort for Qwen.
       reasoningEfforts: ["low", "medium", "high"],
       reasoningEffort: HOSTED_DEFAULT_REASONING_EFFORT,
+    };
+  }
+  if (bare.startsWith("gemma")) {
+    return {
+      contextLength: HOSTED_FREE_FALLBACK_CONTEXT_LENGTH,
+      maxOutputTokens: HOSTED_FREE_FALLBACK_MAX_OUTPUT_TOKENS,
+      reasoningEfforts: [],
     };
   }
   if (bare.includes("claude")) {
@@ -194,7 +205,7 @@ function buzzModel(modelId: string, name: string): AetherConfiguredModel {
 }
 
 /**
- * Hosted OpenRouter provider for the default model. Seeded only from the
+ * Hosted OpenRouter provider for the default model and its free fallback. Seeded only from the
  * explicit hosted key AETHER_HOSTED_OPENROUTER_API_KEY, never from
  * OPENROUTER_API_KEY or a user's key.
  */
@@ -208,7 +219,10 @@ export function hostedOpenRouterManifest(
     name: HOSTED_OPENROUTER_PROVIDER,
     baseUrl: DEFAULT_OPENROUTER_BASE_URL,
     auth: { apiKey: key },
-    models: [buzzModel(HOSTED_DEFAULT_MODEL_ID, HOSTED_DEFAULT_MODEL_RESOURCE)],
+    models: [
+      buzzModel(HOSTED_DEFAULT_MODEL_ID, HOSTED_DEFAULT_MODEL_RESOURCE),
+      buzzModel(HOSTED_FREE_FALLBACK_MODEL_ID, HOSTED_FREE_FALLBACK_MODEL_RESOURCE),
+    ],
   };
 }
 

@@ -402,6 +402,7 @@ export function chunksForTrueForgeEvent(
       if (!call || typeof call !== "object") continue;
       const toolCallId = String((call as { id?: string }).id ?? "");
       if (!toolCallId) continue;
+      state.openTools.delete(toolCallId);
       const preview = toolPreview(state, toolCallId);
       const callConfirmation =
         call && typeof call === "object" && "confirmationId" in call
@@ -490,9 +491,21 @@ export function chunksForTrueForgeEvent(
   return chunks;
 }
 
+export const TOOL_DID_NOT_FINISH = "This step did not finish.";
+
+/** Close every tool that never got a response, so the thread stops running. */
 export function closeTrueForgeUi(state: TrueForgeUiState): UiChunk[] {
   const chunks: UiChunk[] = [];
   flushPendingTools(state, chunks);
+  for (const toolCallId of state.openTools.keys()) {
+    chunks.push({
+      type: "tool-output-available",
+      toolCallId,
+      output: { ok: false, error: TOOL_DID_NOT_FINISH },
+      providerExecuted: true,
+    });
+  }
+  state.openTools.clear();
   if (state.reasoningId) chunks.push({ type: "reasoning-end", id: state.reasoningId });
   if (state.textId) chunks.push({ type: "text-end", id: state.textId });
   return chunks;

@@ -161,6 +161,11 @@ echo "$*" >> "$NPM_LOG"
         res.end('{"data":{}}');
         return;
       }
+      if (req.url === "/api/v1/models") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end('{"data":[{"name":"buzz/gpt-5-6-luna"},{"name":"openrouter/qwen3-8-27b-free"}]}');
+        return;
+      }
       res.writeHead(404);
       res.end("missing");
     });
@@ -174,6 +179,7 @@ echo "$*" >> "$NPM_LOG"
       PATH: `${bin}:${process.env.PATH ?? ""}`,
       AETHER_REPO_ROOT: repo,
       AETHER_SIDECAR_HEALTH_URL: healthUrl,
+      AETHER_SIDECAR_MODELS_URL: `http://127.0.0.1:${address.port}/api/v1/models`,
       AETHER_HEALTH_GATE_SECONDS: "0",
       AETHER_HEALTH_GATE_INTERVAL: "0",
       PM2_LOG: log,
@@ -244,5 +250,62 @@ exit 9
     assert.equal(branch, "master");
     const commands = fs.readFileSync(log, "utf8").trim().split("\n");
     assert.equal(commands.filter((line) => line === "reload aether").length, 2);
+  });
+
+  it("resets master when capabilities is 200 but the default model is not listed", async () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "aether-gate-model-"));
+    const bin = path.join(repo, "bin");
+    fs.mkdirSync(bin);
+    git(repo, ["init", "-b", "master"]);
+    git(repo, ["config", "user.email", "gate@example.com"]);
+    git(repo, ["config", "user.name", "gate"]);
+    fs.writeFileSync(path.join(repo, "package-lock.json"), "{\"lock\":1}\n");
+    git(repo, ["add", "package-lock.json"]);
+    git(repo, ["commit", "-m", "base"]);
+    const previous = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
+    fs.writeFileSync(path.join(repo, "README"), "bad\n");
+    git(repo, ["add", "README"]);
+    git(repo, ["commit", "-m", "bad"]);
+    const state = path.join(repo, "pm2.json");
+    const log = path.join(repo, "pm2.log");
+    fs.writeFileSync(state, JSON.stringify([{ name: "aether", pid: 10, pm2_env: { restart_time: 1 } }]));
+    writeExec(
+      path.join(bin, "pm2"),
+      `#!/bin/bash
+echo "$*" >> "$PM2_LOG"
+if [[ "\$1" == "jlist" ]]; then cat "$PM2_STATE"; exit 0; fi
+if [[ "\$1" == "reload" && "\$2" == "aether" && -z "\${3:-}" ]]; then exit 0; fi
+exit 9
+`,
+    );
+    const server = http.createServer((req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(req.url === "/api/v1/models" ? '{"data":[{"name":"buzz/gpt-5-6-luna"}]}' : '{"data":{}}');
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("no port");
+    const base = `http://127.0.0.1:${address.port}/api/v1`;
+    const env = {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      AETHER_REPO_ROOT: repo,
+      AETHER_SIDECAR_HEALTH_URL: `${base}/capabilities`,
+      AETHER_SIDECAR_MODELS_URL: `${base}/models`,
+      AETHER_HEALTH_GATE_SECONDS: "0",
+      AETHER_HEALTH_GATE_INTERVAL: "0",
+      PM2_LOG: log,
+      PM2_STATE: state,
+    };
+    const run = await runBash([script, previous], env);
+    assert.equal(run.status, 1, run.stderr || run.stdout);
+    assert.match(run.stderr, /does not list openrouter\/qwen3-8-27b-free/);
+    const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
+    assert.equal(head, previous);
+
+    git(repo, ["reset", "--hard", "HEAD@{1}"]);
+    const skipped = await runBash([script, previous], { ...env, AETHER_SIDECAR_REQUIRED_MODEL: "" });
+    server.close();
+    assert.equal(skipped.status, 0, skipped.stderr || skipped.stdout);
   });
 });
