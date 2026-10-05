@@ -13,6 +13,17 @@ import {
 } from "@/lib/conversations/cloud-client";
 
 const DISMISS_KEY = "aether:migrate-dismissed";
+/** Wait after sign-in so the banner never competes with the first message. */
+const SHOW_DELAY_MS = 4000;
+
+function isComposing(): boolean {
+  const el = document.activeElement;
+  if (!(el instanceof HTMLElement)) return false;
+  if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
+    return el.value.trim().length > 0;
+  }
+  return el.isContentEditable && (el.textContent ?? "").trim().length > 0;
+}
 
 /**
  * After sign-in, offer to upload browser-local chats into cloud history —
@@ -32,6 +43,7 @@ export function SyncLocalChatsBanner() {
     }
 
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     void (async () => {
       try {
         if (localStorage.getItem(DISMISS_KEY) === "1") return;
@@ -41,7 +53,16 @@ export function SyncLocalChatsBanner() {
         const local = exportLocalConversationsForMigrate();
         if (local.length === 0) return;
         setPendingCount(local.length);
-        setVisible(true);
+        // Defer past first paint, and keep waiting while the user is mid-compose.
+        const reveal = () => {
+          if (cancelled) return;
+          if (isComposing()) {
+            timer = setTimeout(reveal, SHOW_DELAY_MS);
+            return;
+          }
+          setVisible(true);
+        };
+        timer = setTimeout(reveal, SHOW_DELAY_MS);
       } catch {
         // ignore
       }
@@ -49,6 +70,7 @@ export function SyncLocalChatsBanner() {
 
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, [status]);
 

@@ -8,8 +8,15 @@ export const MAX_SIGNED_TOOL_TOKENS = 200;
 let loggedMissingOrigin = false;
 let mcpDeleteUnsupported = false;
 
+/** Fixed pool of MCP server names. The sidecar inventory never exceeds this many aether rows. */
+export const MAX_AETHER_MCP_SLOTS = 48;
+/** A lease idle this long is free for another conversation. */
+export const AETHER_MCP_SLOT_IDLE_TTL_MS = 30 * 60 * 1000;
+const slotLeases = new Map<string, { slot: number; at: number }>();
+
 export function resetAetherMcpRegisterState(): void {
   signedTokens.clear();
+  slotLeases.clear();
   loggedMissingOrigin = false;
   mcpDeleteUnsupported = false;
 }
@@ -34,19 +41,87 @@ export function aetherPublicOrigin(
   return null;
 }
 
-export function aetherMcpServerName(conversationId: string): string {
-  return aetherMcpServerNames(conversationId).direct;
+export function aetherMcpServerName(conversationId: string, now = Date.now()): string {
+  return aetherMcpServerNames(conversationId, now).direct;
+}
+
+function slotLabel(slot: number): string {
+  return `s${String(slot).padStart(2, "0")}`;
+}
+
+/** Stable starting slot so separate app instances rarely pick the same free slot. */
+function preferredSlot(conversationId: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < conversationId.length; i++) {
+    hash = Math.imul(hash ^ conversationId.charCodeAt(i), 16777619) >>> 0;
+  }
+  return (hash % MAX_AETHER_MCP_SLOTS) + 1;
+}
+
+export function aetherMcpSlotLeaseCount(): number {
+  return slotLeases.size;
+}
+
+/** Slot currently leased to a conversation, without creating or touching a lease. */
+export function leasedAetherMcpSlotName(conversationId: string): string | null {
+  const lease = slotLeases.get(conversationId);
+  return lease ? `aether-${slotLabel(lease.slot)}` : null;
 }
 
 /**
- * One server per conversation. Standalone TrueForge does not forward per-turn
- * headers to MCP (`gatewayTurnHeaders` is empty unless TrueFoundry gateway
- * mode is on), so a single shared server would reuse one user's context.
+ * Free a conversation's slot and return its server name (null when it holds none),
+ * so the caller can try a DELETE. Slot names are pooled, so a name must not be
+ * deleted for a conversation that no longer holds it.
  */
-export function aetherMcpServerNames(conversationId: string): { direct: string; deferred: string } {
-  const clean = conversationId.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const suffix = (clean || "chat").slice(0, 32);
-  return { direct: `aether-${suffix}`, deferred: `aetherx-${suffix}` };
+export function releaseAetherMcpSlot(conversationId: string): string | null {
+  const name = leasedAetherMcpSlotName(conversationId);
+  slotLeases.delete(conversationId);
+  return name;
+}
+
+function leaseSlot(conversationId: string, now: number): number {
+  const held = slotLeases.get(conversationId);
+  if (held) {
+    // Re-insert so Map order tracks recency.
+    slotLeases.delete(conversationId);
+    slotLeases.set(conversationId, { slot: held.slot, at: now });
+    return held.slot;
+  }
+  const taken = new Map<number, { id: string; at: number }>();
+  for (const [id, lease] of slotLeases) taken.set(lease.slot, { id, at: lease.at });
+  const start = preferredSlot(conversationId);
+  let slot = 0;
+  for (let i = 0; i < MAX_AETHER_MCP_SLOTS && !slot; i++) {
+    const candidate = ((start - 1 + i) % MAX_AETHER_MCP_SLOTS) + 1;
+    const owner = taken.get(candidate);
+    if (!owner || now - owner.at > AETHER_MCP_SLOT_IDLE_TTL_MS) slot = candidate;
+  }
+  if (!slot) {
+    // Pool is full of live leases: take the least recently used one.
+    let oldest: { slot: number; at: number } | null = null;
+    for (const [candidate, owner] of taken) {
+      if (!oldest || owner.at < oldest.at) oldest = { slot: candidate, at: owner.at };
+    }
+    slot = oldest?.slot ?? start;
+  }
+  const previous = taken.get(slot);
+  if (previous) slotLeases.delete(previous.id);
+  slotLeases.set(conversationId, { slot, at: now });
+  return slot;
+}
+
+/**
+ * Pooled MCP server names (`aether-s01`). Standalone TrueForge does not forward
+ * per-turn headers to MCP (`gatewayTurnHeaders` is empty unless TrueFoundry gateway
+ * mode is on), so each conversation leases a slot and the upsert sets that slot's
+ * auth headers. The sidecar cannot DELETE rows, so names are reused, never grown.
+ */
+export function aetherMcpServerNames(
+  conversationId: string,
+  now = Date.now(),
+): { direct: string; deferred: string } {
+  const label = slotLabel(leaseSlot(conversationId, now));
+  return { direct: `aether-${label}`, deferred: `aetherx-${label}` };
 }
 
 /** Fields safe to seal. Connector tokens are resolved on the tool call. */

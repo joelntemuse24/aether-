@@ -14,6 +14,7 @@ import {
   ensureAetherMcpServer,
   evictSignedToolTokens,
   needsDeferredAetherTools,
+  releaseAetherMcpSlot,
   removeAetherMcpServer,
 } from "./mcp-register";
 import {
@@ -122,7 +123,8 @@ export async function pruneTrueForgeCaches(now = Date.now()): Promise<string[]> 
   const dropped = evictIdleTrueForgeSessions(now);
   evictSignedToolTokens(now);
   for (const key of dropped) {
-    await removeAetherMcpServer(aetherMcpServerNames(conversationIdFromSessionCacheKey(key)).direct);
+    const slotName = releaseAetherMcpSlot(conversationIdFromSessionCacheKey(key));
+    if (slotName) await removeAetherMcpServer(slotName);
   }
   return dropped;
 }

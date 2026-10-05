@@ -8,12 +8,14 @@ import { useAuiState } from "@assistant-ui/react";
 import { useHarness } from "@/providers/harness-provider";
 import { MAX_AUTO_CONTINUES } from "@/lib/chat-continue";
 import {
+  THINKING_WORD,
   closeActivityClock,
   collectWebSearchHits,
   compactLiveSteps,
   deriveAgentActivity,
   formatActivityElapsed,
   activityClockShouldRun,
+  liveReasoningDisclosure,
   liveWorkOneLiner,
   recalledActivityElapsed,
   shouldRevealActivityElapsed,
@@ -108,6 +110,9 @@ function LiveActivity({
   const liveSteps = compactLiveSteps(view);
   const label = toolLine ?? liveSteps[0]?.label ?? view.liveLine ?? "Thinking";
   const showElapsed = shouldRevealActivityElapsed(view.elapsedSeconds);
+  const liveReasoning = liveReasoningDisclosure(view);
+  const [open, setOpen] = useState(false);
+  const reasoningId = useId();
   return (
     <div
       className={cn(
@@ -132,6 +137,25 @@ function LiveActivity({
           </span>
         ) : null}
       </div>
+      {liveReasoning ? (
+        <>
+          <button
+            type="button"
+            className="aether-activity__summary-btn"
+            aria-expanded={open}
+            aria-controls={reasoningId}
+            onClick={() => setOpen((v) => !v)}
+          >
+            <span>{THINKING_WORD}</span>
+            <ChevronDownIcon className="aether-activity__caret" aria-hidden />
+          </button>
+          {open ? (
+            <div id={reasoningId} className="aether-activity__detail">
+              <p className="aether-activity__reasoning">{liveReasoning}</p>
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

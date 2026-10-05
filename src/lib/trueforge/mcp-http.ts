@@ -317,10 +317,10 @@ async function runTool(name: string, args: Json, ctx: TrueForgeToolContext | nul
   if (!ctx) return textResult({ ok: false, error: "This tool needs a signed-in chat." }, true);
   const live = await liveContext(ctx);
   if (ctx.hasDrive && !live.driveAccessToken) {
-    return textResult({ ok: false, error: "Google Drive needs to be connected again." }, true);
+    return textResult({ ok: false, error: "Google Drive needs to be connected again. Reconnect it in Settings: /?connect=drive" }, true);
   }
   if (ctx.hasGitHub && name.startsWith("github_") && !live.githubAccessToken) {
-    return textResult({ ok: false, error: "GitHub needs to be connected again." }, true);
+    return textResult({ ok: false, error: "GitHub needs to be connected again. Reconnect it in Settings: /?connect=github" }, true);
   }
   const result = await executeAetherTool({
     name,
