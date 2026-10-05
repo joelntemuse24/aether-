@@ -3,6 +3,7 @@ import {
   HOSTED_DEFAULT_MAX_OUTPUT_TOKENS,
   HOSTED_DEFAULT_MODEL_ID,
   HOSTED_DEFAULT_MODEL_RESOURCE,
+  HOSTED_DEFAULT_REASONING_EFFORT,
   HOSTED_OPENROUTER_PROVIDER,
 } from "@/lib/hosted/default-model";
 
@@ -77,6 +78,7 @@ export function modelProfile(id: string): ModelProfile {
       maxOutputTokens: HOSTED_DEFAULT_MAX_OUTPUT_TOKENS,
       // Declared so the sidecar accepts a session reasoning effort for Qwen.
       reasoningEfforts: ["low", "medium", "high"],
+      reasoningEffort: HOSTED_DEFAULT_REASONING_EFFORT,
     };
   }
   if (bare.includes("claude")) {

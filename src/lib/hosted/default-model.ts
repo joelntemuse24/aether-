@@ -14,6 +14,12 @@ export const HOSTED_DEFAULT_MODEL_RESOURCE = "qwen3-8-27b-free";
 export const HOSTED_DEFAULT_MODEL_FQN = `${HOSTED_OPENROUTER_PROVIDER}/${HOSTED_DEFAULT_MODEL_RESOURCE}`;
 export const HOSTED_DEFAULT_CONTEXT_LENGTH = 262_144;
 export const HOSTED_DEFAULT_MAX_OUTPUT_TOKENS = 32_768;
+/**
+ * Sent as `reasoning_effort` on every hosted default turn. Without it Qwen
+ * thinks for 8k+ tokens (about 4 minutes) on a long question and the turn is
+ * cut off before any answer text. `low` answers the same question in under a minute.
+ */
+export const HOSTED_DEFAULT_REASONING_EFFORT = "low" as const;
 
 /** Picker group for the hosted default. */
 export const HOSTED_DEFAULT_GROUP = "Default" as const;

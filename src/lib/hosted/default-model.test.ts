@@ -41,6 +41,8 @@ describe("hosted default model", () => {
     assert.equal(isHostedDefaultModel(HOSTED_DEFAULT_MODEL_FQN), true);
     assert.equal(modelProfile(HOSTED_DEFAULT_MODEL_FQN).contextLength, 262_144);
     assert.deepEqual(modelProfile(HOSTED_DEFAULT_MODEL_FQN).reasoningEfforts, ["low", "medium", "high"]);
+    // Unbounded thinking ran past the turn budget with no answer text.
+    assert.equal(modelProfile(HOSTED_DEFAULT_MODEL_FQN).reasoningEffort, "low");
   });
 
   it("keeps Buzz hidden unless the flag is on", () => {
