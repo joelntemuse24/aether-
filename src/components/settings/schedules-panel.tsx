@@ -6,10 +6,12 @@ import { cn } from "@/lib/utils";
 
 type Job = {
   id: string;
+  name: string;
   title: string;
   cron: string;
-  delivery: string;
   status: string;
+  timezone: string;
+  task: string;
 };
 
 export function OptionalServicesStatus() {
@@ -31,9 +33,7 @@ export function OptionalServicesStatus() {
   const row = (label: string, connected: boolean) => (
     <div className="flex items-center justify-between text-[12px]">
       <span className="text-[var(--text)]">{label}</span>
-      <span className="text-[var(--muted-soft)]">
-        {connected ? "Connected" : "Not connected"}
-      </span>
+      <span className="text-[var(--muted-soft)]">{connected ? "Connected" : "Not connected"}</span>
     </div>
   );
   return (
@@ -52,7 +52,6 @@ export function SchedulesPanel({ signedIn }: { signedIn: boolean }) {
   const [title, setTitle] = useState("Morning brief");
   const [prompt, setPrompt] = useState("");
   const [when, setWhen] = useState("every morning");
-  const [delivery, setDelivery] = useState<"inbox" | "email">("inbox");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -61,9 +60,14 @@ export function SchedulesPanel({ signedIn }: { signedIn: boolean }) {
     if (!signedIn) return;
     const res = await fetch("/api/schedules");
     if (!res.ok) return;
-    const body = (await res.json()) as { jobs?: Job[]; fires?: boolean };
+    const body = (await res.json()) as {
+      jobs?: Job[];
+      fires?: boolean;
+      note?: string;
+    };
     setJobs(body.jobs ?? []);
     setFires(!!body.fires);
+    setNote(body.note ?? null);
   }, [signedIn]);
 
   useEffect(() => {
@@ -71,25 +75,13 @@ export function SchedulesPanel({ signedIn }: { signedIn: boolean }) {
   }, [refresh]);
 
   if (!signedIn) {
-    return (
-      <p className="text-xs leading-relaxed text-[var(--muted)]">
-        Sign in with cloud storage to schedule a morning brief. Sends still wait
-        on a confirm card.
-      </p>
-    );
+    return <p className="text-xs leading-relaxed text-[var(--muted)]">Sign in with cloud storage to schedule a recurring run.</p>;
   }
 
   return (
     <div className="space-y-3">
-      <p className="text-xs leading-relaxed text-[var(--muted)]">
-        Recurring drafts only. Nothing is sent until you confirm that run.
-      </p>
-      {!fires ? (
-        <p className="text-xs text-[var(--muted-soft)]">
-          Saved automations will not fire until an operator enables scheduled
-          jobs.
-        </p>
-      ) : null}
+      <p className="text-xs leading-relaxed text-[var(--muted)]">Automations run an agent task on the schedule you choose.</p>
+      {!fires ? <p className="text-xs text-[var(--muted-soft)]">{note || "Automations need the hosted agent runtime."}</p> : null}
       <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
         <input
           value={title}
@@ -100,7 +92,7 @@ export function SchedulesPanel({ signedIn }: { signedIn: boolean }) {
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="What should be prepared?"
+          placeholder="What should the agent do?"
           rows={3}
           className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-[13px] text-[var(--text)]"
         />
@@ -121,28 +113,17 @@ export function SchedulesPanel({ signedIn }: { signedIn: boolean }) {
             </button>
           ))}
         </div>
-        <div className="flex gap-2 text-[12px] text-[var(--muted)]">
-          <label className="flex items-center gap-1.5">
-            <input
-              type="radio"
-              checked={delivery === "inbox"}
-              onChange={() => setDelivery("inbox")}
-            />
-            Chat draft
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input
-              type="radio"
-              checked={delivery === "email"}
-              onChange={() => setDelivery("email")}
-            />
-            Email draft
-          </label>
-        </div>
+        <input
+          value={when}
+          onChange={(e) => setWhen(e.target.value)}
+          aria-label="Schedule or five-field cron"
+          placeholder="Or enter a 5-field cron, such as 30 7 * * 1"
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-[12px] text-[var(--text)]"
+        />
         <Button
           type="button"
           size="sm"
-          disabled={busy || !prompt.trim()}
+          disabled={busy || !fires || !prompt.trim()}
           onClick={() => {
             setBusy(true);
             setError(null);
@@ -151,15 +132,12 @@ export function SchedulesPanel({ signedIn }: { signedIn: boolean }) {
               const res = await fetch("/api/schedules", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ title, prompt, when, delivery }),
+                body: JSON.stringify({ title, prompt, when }),
               });
-              const body = (await res.json().catch(() => ({}))) as {
-                error?: string;
-                note?: string;
-              };
+              const body = (await res.json().catch(() => ({}))) as { error?: string; note?: string };
               if (!res.ok) setError(body.error || "Could not save.");
               else {
-                setNote(body.note || "Saved. Confirm before any send.");
+                setNote(body.note || "Saved as a recurring run.");
                 setPrompt("");
                 await refresh();
               }
@@ -170,35 +148,46 @@ export function SchedulesPanel({ signedIn }: { signedIn: boolean }) {
           Schedule
         </Button>
         {error ? <p className="text-xs text-[var(--error-text)]">{error}</p> : null}
-        {note ? <p className="text-xs text-[var(--muted)]">{note}</p> : null}
+        {note && fires ? <p className="text-xs text-[var(--muted)]">{note}</p> : null}
       </div>
       {jobs.length > 0 ? (
         <ul className="space-y-2">
           {jobs.map((job) => (
-            <li
-              key={job.id}
-              className="flex items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
-            >
+            <li key={job.id} className="flex items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
               <div className="min-w-0">
                 <div className="truncate text-[13px] text-[var(--text)]">{job.title}</div>
-                <div className="text-[11px] text-[var(--muted-soft)]">
-                  {job.cron} · {job.delivery === "email" ? "email draft" : "chat draft"}
-                </div>
+                <div className="text-[11px] text-[var(--muted-soft)]">{job.cron} · {job.timezone} · {job.status}</div>
               </div>
-              <button
-                type="button"
-                className="text-xs text-[var(--muted)] hover:underline"
-                onClick={() => {
-                  void (async () => {
-                    await fetch(`/api/schedules?id=${encodeURIComponent(job.id)}`, {
-                      method: "DELETE",
-                    });
-                    await refresh();
-                  })();
-                }}
-              >
-                Remove
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  className="text-xs text-[var(--muted)] hover:underline"
+                  onClick={() => {
+                    void (async () => {
+                      await fetch("/api/schedules", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id: job.id, status: job.status === "paused" ? "active" : "paused" }),
+                      });
+                      await refresh();
+                    })();
+                  }}
+                >
+                  {job.status === "paused" ? "Resume" : "Pause"}
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-[var(--muted)] hover:underline"
+                  onClick={() => {
+                    void (async () => {
+                      await fetch(`/api/schedules?id=${encodeURIComponent(job.id)}`, { method: "DELETE" });
+                      await refresh();
+                    })();
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
             </li>
           ))}
         </ul>

@@ -55,6 +55,14 @@ Provision Postgres 16 and Redis 7 through the hosted compose profile or managed 
 
 TrueForge sessions do not migrate from SQLite; they are empty after cutover. Neon conversations remain in the Next app. Ask-user stays off, skills stay unset, and the native engine stays off. See [the Contabo cutover procedure](../deploy/trueforge/contabo-hosted-cutover.md) for migration, environment propagation, smoke checks, and rollback.
 
+## Schedules
+
+Settings → Automations uses the TrueForge `/api/v1/schedules` resources and keeps one named agent, `aether-scheduled`, for recurring runs. Standalone SQLite on Contabo fires schedules through the in-process dispatch loop. Hosted Postgres stores schedules through the API and needs the `start:controller` / `controller-main` process running so pending runs are dispatched. Schedules accept five-field cron expressions with a minimum interval of one hour. Schedule names follow ResourceName rules: 2–64 characters, lowercase, beginning with a letter, ending with a letter or number, and using hyphens between words.
+
+## Code Mode
+
+Code Mode becomes available automatically when sandbox capabilities are on. Contabo uses the local Unix socket transport; `CODE_MODE_SOCKET_PARENT` is an optional environment setting when the default socket location needs adjustment. There is no separate Aether Code Mode flag. NATS is used only by Daytona or TrueForge cloud providers. Aether does not enable generative UI.
+
 ## Deferred
 
 - Sandbox provider credentials (Daytona and others)
