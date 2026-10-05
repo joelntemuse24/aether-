@@ -1368,7 +1368,7 @@ describe("thread / composer copy stays honest", () => {
     );
     assert.doesNotMatch(recent, /uppercase/);
     assert.match(strip, /aether-pages-pill/);
-    assert.match(strip, /Web results/);
+    assert.match(strip, /Sources/);
     assert.match(strip, /sourcePagesLabel/);
     assert.match(readFileSync(new URL("./agent-activity.ts", import.meta.url), "utf8"), /pages/);
     assert.doesNotMatch(strip, /aether-source-card/);
