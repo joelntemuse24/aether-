@@ -52,6 +52,8 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as {
     confirmationId?: string;
     approved?: boolean;
+    response?: string;
+    content?: string;
     payload?: unknown;
   };
   const confirmationId =
@@ -62,17 +64,21 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  if (typeof body.approved !== "boolean") {
-    return NextResponse.json(
-      { error: "approved must be true or false." },
-      { status: 400 },
-    );
-  }
-
   if (confirmationId.startsWith("tf_")) {
-    const { resumeTrueForgeApproval } = await import("@/lib/trueforge/approvals");
-    const resumed = await resumeTrueForgeApproval(confirmationId, body.approved);
-    if (resumed) return resumed;
+    const { decodeTrueForgeApproval, resumeTrueForgeApproval, resumeTrueForgeToolResponse } = await import("@/lib/trueforge/approvals");
+    const decoded = decodeTrueForgeApproval(confirmationId);
+    if (!decoded) return NextResponse.json({ error: "Invalid confirmation id." }, { status: 400 });
+    const content = typeof body.response === "string" ? body.response : body.content;
+    if (decoded.kind === "response" || typeof content === "string") {
+      if (typeof content !== "string" || !content.trim()) {
+        return NextResponse.json({ error: "A response is required." }, { status: 400 });
+      }
+      return await resumeTrueForgeToolResponse(confirmationId, content);
+    }
+    if (typeof body.approved === "boolean") return await resumeTrueForgeApproval(confirmationId, body.approved);
+  }
+  if (typeof body.approved !== "boolean") {
+    return NextResponse.json({ error: "approved must be true or false." }, { status: 400 });
   }
 
   const peek = await peekConfirmation(confirmationId);
