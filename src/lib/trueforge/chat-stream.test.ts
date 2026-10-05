@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import {
   FIRST_BYTE_MS,
   CUT_OFF_ANSWER,
+  NO_ANSWER_CUT_OFF,
+  STREAM_IDLE_MS,
   driveTrueForgeTurn,
   hostedTurnErrorCopy,
   isTurnActivityChunk,
@@ -378,5 +380,28 @@ describe("TrueForge live stream", () => {
     assert.equal(outcome.wroteError, false);
     const empty = settleCutOffChunks({ sawText: false, openTools: [{ id: "call_exec", name: "exec" }] });
     assert.match(JSON.stringify(empty), /Stopped before this finished/);
+  });
+
+  it("does not blame a command when the model was still thinking at the cutoff", async () => {
+    assert.ok(STREAM_IDLE_MS > FIRST_BYTE_MS && STREAM_IDLE_MS < TURN_BUDGET_MS);
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield { type: "model.message.delta", reasoningContent: "Weighing prefill against decode." };
+      throw new Error("aborted");
+    }
+    const outcome = await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses",
+      cutoff: () => true,
+    });
+    const text = writes
+      .filter((chunk) => chunk.type === "text-delta")
+      .map((chunk) => String(chunk.delta ?? ""))
+      .join("");
+    assert.equal(text, NO_ANSWER_CUT_OFF);
+    assert.equal(text.includes("command"), false);
+    assert.ok(writes.some((chunk) => chunk.type === "reasoning-delta"));
+    assert.equal(outcome.failedBeforeOutput, false);
   });
 });

@@ -96,6 +96,10 @@ describe("aether TrueForge providers", () => {
     assert.equal(opus.reasoningEffort, undefined);
     const fable = modelProfile("claude-fable-5");
     assert.equal(fable.maxOutputTokens, 128_000);
+    const qwen = modelProfile("openrouter/qwen3-8-27b-free");
+    assert.equal(qwen.reasoningEfforts.includes("low"), true);
+    const hosted = aetherProviderManifests({ AETHER_HOSTED_OPENROUTER_API_KEY: "or-secret" });
+    assert.equal(hosted[0]?.models[0]?.properties.reasoningEfforts?.includes("low"), true);
     const unknown = modelProfile("mystery-model");
     assert.equal(unknown.maxOutputTokens, 64_000);
     assert.equal(unknown.reasoningEffort, undefined);

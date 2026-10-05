@@ -75,7 +75,8 @@ export function modelProfile(id: string): ModelProfile {
     return {
       contextLength: HOSTED_DEFAULT_CONTEXT_LENGTH,
       maxOutputTokens: HOSTED_DEFAULT_MAX_OUTPUT_TOKENS,
-      reasoningEfforts: [],
+      // Declared so the sidecar accepts a session reasoning effort for Qwen.
+      reasoningEfforts: ["low", "medium", "high"],
     };
   }
   if (bare.includes("claude")) {

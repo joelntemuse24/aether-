@@ -40,7 +40,7 @@ describe("hosted default model", () => {
     assert.equal(hostedModelFqn("gpt-5.6-luna"), "buzz/gpt-5-6-luna");
     assert.equal(isHostedDefaultModel(HOSTED_DEFAULT_MODEL_FQN), true);
     assert.equal(modelProfile(HOSTED_DEFAULT_MODEL_FQN).contextLength, 262_144);
-    assert.deepEqual(modelProfile(HOSTED_DEFAULT_MODEL_FQN).reasoningEfforts, []);
+    assert.deepEqual(modelProfile(HOSTED_DEFAULT_MODEL_FQN).reasoningEfforts, ["low", "medium", "high"]);
   });
 
   it("keeps Buzz hidden unless the flag is on", () => {

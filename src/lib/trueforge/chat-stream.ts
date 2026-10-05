@@ -82,6 +82,13 @@ export const TURN_BUDGET_MS = 240_000;
 export const CUT_OFF_ANSWER =
   "Stopped before this finished. The last command ran too long.";
 
+/** Cut off while the model was still thinking or went quiet, with no command running. */
+export const NO_ANSWER_CUT_OFF =
+  "Stopped before an answer was ready. Use Retry to try again.";
+
+/** A stream that sends nothing for this long, with no tool running, is treated as stalled. */
+export const STREAM_IDLE_MS = 90_000;
+
 /** Close a command the turn had to abandon, and keep any answer already written. */
 export function settleCutOffChunks(input: {
   sawText: boolean;
@@ -98,8 +105,9 @@ export function settleCutOffChunks(input: {
     });
   }
   if (!input.sawText) {
+    const answer = input.openTools.some((tool) => tool.id) ? CUT_OFF_ANSWER : NO_ANSWER_CUT_OFF;
     chunks.push({ type: "text-start", id: "tf-cutoff" });
-    chunks.push({ type: "text-delta", id: "tf-cutoff", delta: CUT_OFF_ANSWER });
+    chunks.push({ type: "text-delta", id: "tf-cutoff", delta: answer });
     chunks.push({ type: "text-end", id: "tf-cutoff" });
   }
   return chunks;
@@ -437,10 +445,23 @@ export async function streamTrueForgeHostedChat(input: {
           controller.abort();
         }, TURN_BUDGET_MS);
         let sawByte = false;
+        let openTools = 0;
+        let idle: ReturnType<typeof setTimeout> | undefined;
+        const armIdle = () => {
+          clearTimeout(idle);
+          if (openTools > 0) return;
+          idle = setTimeout(() => {
+            cutoff = true;
+            controller.abort();
+          }, STREAM_IDLE_MS);
+        };
         const guardedWrite = (chunk: UiChunk) => {
+          if (chunk.type === "tool-input-available") openTools++;
+          if (chunk.type === "tool-output-available") openTools = Math.max(0, openTools - 1);
           if (isTurnActivityChunk(chunk)) {
             sawByte = true;
             clearTimeout(timer);
+            armIdle();
           }
           write(chunk);
         };
@@ -470,9 +491,14 @@ export async function streamTrueForgeHostedChat(input: {
         } finally {
           clearTimeout(timer);
           clearTimeout(budget);
+          clearTimeout(idle);
           input.abortSignal?.removeEventListener("abort", onUserAbort);
         }
-        if (cutoff) break;
+        if (cutoff) {
+          // Closing the stream leaves the sidecar turn running, which blocks the next send.
+          await cancelSidecarTurn(session.id);
+          break;
+        }
         if (sawByte || !outcome.failedBeforeOutput) break;
         if (input.abortSignal?.aborted) break;
         if (
