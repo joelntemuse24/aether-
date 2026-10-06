@@ -6,7 +6,11 @@ import { browserSafeChatError } from "./hosted-limit";
 import { TOOLS_UNAVAILABLE_NOTICE, trueforgeInstructions } from "./instructions";
 import { trueforgeClient, trueforgeSessionId } from "./sessions";
 import type { TrueForgeToolContext } from "./tool-context";
-import { sandboxFileCards, type SandboxFileRef } from "./sandbox-files";
+import {
+  sandboxFileAnnounceChunks,
+  sandboxFileCards,
+  type SandboxFileRef,
+} from "./sandbox-files";
 import {
   chunksForTrueForgeEvent,
   closeTrueForgeUi,
@@ -172,6 +176,9 @@ export async function driveTrueForgeTurn(input: {
     for (const chunk of flushSandboxHold(state)) emit(chunk);
     if (!turnId || state.sandboxFiles.length === 0) return;
     const refs: SandboxFileRef[] = state.sandboxFiles.splice(0, state.sandboxFiles.length);
+    // Announce cards before the download so CreateArtifactToolCall mounts while
+    // the thread is still live (auto-open + Building… state).
+    for (const chunk of sandboxFileAnnounceChunks(refs)) emit(chunk);
     const load =
       input.loadSandboxFile ??
       ((filePath: string) => downloadHostedSandboxFile(input.sessionId, turnId, filePath));
@@ -180,6 +187,7 @@ export async function driveTrueForgeTurn(input: {
         refs,
         load: (filePath) => load(filePath, turnId),
         persist: input.persistSandboxFile,
+        announced: true,
       });
       for (const chunk of cards) emit(chunk);
     } catch {

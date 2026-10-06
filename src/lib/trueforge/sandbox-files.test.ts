@@ -8,6 +8,7 @@ import {
   isPanelSandboxPath,
   isPublishableSandboxPath,
   redactSandboxText,
+  sandboxFileAnnounceChunks,
   sandboxFileCards,
   sandboxFileName,
 } from "./sandbox-files";
@@ -23,6 +24,32 @@ const CHART =
   "/home/aether/.local/share/trueforge-aether/sandboxes/abc/abc/artifacts/rent_chart.png";
 
 describe("sandbox file publishing", () => {
+
+  it("announces file cards before bytes load so the panel can auto-open", () => {
+    const chunks = sandboxFileAnnounceChunks([
+      { label: "Deck", path: DECK },
+      { label: "Calc", path: "/home/user/trueforge-aether/sandboxes/t1/calc.html" },
+    ]);
+    assert.equal(chunks.length, 2);
+    assert.equal(chunks[0]?.type, "tool-input-available");
+    assert.equal((chunks[0] as { toolCallId?: string }).toolCallId, "sandbox-file-1");
+    assert.equal((chunks[0] as { input?: { kind?: string } }).input?.kind, "file");
+    assert.equal((chunks[1] as { input?: { kind?: string } }).input?.kind, "html");
+  });
+
+
+  it("settles an announced card when the file cannot be loaded", async () => {
+    const chunks = await sandboxFileCards({
+      refs: [{ label: "Missing", path: DECK }],
+      load: async () => null,
+      announced: true,
+    });
+    assert.equal(chunks.length, 1);
+    assert.equal(chunks[0]?.type, "tool-output-available");
+    assert.equal((chunks[0] as { toolCallId?: string }).toolCallId, "sandbox-file-1");
+    assert.equal((chunks[0] as { output?: { ok?: boolean } }).output?.ok, false);
+  });
+
   it("hides the housing-deck path and keeps the file to download", () => {
     const text = [
       "The deck is ready.",

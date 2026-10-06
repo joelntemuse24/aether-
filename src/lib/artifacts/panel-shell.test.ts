@@ -39,6 +39,9 @@ describe("artifact panel shell", () => {
     assert.match(toolUi, /aether-artifact-card/);
     assert.match(toolUi, /aether-file-card/);
     assert.match(toolUi, /aether-file-card__download/);
+    assert.match(toolUi, /aether-file-card__open/);
+    assert.match(toolUi, /Open in Artifacts/);
+    assert.match(toolUi, /inLivePublishWindow/);
     const create = toolUi.slice(toolUi.indexOf("const CreateArtifactToolCall"));
     assert.match(create, /stayOpen\n/);
     assert.doesNotMatch(

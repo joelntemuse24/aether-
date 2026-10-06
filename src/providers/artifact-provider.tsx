@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -19,6 +20,7 @@ import {
   upsertLocalArtifact,
   type LocalArtifact,
 } from "@/lib/artifacts/local";
+import { useAuiState } from "@assistant-ui/react";
 import { useSession } from "@/providers/session-provider";
 
 export type Artifact = {
@@ -75,6 +77,11 @@ type ArtifactContextValue = {
   saveCurrentArtifact: () => Promise<boolean>;
   /** Keep session/local list in sync when a tool creates an artifact. */
   rememberSessionArtifact: (artifact: Artifact) => void;
+  /**
+   * True briefly after a live turn (and while it runs). Used to auto-open
+   * sandbox-published file cards that mount after the stream settles.
+   */
+  inLivePublishWindow: () => boolean;
 };
 
 export type ArtifactDrafting = {
@@ -104,6 +111,28 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
   const [drafting, setDrafting] = useState<ArtifactDrafting | null>(null);
   const [saved, setSaved] = useState<SavedArtifactSummary[]>([]);
   const [savedCloud, setSavedCloud] = useState(false);
+  /** Grace window so late sandbox file cards still auto-open the panel. */
+  const livePublishUntilRef = useRef(0);
+  const sawThreadLiveRef = useRef(false);
+  const threadRunning = useAuiState((s) => s.thread.isRunning);
+
+  useEffect(() => {
+    if (threadRunning) {
+      sawThreadLiveRef.current = true;
+      livePublishUntilRef.current = Number.POSITIVE_INFINITY;
+      return;
+    }
+    if (sawThreadLiveRef.current) {
+      // Sandbox cards often arrive in the same tick as stream close.
+      livePublishUntilRef.current = Date.now() + 15_000;
+      sawThreadLiveRef.current = false;
+    }
+  }, [threadRunning]);
+
+  const inLivePublishWindow = useCallback(
+    () => Date.now() < livePublishUntilRef.current,
+    [],
+  );
 
   const openArtifact = useCallback((next: Artifact) => {
     setArtifact(next);
@@ -449,6 +478,7 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
       persistArtifactContent,
       saveCurrentArtifact,
       rememberSessionArtifact,
+      inLivePublishWindow,
     }),
     [
       artifact,
@@ -465,6 +495,7 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
       persistArtifactContent,
       saveCurrentArtifact,
       rememberSessionArtifact,
+      inLivePublishWindow,
     ],
   );
 

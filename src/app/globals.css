@@ -490,8 +490,23 @@ body::before {
   object-fit: contain;
 }
 
-.aether-file-card__download {
-  align-self: flex-start;
+.aether-file-card[role="button"] {
+  cursor: pointer;
+}
+
+.aether-file-card[role="button"]:hover {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+}
+
+.aether-file-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.aether-file-card__open {
   border: 0;
   border-radius: 999px;
   background: var(--accent);
@@ -500,6 +515,21 @@ body::before {
   font-size: 12px;
   font-weight: 600;
   padding: 6px 10px;
+}
+
+.aether-file-card__download {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+}
+
+.aether-file-card__download:hover {
+  background: var(--hover-overlay);
 }
 
 @media (max-width: 1023px) {

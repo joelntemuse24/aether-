@@ -488,10 +488,27 @@ const FilePreviewCard: FC<{
   href?: string;
   previewSrc?: string;
   running?: boolean;
-}> = ({ kind, title, filename, href, previewSrc, running }) => {
+  onOpen?: () => void;
+}> = ({ kind, title, filename, href, previewSrc, running, onOpen }) => {
   const label = filename || title || `${kind} file`;
   return (
-    <div className="aether-file-card" data-kind={kind}>
+    <div
+      className="aether-file-card"
+      data-kind={kind}
+      role={onOpen ? "button" : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      onClick={onOpen}
+      onKeyDown={
+        onOpen
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onOpen();
+              }
+            }
+          : undefined
+      }
+    >
       <div className="aether-file-card__preview">
         {kind === "png" && previewSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -502,21 +519,38 @@ const FilePreviewCard: FC<{
       </div>
       <div className="aether-file-card__name">{label}</div>
       <div className="aether-file-card__hint">
-        {running ? "Building…" : "Ready to download"}
+        {running ? "Building…" : onOpen ? "Open in Artifacts" : "Ready to download"}
       </div>
-      {href ? (
-        <button
-          type="button"
-          className="aether-file-card__download"
-          onClick={() => triggerDownload(href, label)}
-        >
-          Download
-        </button>
-      ) : (
-        <span className="aether-file-chip__missing">
-          Sign in to download this file.
-        </span>
-      )}
+      <div className="aether-file-card__actions">
+        {onOpen && !running ? (
+          <button
+            type="button"
+            className="aether-file-card__open"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen();
+            }}
+          >
+            Open
+          </button>
+        ) : null}
+        {href ? (
+          <button
+            type="button"
+            className="aether-file-card__download"
+            onClick={(event) => {
+              event.stopPropagation();
+              triggerDownload(href, label);
+            }}
+          >
+            Download
+          </button>
+        ) : (
+          <span className="aether-file-chip__missing">
+            Sign in to download this file.
+          </span>
+        )}
+      </div>
     </div>
   );
 };
@@ -593,6 +627,7 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     artifact: openPanelArtifact,
     open,
     setDrafting,
+    inLivePublishWindow,
   } = useArtifact();
   const running = usePartRunning(part);
   const threadRunning = useAuiState((s) => s.thread.isRunning);
@@ -721,7 +756,12 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
         ...artifact,
         persisted: !!result?.persisted,
       };
-      if (sawLiveRef.current && !openedRef.current) {
+      // Auto-open on live completion, including sandbox file cards that mount
+      // after the stream settles (inLivePublishWindow grace).
+      if (
+        !openedRef.current &&
+        (sawLiveRef.current || inLivePublishWindow())
+      ) {
         openedRef.current = true;
         openArtifact(payload);
         rememberSessionArtifact(payload);
@@ -733,7 +773,10 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       ) {
         openArtifact(payload);
         rememberSessionArtifact(payload);
-      } else if (sawLiveRef.current && result?.persisted) {
+      } else if (
+        (sawLiveRef.current || inLivePublishWindow()) &&
+        result?.persisted
+      ) {
         rememberSessionArtifact(payload);
         void refreshSaved();
       }
@@ -785,6 +828,16 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
               : undefined
           }
           running={running}
+          onOpen={
+            artifact
+              ? () =>
+                  openArtifact({
+                    ...artifact,
+                    persisted: !!result?.persisted,
+                    downloadPath,
+                  })
+              : undefined
+          }
         />
       ) : kindHint === "file" ? (
         <FileChip
