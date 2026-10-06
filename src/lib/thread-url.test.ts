@@ -199,6 +199,34 @@ describe("URL → thread", () => {
     );
   });
 
+  it("ignores stale /c/A while Active→URL has /c/B pending (sidebar switch)", () => {
+    assert.equal(
+      planUrlToThread({
+        pathname: "/c/thread-a",
+        urlThreadId: "thread-a",
+        pendingPath: "/c/thread-b",
+        pendingNewChat: false,
+        itemIsNew: false,
+        canonicalId: "thread-b",
+      }),
+      "ignore",
+    );
+  });
+
+  it("still switches on a real back/forward deep link when nothing is pending", () => {
+    assert.equal(
+      planUrlToThread({
+        pathname: "/c/thread-a",
+        urlThreadId: "thread-a",
+        pendingPath: null,
+        pendingNewChat: false,
+        itemIsNew: false,
+        canonicalId: "thread-b",
+      }),
+      "switch-thread",
+    );
+  });
+
   it("does not remount when /c/:id is already the active thread", () => {
     assert.equal(
       planUrlToThread({
