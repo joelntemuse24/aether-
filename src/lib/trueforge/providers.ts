@@ -1,13 +1,12 @@
 import {
   HOSTED_DEFAULT_CONTEXT_LENGTH,
   HOSTED_DEFAULT_MAX_OUTPUT_TOKENS,
-  HOSTED_DEFAULT_MODEL_ID,
   HOSTED_DEFAULT_MODEL_RESOURCE,
-  HOSTED_DEFAULT_REASONING_EFFORT,
   HOSTED_FREE_FALLBACK_CONTEXT_LENGTH,
   HOSTED_FREE_FALLBACK_MAX_OUTPUT_TOKENS,
   HOSTED_FREE_FALLBACK_MODEL_ID,
   HOSTED_FREE_FALLBACK_MODEL_RESOURCE,
+  HOSTED_OMNIROUTE_PROVIDER,
   HOSTED_OPENROUTER_PROVIDER,
 } from "@/lib/hosted/default-model";
 
@@ -49,6 +48,10 @@ export const AETHER_OPENROUTER_EXPERT_FQN = "openrouter/gpt-5-6-luna";
 
 export const DEFAULT_BUZZ_BASE_URL = "https://api.buzzai.cc/v1";
 export const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+/** TrueForge runs on Contabo next to OmniRoute, so the default is loopback. */
+export const DEFAULT_OMNIROUTE_BASE_URL = "http://127.0.0.1:20128/v1";
+/** TrueForge custom providers require an apiKey string. OmniRoute is open on loopback. */
+const OMNIROUTE_DUMMY_API_KEY = "local";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -76,13 +79,11 @@ function bareModelId(id: string): string {
 /** Family defaults. Unknown ids stay conservative so a bad effort cannot 400 the turn. */
 export function modelProfile(id: string): ModelProfile {
   const bare = bareModelId(id);
-  if (bare.startsWith("qwen")) {
+  if (bare === "auto") {
     return {
       contextLength: HOSTED_DEFAULT_CONTEXT_LENGTH,
       maxOutputTokens: HOSTED_DEFAULT_MAX_OUTPUT_TOKENS,
-      // Declared so the sidecar accepts a session reasoning effort for Qwen.
-      reasoningEfforts: ["low", "medium", "high"],
-      reasoningEffort: HOSTED_DEFAULT_REASONING_EFFORT,
+      reasoningEfforts: [],
     };
   }
   if (bare.startsWith("gemma")) {
@@ -205,9 +206,25 @@ function buzzModel(modelId: string, name: string): AetherConfiguredModel {
 }
 
 /**
- * Hosted OpenRouter provider for the default model and its free fallback. Seeded only from the
+ * Hosted default provider: OmniRoute `auto` (quota-aware free-provider fallback) on the
+ * Contabo loopback. The key is optional; an empty key becomes the dummy "local".
+ */
+export function hostedOmniRouteManifest(
+  env: Record<string, string | undefined> = process.env,
+): AetherProviderManifest {
+  return {
+    type: "custom",
+    name: HOSTED_OMNIROUTE_PROVIDER,
+    baseUrl: envPlain(env, "AETHER_HOSTED_OMNIROUTE_BASE_URL") || DEFAULT_OMNIROUTE_BASE_URL,
+    auth: { apiKey: envSecret(env, "AETHER_HOSTED_OMNIROUTE_API_KEY") || OMNIROUTE_DUMMY_API_KEY },
+    models: [buzzModel(HOSTED_DEFAULT_MODEL_RESOURCE, HOSTED_DEFAULT_MODEL_RESOURCE)],
+  };
+}
+
+/**
+ * Optional legacy hosted OpenRouter provider with one free model. Seeded only from the
  * explicit hosted key AETHER_HOSTED_OPENROUTER_API_KEY, never from
- * OPENROUTER_API_KEY or a user's key.
+ * OPENROUTER_API_KEY or a user's key. It is not the hosted default.
  */
 export function hostedOpenRouterManifest(
   env: Record<string, string | undefined> = process.env,
@@ -219,15 +236,12 @@ export function hostedOpenRouterManifest(
     name: HOSTED_OPENROUTER_PROVIDER,
     baseUrl: DEFAULT_OPENROUTER_BASE_URL,
     auth: { apiKey: key },
-    models: [
-      buzzModel(HOSTED_DEFAULT_MODEL_ID, HOSTED_DEFAULT_MODEL_RESOURCE),
-      buzzModel(HOSTED_FREE_FALLBACK_MODEL_ID, HOSTED_FREE_FALLBACK_MODEL_RESOURCE),
-    ],
+    models: [buzzModel(HOSTED_FREE_FALLBACK_MODEL_ID, HOSTED_FREE_FALLBACK_MODEL_RESOURCE)],
   };
 }
 
 /**
- * Sidecar providers: the hosted default (OpenRouter, hosted key only) plus Buzz.
+ * Sidecar providers: the hosted default (OmniRoute) first, optional hosted OpenRouter, plus Buzz.
  * Buzz GPT uses the OpenAI-compatible host. Buzz Claude uses the
  * Anthropic-compatible host. A user's OpenRouter key is never seeded here.
  */
@@ -236,10 +250,14 @@ export function aetherProviderManifests(
   modelIds: readonly string[] = KNOWN_CHAT_MODEL_IDS,
 ): AetherProviderManifest[] {
   const hostedOpenRouter = hostedOpenRouterManifest(env);
+  const hostedDefault: AetherProviderManifest[] = [
+    hostedOmniRouteManifest(env),
+    ...(hostedOpenRouter ? [hostedOpenRouter] : []),
+  ];
   const buzzKey =
     envSecret(env, "AETHER_HOSTED_BUZZ_API_KEY") ||
     envSecret(env, "AETHER_HOSTED_CLAUDE_API_KEY");
-  if (!buzzKey) return hostedOpenRouter ? [hostedOpenRouter] : [];
+  if (!buzzKey) return hostedDefault;
   const ids = chatModelIds(modelIds);
   const gpt = ids.filter((id) => id.startsWith("gpt-"));
   const claude = ids.filter((id) => id.startsWith("claude-"));
@@ -247,7 +265,7 @@ export function aetherProviderManifests(
     envPlain(env, "AETHER_HOSTED_BUZZ_BASE_URL") ||
       envPlain(env, "AETHER_HOSTED_CLAUDE_BASE_URL"),
   );
-  const manifests: AetherProviderManifest[] = hostedOpenRouter ? [hostedOpenRouter] : [];
+  const manifests: AetherProviderManifest[] = hostedDefault;
   if (gpt.length) {
     manifests.push({
       type: "custom",

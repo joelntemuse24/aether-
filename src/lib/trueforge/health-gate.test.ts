@@ -163,7 +163,7 @@ echo "$*" >> "$NPM_LOG"
       }
       if (req.url === "/api/v1/models") {
         res.writeHead(200, { "content-type": "application/json" });
-        res.end('{"data":[{"name":"buzz/gpt-5-6-luna"},{"name":"openrouter/qwen3-8-27b-free"}]}');
+        res.end('{"data":[{"name":"buzz/gpt-5-6-luna"},{"name":"omniroute/auto"}]}');
         return;
       }
       res.writeHead(404);
@@ -299,7 +299,7 @@ exit 9
     };
     const run = await runBash([script, previous], env);
     assert.equal(run.status, 1, run.stderr || run.stdout);
-    assert.match(run.stderr, /does not list openrouter\/qwen3-8-27b-free/);
+    assert.match(run.stderr, /does not list omniroute\/auto/);
     const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).stdout.trim();
     assert.equal(head, previous);
 
