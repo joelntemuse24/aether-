@@ -21,7 +21,7 @@ TrueForge defaults to `STANDALONE=true` with SQLite. Hosted Postgres + Redis act
 
 ## Keys
 
-Hosted Buzz keys live on Vercel and on the VM sidecar env. The hosted default is Free auto (`auto` → `omniroute/auto`) on a loopback OmniRoute provider: `AETHER_HOSTED_OMNIROUTE_BASE_URL` (default `http://127.0.0.1:20128/v1`) and optional `AETHER_HOSTED_OMNIROUTE_API_KEY` (empty uses the dummy `local`) in the VM sidecar env. `AETHER_HOSTED_OPENROUTER_API_KEY` in the VM sidecar env optionally seeds one legacy free model; it is the only OpenRouter key seeded into sidecar provider settings. User BYOK keys stay in the browser `localStorage` (`aether:` prefix). They are not written to Neon, Trigger env, or sidecar provider settings.
+Hosted Buzz keys live on Vercel and on the VM sidecar env. The hosted default is Free auto (`free-only` → `omniroute/free-only`; Contabo OmniRoute combo `free-only`, cost 0) on a loopback OmniRoute provider: `AETHER_HOSTED_OMNIROUTE_BASE_URL` (default `http://127.0.0.1:20128/v1`) and optional `AETHER_HOSTED_OMNIROUTE_API_KEY` (empty uses the dummy `local`) in the VM sidecar env. `AETHER_HOSTED_OPENROUTER_API_KEY` in the VM sidecar env optionally seeds one legacy free model; it is the only OpenRouter key seeded into sidecar provider settings. User BYOK keys stay in the browser `localStorage` (`aether:` prefix). They are not written to Neon, Trigger env, or sidecar provider settings.
 
 | Rule | Status | Check |
 | --- | --- | --- |
