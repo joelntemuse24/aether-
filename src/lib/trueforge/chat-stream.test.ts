@@ -534,3 +534,76 @@ describe("TrueForge live stream", () => {
     assert.deepEqual(outputs[0]?.output, { ok: true });
   });
 });
+
+describe("Free auto resolved model metadata", () => {
+  const metadataChunks = (writes: UiChunk[]) =>
+    writes.filter((chunk) => chunk.type === "message-metadata");
+
+  it("writes message metadata once when the response headers carried the model", async () => {
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield { type: "model.message.delta", content: "Hi" };
+      yield { type: "turn.done", state: { status: "done" } };
+    }
+    await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses",
+      modelId: HOSTED_DEFAULT_MODEL_ID,
+      resolvedModel: "apodex/apodex-1.1-mini:free",
+    });
+    assert.deepEqual(metadataChunks(writes), [
+      {
+        type: "message-metadata",
+        messageMetadata: { custom: { resolvedModel: "apodex/apodex-1.1-mini:free" } },
+      },
+    ]);
+  });
+
+  it("uses a model carried on a turn event and does not repeat it", async () => {
+    const writes: UiChunk[] = [];
+    async function* events() {
+      yield { type: "model.message.delta", content: "A", model: "x/y:free" };
+      yield { type: "model.message.delta", content: "B", model: "x/y:free" };
+      yield { type: "turn.done", state: { status: "done" } };
+    }
+    await driveTrueForgeTurn({
+      events: events(),
+      write: (chunk) => writes.push(chunk),
+      sessionId: "ses",
+      modelId: HOSTED_DEFAULT_MODEL_ID,
+    });
+    assert.equal(metadataChunks(writes).length, 1);
+  });
+
+  it("writes nothing when no model is known or the turn is not Free auto", async () => {
+    for (const modelId of [HOSTED_DEFAULT_MODEL_ID, "gpt-5.6-luna"]) {
+      const writes: UiChunk[] = [];
+      async function* events() {
+        yield { type: "model.message.delta", content: "Hi", model: "x/y:free" };
+        yield { type: "turn.done", state: { status: "done" } };
+      }
+      await driveTrueForgeTurn({
+        events: events(),
+        write: (chunk) => writes.push(chunk),
+        sessionId: "ses",
+        modelId,
+        resolvedModel: modelId === HOSTED_DEFAULT_MODEL_ID ? null : "x/y:free",
+      });
+      assert.equal(metadataChunks(writes).length, modelId === HOSTED_DEFAULT_MODEL_ID ? 1 : 0);
+    }
+    const quiet: UiChunk[] = [];
+    async function* plain() {
+      yield { type: "model.message.delta", content: "Hi" };
+      yield { type: "turn.done", state: { status: "done" } };
+    }
+    await driveTrueForgeTurn({
+      events: plain(),
+      write: (chunk) => quiet.push(chunk),
+      sessionId: "ses",
+      modelId: HOSTED_DEFAULT_MODEL_ID,
+    });
+    assert.equal(metadataChunks(quiet).length, 0);
+  });
+});
+

@@ -66,6 +66,7 @@ import {
   shouldOfferContinue,
 } from "@/lib/chat-continue";
 import type { HarnessChatContext } from "@/lib/harness/types";
+import { rememberResolvedModel, resolvedModelFromMessage } from "@/lib/hosted/resolved-model";
 import { mergeStoredThreadWithIncoming } from "@/lib/chat-history-merge";
 import { setChatHistoryReady } from "@/lib/chat-history-gate";
 import {
@@ -590,6 +591,9 @@ function useChatThreadRuntime() {
       });
     },
     onFinish: ({ isAbort, isDisconnect, isError }) => {
+      // Free auto turns carry the real upstream model in metadata. Joel's picker reads it.
+      const lastAssistant = [...messagesRef.current].reverse().find((m) => m.role === "assistant");
+      rememberResolvedModel(resolvedModelFromMessage(lastAssistant));
       const key = threadIdRef.current;
       if (key && messagesRef.current.length > 0) {
         persistThreadUIMessages(key, messagesRef.current);
