@@ -100,7 +100,7 @@ describe("aether TrueForge providers", () => {
     assert.equal(opus.reasoningEffort, undefined);
     const fable = modelProfile("claude-fable-5");
     assert.equal(fable.maxOutputTokens, 128_000);
-    const auto = modelProfile("omniroute/auto");
+    const auto = modelProfile("omniroute/free-only");
     assert.equal(auto.contextLength, 262_144);
     assert.deepEqual(auto.reasoningEfforts, []);
     assert.equal(auto.reasoningEffort, undefined);

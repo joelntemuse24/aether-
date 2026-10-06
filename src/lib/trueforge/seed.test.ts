@@ -24,7 +24,7 @@ describe("TrueForge provider seed", () => {
 
   describe("ensureDefaultModelSeeded", () => {
     const quiet = { info() {}, warn() {}, error() {} };
-    const fqn = "omniroute/auto";
+    const fqn = "omniroute/free-only";
 
     it("does not re-seed when the model is listed", async () => {
       let reseeds = 0;

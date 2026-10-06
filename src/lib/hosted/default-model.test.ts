@@ -37,14 +37,14 @@ const resolve = (requested: string, buzzEnabled = false) =>
   });
 
 describe("hosted default model", () => {
-  it("is Free auto (OmniRoute auto) on the sidecar's hosted provider", () => {
-    assert.equal(HOSTED_DEFAULT_MODEL_ID, "auto");
+  it("is Free auto (OmniRoute combo free-only) on the sidecar's hosted provider", () => {
+    assert.equal(HOSTED_DEFAULT_MODEL_ID, "free-only");
     assert.equal(HOSTED_DEFAULT_MODEL_LABEL, "Free auto");
-    assert.equal(HOSTED_DEFAULT_MODEL_FQN, "omniroute/auto");
+    assert.equal(HOSTED_DEFAULT_MODEL_FQN, "omniroute/free-only");
     assert.equal(hostedModelFqn(HOSTED_DEFAULT_MODEL_ID), HOSTED_DEFAULT_MODEL_FQN);
     assert.equal(hostedModelFqn("gpt-5.6-luna"), "buzz/gpt-5-6-luna");
-    assert.equal(isHostedDefaultModel("auto"), true);
-    assert.equal(isHostedDefaultModel("omniroute/auto"), true);
+    assert.equal(isHostedDefaultModel("free-only"), true);
+    assert.equal(isHostedDefaultModel("omniroute/free-only"), true);
     assert.equal(isHostedDefaultModel("qwen/qwen3.8-27b:free"), false);
     assert.equal(modelProfile(HOSTED_DEFAULT_MODEL_FQN).contextLength, 262_144);
     assert.deepEqual(modelProfile(HOSTED_DEFAULT_MODEL_FQN).reasoningEfforts, []);
@@ -61,7 +61,7 @@ describe("hosted default model", () => {
   it("routes empty, stale, and Buzz ids to the default while Buzz is hidden", () => {
     assert.deepEqual(resolve(""), { kind: "default" });
     assert.deepEqual(resolve(HOSTED_DEFAULT_MODEL_ID), { kind: "default" });
-    assert.deepEqual(resolve("omniroute/auto"), { kind: "default" });
+    assert.deepEqual(resolve("omniroute/free-only"), { kind: "default" });
     assert.deepEqual(resolve("qwen/qwen3.8-27b:free"), { kind: "byok-openrouter", id: "qwen/qwen3.8-27b:free" });
     assert.deepEqual(resolve("gpt-5.6-luna"), { kind: "default" });
     assert.deepEqual(resolve("claude-sonnet-5-5"), { kind: "default" });
@@ -70,7 +70,7 @@ describe("hosted default model", () => {
     assert.deepEqual(resolve("openai/gpt-4.1"), { kind: "byok-openrouter", id: "openai/gpt-4.1" });
   });
 
-  it("seeds OmniRoute auto on loopback with a dummy key when none is set", () => {
+  it("seeds OmniRoute combo free-only on loopback with a dummy key when none is set", () => {
     const manifest = hostedOmniRouteManifest({});
     assert.ok(manifest.type === "custom");
     assert.equal(manifest.name, "omniroute");
@@ -78,7 +78,7 @@ describe("hosted default model", () => {
     assert.equal(manifest.auth.apiKey, "local");
     assert.deepEqual(
       manifest.models.map((model) => [model.modelId, model.name]),
-      [["auto", "auto"]],
+      [["free-only", "free-only"]],
     );
     assert.equal(manifest.models[0]?.properties.reasoningEfforts, undefined);
     const custom = hostedOmniRouteManifest({

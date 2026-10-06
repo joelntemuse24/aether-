@@ -158,7 +158,7 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
     });
     assert.equal(astra.spec.model.params?.reasoningEffort, "low");
     const auto = buildTrueForgeAgentSpec({
-      modelName: "omniroute/auto",
+      modelName: "omniroute/free-only",
       instructions: "Answer.",
       mcp: null,
       sandboxEnabled: true,

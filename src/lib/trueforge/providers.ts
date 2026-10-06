@@ -1,6 +1,7 @@
 import {
   HOSTED_DEFAULT_CONTEXT_LENGTH,
   HOSTED_DEFAULT_MAX_OUTPUT_TOKENS,
+  HOSTED_DEFAULT_MODEL_ID,
   HOSTED_DEFAULT_MODEL_RESOURCE,
   HOSTED_FREE_FALLBACK_CONTEXT_LENGTH,
   HOSTED_FREE_FALLBACK_MAX_OUTPUT_TOKENS,
@@ -79,7 +80,7 @@ function bareModelId(id: string): string {
 /** Family defaults. Unknown ids stay conservative so a bad effort cannot 400 the turn. */
 export function modelProfile(id: string): ModelProfile {
   const bare = bareModelId(id);
-  if (bare === "auto") {
+  if (bare === HOSTED_DEFAULT_MODEL_RESOURCE) {
     return {
       contextLength: HOSTED_DEFAULT_CONTEXT_LENGTH,
       maxOutputTokens: HOSTED_DEFAULT_MAX_OUTPUT_TOKENS,
@@ -206,7 +207,7 @@ function buzzModel(modelId: string, name: string): AetherConfiguredModel {
 }
 
 /**
- * Hosted default provider: OmniRoute `auto` (quota-aware free-provider fallback) on the
+ * Hosted default provider: OmniRoute combo `free-only` (cost-0 free-provider priority) on the
  * Contabo loopback. The key is optional; an empty key becomes the dummy "local".
  */
 export function hostedOmniRouteManifest(
@@ -217,7 +218,7 @@ export function hostedOmniRouteManifest(
     name: HOSTED_OMNIROUTE_PROVIDER,
     baseUrl: envPlain(env, "AETHER_HOSTED_OMNIROUTE_BASE_URL") || DEFAULT_OMNIROUTE_BASE_URL,
     auth: { apiKey: envSecret(env, "AETHER_HOSTED_OMNIROUTE_API_KEY") || OMNIROUTE_DUMMY_API_KEY },
-    models: [buzzModel(HOSTED_DEFAULT_MODEL_RESOURCE, HOSTED_DEFAULT_MODEL_RESOURCE)],
+    models: [buzzModel(HOSTED_DEFAULT_MODEL_ID, HOSTED_DEFAULT_MODEL_RESOURCE)],
   };
 }
 
