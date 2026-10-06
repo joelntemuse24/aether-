@@ -182,6 +182,15 @@ describe("assistant prose tokens", () => {
     );
   });
 
+  it("keeps the empty-state greeting small and italic in Cormorant", () => {
+    const thread = read("src/components/assistant-ui/thread.tsx");
+    const welcome = thread.slice(thread.indexOf("const ThreadWelcome"));
+    const h1 = welcome.slice(welcome.indexOf("<h1"), welcome.indexOf("</h1>"));
+    assert.match(h1, /font-\[family-name:var\(--font-serif\)\]/);
+    assert.match(h1, /fontSize:\s*"clamp\(1\.35rem, 2\.6vw, 1\.75rem\)"/);
+    assert.match(h1, /fontStyle:\s*"italic"/);
+  });
+
   it("points inline code and fenced blocks at the prose tokens", () => {
     const markdown = read("src/components/assistant-ui/markdown-text.tsx");
     assert.match(markdown, /bg-\[var\(--color-prose-code-bg\)\]/);

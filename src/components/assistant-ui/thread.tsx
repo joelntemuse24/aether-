@@ -270,9 +270,9 @@ const ThreadWelcome: FC = () => {
       <h1
         className="max-w-[28rem] text-center font-[family-name:var(--font-serif)] text-[var(--text)]"
         style={{
-          fontSize: "clamp(1.75rem, 3.2vw, 2.25rem)",
+          fontSize: "clamp(1.35rem, 2.6vw, 1.75rem)",
           fontWeight: 400,
-          fontStyle: "normal",
+          fontStyle: "italic",
           letterSpacing: "-0.02em",
           lineHeight: 1.15,
         }}
