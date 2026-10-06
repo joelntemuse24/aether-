@@ -295,6 +295,23 @@ async function callTool(name: string, args: Json, ctx: TrueForgeToolContext | nu
   return withToolDeadline(runTool(name, args, ctx), toolDeadlineMs(name));
 }
 
+/**
+ * Connector reconnect prompts apply only to the connector's own tools. A flaky
+ * Drive token must not block create_artifact, memory_*, or other account tools.
+ */
+export function connectorGateError(
+  name: string,
+  live: Pick<TrueForgeToolContext, "hasDrive" | "hasGitHub" | "driveAccessToken" | "githubAccessToken">,
+): string | null {
+  if (live.hasDrive && name.startsWith("drive_") && !live.driveAccessToken) {
+    return "Google Drive needs to be connected again. Reconnect it in Settings: /?connect=drive";
+  }
+  if (live.hasGitHub && name.startsWith("github_") && !live.githubAccessToken) {
+    return "GitHub needs to be connected again. Reconnect it in Settings: /?connect=github";
+  }
+  return null;
+}
+
 async function runTool(name: string, args: Json, ctx: TrueForgeToolContext | null) {
   if (name === TOOL_NAMES.webSearch) {
     const query = typeof args.query === "string" ? args.query : "";
@@ -316,12 +333,8 @@ async function runTool(name: string, args: Json, ctx: TrueForgeToolContext | nul
   }
   if (!ctx) return textResult({ ok: false, error: "This tool needs a signed-in chat." }, true);
   const live = await liveContext(ctx);
-  if (ctx.hasDrive && !live.driveAccessToken) {
-    return textResult({ ok: false, error: "Google Drive needs to be connected again. Reconnect it in Settings: /?connect=drive" }, true);
-  }
-  if (ctx.hasGitHub && name.startsWith("github_") && !live.githubAccessToken) {
-    return textResult({ ok: false, error: "GitHub needs to be connected again. Reconnect it in Settings: /?connect=github" }, true);
-  }
+  const gateError = connectorGateError(name, live);
+  if (gateError) return textResult({ ok: false, error: gateError }, true);
   const result = await executeAetherTool({
     name,
     args,

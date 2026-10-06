@@ -19,6 +19,7 @@ import {
   resetActivityClock,
   shouldRevealActivityElapsed,
   shouldShowComposerActivity,
+  shouldShowMessageSourceCards,
   sourceChipLabel,
   sourceTrayPills,
   syncActivityClock,
@@ -1278,6 +1279,13 @@ describe("thread / composer copy stays honest", () => {
     assert.match(strip, /data-activity-slot="pending"/);
     assert.match(strip, /data-activity-slot="message"/);
     assert.match(thread, /MessageSourceCards/);
+    assert.doesNotMatch(toolUi, /This step failed/);
+    assert.match(strip, /shouldShowMessageSourceCards\(statusType\)/);
+    assert.match(strip, /s\.message\?\.status\?\.type/);
+    assert.match(
+      thread,
+      /<MessageAgentActivity \/>[\s\S]*<\/MessagePrimitive\.Parts>[\s\S]*<AssistantActionBar \/>[\s\S]*<MessageSourceCards \/>/,
+    );
     assert.match(thread, /AgentStatusStrip/);
     assert.doesNotMatch(thread, /<AgentStatusStrip \/>\s*\n\s*\{pending &&/);
     assert.match(thread, /aether-composer-dock/);
@@ -1564,5 +1572,27 @@ describe("live Thinking disclosure", () => {
       elapsedSeconds: 1,
     });
     assert.equal(short.summaryLabel, "Ran Python");
+  });
+});
+
+describe("shouldShowMessageSourceCards", () => {
+  it("hides the sources pill while the message runs", () => {
+    assert.equal(shouldShowMessageSourceCards("running"), false);
+    assert.equal(shouldShowMessageSourceCards("complete"), true);
+    assert.equal(shouldShowMessageSourceCards("incomplete"), true);
+    assert.equal(shouldShowMessageSourceCards(undefined), true);
+  });
+});
+
+describe("failed tool chrome", () => {
+  it("lets a soft-failed create_artifact still preview from its own content", () => {
+    const toolUi = readFileSync(
+      new URL("../components/assistant-ui/tool-ui.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.match(toolUi, /const usablePayload = /);
+    assert.match(toolUi, /!confirm\.needsConfirmation &&\s*usablePayload/);
+    const artifactCall = toolUi.slice(toolUi.indexOf("const CreateArtifactToolCall"));
+    assert.doesNotMatch(artifactCall.slice(0, artifactCall.indexOf("\n};\n")), /error=\{/);
   });
 });

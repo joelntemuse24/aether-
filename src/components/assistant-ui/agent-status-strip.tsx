@@ -21,6 +21,7 @@ import {
   shouldRevealActivityElapsed,
   shouldShowComposerActivity,
   sourceChipLabel,
+  shouldShowMessageSourceCards,
   sourcePagesLabel,
   syncActivityClock,
   type ActivityMessage,
@@ -332,6 +333,7 @@ const SourceFavicon: FC<{ url?: string; title: string }> = ({ url, title }) => {
 
 export const MessageSourceCards: FC = () => {
   const parts = useAuiState((s) => s.message?.parts);
+  const statusType = useAuiState((s) => s.message?.status?.type);
   const hits = collectWebSearchHits(parts);
   const [open, setOpen] = useState(false);
   const titleId = useId();
@@ -347,7 +349,9 @@ export const MessageSourceCards: FC = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  if (hits.length === 0) return null;
+  if (!shouldShowMessageSourceCards(statusType) || hits.length === 0) {
+    return null;
+  }
   const faces = hits.slice(0, 3);
 
   return (
