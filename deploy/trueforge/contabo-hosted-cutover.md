@@ -36,6 +36,8 @@ For a separate Docker deployment, set `TRUEFORGE_DATABASE_URL=postgres://truefor
 
 The Contabo entry point `/opt/aether/sidecar-only.ts` is external to this repo. Before cutover, inspect it and prepare a backed-up edit so that its upstream spawn uses `buildTrueForgeUpstreamEnv(process.env)` from `src/lib/trueforge/runtime-mode.ts`, followed by its existing host, port, app-data, and outbound-host overlays. Alternatively, it must derive `STANDALONE=false` only when both trimmed database and Redis URLs are present. Keep `prepareSidecar()`, provider seeding, auth, and sandbox pruning intact. A hardcoded `STANDALONE=true` in this external launcher prevents cutover.
 
+The same launcher must call `seedAetherSkills(origin)` (from `src/lib/trueforge/skills.ts`) after the provider seed, as `vm-server.ts` and `dev-server.ts` do. Skills mount only when registered in `settings.skills`; catalog presence is not enough. Check `GET /api/v1/settings/skills` returns `web-artifacts-builder`. Aether mounts no skills when that list is empty, so a missed seed costs the skill, not the chat.
+
 Use `contabo-hosted-env.example` as the template for a protected env file. Replace every placeholder, retain the current `AETHER_TRUEFORGE_TOKEN`, and keep provider keys unchanged. Required hosted variables:
 
 - `TRUEFORGE_DATABASE_URL`: the dedicated TrueForge Postgres URL; mapped to package `DATABASE_URL`.

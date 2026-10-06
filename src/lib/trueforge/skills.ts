@@ -45,3 +45,35 @@ export async function seedAetherSkills(
   }
   return seeded;
 }
+
+export const CONFIGURED_SKILLS_TTL_MS = 45_000;
+export const CONFIGURED_SKILLS_FAILURE_TTL_MS = 5_000;
+
+let configuredSkillsCache: { names: string[]; at: number; ttl: number } | null = null;
+
+export function resetConfiguredSkillsCache(): void {
+  configuredSkillsCache = null;
+}
+
+/**
+ * Names registered in the sidecar's settings.skills. The catalog lists more than the
+ * sidecar has configured, and attaching an unregistered name 422s session create.
+ * A failed or empty list resolves to [] so the session mounts no skills.
+ */
+export async function configuredTrueForgeSkillNames(
+  list: () => Promise<readonly string[]>,
+  now = Date.now(),
+): Promise<string[]> {
+  if (configuredSkillsCache && now - configuredSkillsCache.at < configuredSkillsCache.ttl) {
+    return configuredSkillsCache.names;
+  }
+  try {
+    const names = [...(await list())];
+    configuredSkillsCache = { names, at: now, ttl: CONFIGURED_SKILLS_TTL_MS };
+    return names;
+  } catch {
+    console.warn("[trueforge] could not list configured skills; mounting none");
+    configuredSkillsCache = { names: [], at: now, ttl: CONFIGURED_SKILLS_FAILURE_TTL_MS };
+    return [];
+  }
+}

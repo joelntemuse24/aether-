@@ -1,5 +1,9 @@
 import { ASK_USER_QUESTIONS_ENABLED } from "./question-policy";
-import { mountedTrueForgeSkills } from "./skills";
+import {
+  configuredTrueForgeSkillNames,
+  mountedTrueForgeSkills,
+  optedInTrueForgeSkills,
+} from "./skills";
 import { TrueForge } from "@truefoundry/trueforge-sdk";
 import {
   trueforgeAuthHeaders,
@@ -60,6 +64,8 @@ export type TrueForgeSessionInput = {
   modelName: string;
   instructions: string;
   toolContext?: Omit<TrueForgeToolContext, "exp"> | null;
+  /** Test override for the configured skill names. Defaults to settings.skills.list(). */
+  seededSkillNames?: readonly string[];
 };
 
 export function trueforgeSessionCacheKey(owner: string, conversationId: string): string {
@@ -183,8 +189,21 @@ async function findSession(owner: string, conversationId: string): Promise<Cache
 
 export { ASK_USER_QUESTIONS_ENABLED } from "./question-policy";
 
-export function hostedRuntimeKey(sandboxEnabled: boolean): string {
-  return `${sandboxEnabled ? "1" : "0"}:ask${ASK_USER_QUESTIONS_ENABLED ? "1" : "0"}:skills${mountedTrueForgeSkills(sandboxEnabled).join(",")}`;
+export function hostedRuntimeKey(sandboxEnabled: boolean, seededSkillNames?: readonly string[]): string {
+  return `${sandboxEnabled ? "1" : "0"}:ask${ASK_USER_QUESTIONS_ENABLED ? "1" : "0"}:skills${mountedTrueForgeSkills(sandboxEnabled, process.env, seededSkillNames).join(",")}`;
+}
+
+/** Skill names registered in settings.skills. Resolves to [] when listing fails. */
+async function resolveSeededSkillNames(
+  sandboxEnabled: boolean,
+  override?: readonly string[],
+): Promise<readonly string[]> {
+  if (override) return override;
+  if (!sandboxEnabled || optedInTrueForgeSkills().length === 0) return [];
+  return configuredTrueForgeSkillNames(async () => {
+    const listed = await client().settings.skills.list();
+    return (listed.data ?? []).map((skill) => skill.name);
+  });
 }
 
 export function buildTrueForgeAgentSpec(input: {
@@ -279,9 +298,10 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
   const plannedNames = token ? aetherMcpServerNames(input.conversationId) : null;
   const includeAccountTools = needsDeferredAetherTools(input.toolContext);
   const sandboxEnabled = await trueforgeSandboxEnabled();
+  const seededSkillNames = await resolveSeededSkillNames(sandboxEnabled, input.seededSkillNames);
   const plannedKey = `${
     plannedNames ? `${plannedNames.direct}:${includeAccountTools ? "all" : "web"}:${token}` : ""
-  }:${hostedRuntimeKey(sandboxEnabled)}`;
+  }:${hostedRuntimeKey(sandboxEnabled, seededSkillNames)}`;
   const existing = await findSession(input.owner, input.conversationId);
   if (
     existing?.model === input.modelName &&
@@ -306,7 +326,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
   const instructions = instructionsForAttachedTools(input.instructions, attached);
   const mcpKey = `${
     mcp ? `${mcp.direct}:${mcp.includeAccountTools ? "all" : "web"}:${mcp.token}` : ""
-  }:${hostedRuntimeKey(sandboxEnabled)}`;
+  }:${hostedRuntimeKey(sandboxEnabled, seededSkillNames)}`;
   if (existing) {
     const model = input.modelName;
     existing.model = model;
@@ -321,6 +341,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
           instructions,
           mcp,
           sandboxEnabled,
+          seededSkillNames,
         }),
       }),
     );
@@ -334,6 +355,7 @@ export async function trueforgeSessionId(input: TrueForgeSessionInput): Promise<
         instructions,
         mcp,
         sandboxEnabled,
+        seededSkillNames,
       }),
       metadata: { aetherConversationId: input.conversationId, aetherOwner: input.owner },
     }),
@@ -359,12 +381,14 @@ export async function switchTrueForgeSessionModel(input: {
   instructions: string;
   mcpName?: string | null;
 }): Promise<void> {
+  const sandboxEnabled = await trueforgeSandboxEnabled();
   await client().sessions.update(input.sessionId, {
     agent: buildTrueForgeAgentSpec({
       modelName: input.modelName,
       instructions: input.instructions,
       mcp: null,
-      sandboxEnabled: await trueforgeSandboxEnabled(),
+      sandboxEnabled,
+      seededSkillNames: await resolveSeededSkillNames(sandboxEnabled),
     }),
   });
   const key = trueforgeSessionCacheKey(input.owner ?? "", input.conversationId);
