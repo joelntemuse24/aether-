@@ -8,11 +8,11 @@ import {
   HOSTED_RETRY_DELAY_MS,
   hostedTurnErrorCopy,
   shouldBackupHostedTurn,
-  shouldFailoverHostedTurn,
   shouldRetryHostedTurn,
 } from "@/lib/trueforge/chat-stream";
 import {
   aetherProviderManifests,
+  hostedOmniRouteManifest,
   hostedOpenRouterManifest,
   modelProfile,
 } from "@/lib/trueforge/providers";
@@ -37,17 +37,18 @@ const resolve = (requested: string, buzzEnabled = false) =>
   });
 
 describe("hosted default model", () => {
-  it("is Qwen3.8 27B (free) on the sidecar's hosted provider", () => {
-    assert.equal(HOSTED_DEFAULT_MODEL_ID, "qwen/qwen3.8-27b:free");
-    assert.equal(HOSTED_DEFAULT_MODEL_LABEL, "Qwen3.8 27B");
-    assert.equal(HOSTED_DEFAULT_MODEL_FQN, "openrouter/qwen3-8-27b-free");
+  it("is Free auto (OmniRoute auto) on the sidecar's hosted provider", () => {
+    assert.equal(HOSTED_DEFAULT_MODEL_ID, "auto");
+    assert.equal(HOSTED_DEFAULT_MODEL_LABEL, "Free auto");
+    assert.equal(HOSTED_DEFAULT_MODEL_FQN, "omniroute/auto");
     assert.equal(hostedModelFqn(HOSTED_DEFAULT_MODEL_ID), HOSTED_DEFAULT_MODEL_FQN);
     assert.equal(hostedModelFqn("gpt-5.6-luna"), "buzz/gpt-5-6-luna");
-    assert.equal(isHostedDefaultModel(HOSTED_DEFAULT_MODEL_FQN), true);
+    assert.equal(isHostedDefaultModel("auto"), true);
+    assert.equal(isHostedDefaultModel("omniroute/auto"), true);
+    assert.equal(isHostedDefaultModel("qwen/qwen3.8-27b:free"), false);
     assert.equal(modelProfile(HOSTED_DEFAULT_MODEL_FQN).contextLength, 262_144);
-    assert.deepEqual(modelProfile(HOSTED_DEFAULT_MODEL_FQN).reasoningEfforts, ["low", "medium", "high"]);
-    // Unbounded thinking ran past the turn budget with no answer text.
-    assert.equal(modelProfile(HOSTED_DEFAULT_MODEL_FQN).reasoningEffort, "low");
+    assert.deepEqual(modelProfile(HOSTED_DEFAULT_MODEL_FQN).reasoningEfforts, []);
+    assert.equal(modelProfile(HOSTED_DEFAULT_MODEL_FQN).reasoningEffort, undefined);
   });
 
   it("keeps Buzz hidden unless the flag is on", () => {
@@ -60,6 +61,8 @@ describe("hosted default model", () => {
   it("routes empty, stale, and Buzz ids to the default while Buzz is hidden", () => {
     assert.deepEqual(resolve(""), { kind: "default" });
     assert.deepEqual(resolve(HOSTED_DEFAULT_MODEL_ID), { kind: "default" });
+    assert.deepEqual(resolve("omniroute/auto"), { kind: "default" });
+    assert.deepEqual(resolve("qwen/qwen3.8-27b:free"), { kind: "byok-openrouter", id: "qwen/qwen3.8-27b:free" });
     assert.deepEqual(resolve("gpt-5.6-luna"), { kind: "default" });
     assert.deepEqual(resolve("claude-sonnet-5-5"), { kind: "default" });
     assert.deepEqual(resolve("expert"), { kind: "default" });
@@ -67,27 +70,47 @@ describe("hosted default model", () => {
     assert.deepEqual(resolve("openai/gpt-4.1"), { kind: "byok-openrouter", id: "openai/gpt-4.1" });
   });
 
-  it("seeds the hosted provider only from the explicit hosted key", () => {
+  it("seeds OmniRoute auto on loopback with a dummy key when none is set", () => {
+    const manifest = hostedOmniRouteManifest({});
+    assert.ok(manifest.type === "custom");
+    assert.equal(manifest.name, "omniroute");
+    assert.equal(manifest.baseUrl, "http://127.0.0.1:20128/v1");
+    assert.equal(manifest.auth.apiKey, "local");
+    assert.deepEqual(
+      manifest.models.map((model) => [model.modelId, model.name]),
+      [["auto", "auto"]],
+    );
+    assert.equal(manifest.models[0]?.properties.reasoningEfforts, undefined);
+    const custom = hostedOmniRouteManifest({
+      AETHER_HOSTED_OMNIROUTE_BASE_URL: " http://127.0.0.1:9999/v1 ",
+      AETHER_HOSTED_OMNIROUTE_API_KEY: "omni-secret",
+    });
+    assert.equal(custom.type === "custom" && custom.baseUrl, "http://127.0.0.1:9999/v1");
+    assert.equal(custom.auth.apiKey, "omni-secret");
+    const urlAsKey = hostedOmniRouteManifest({ AETHER_HOSTED_OMNIROUTE_API_KEY: "http://127.0.0.1:20128/v1" });
+    assert.equal(urlAsKey.auth.apiKey, "local");
+  });
+
+  it("puts OmniRoute first and keeps hosted OpenRouter optional", () => {
     assert.equal(hostedOpenRouterManifest({ OPENROUTER_API_KEY: "plain" }), null);
     const manifest = hostedOpenRouterManifest({ AETHER_HOSTED_OPENROUTER_API_KEY: "hosted-secret" });
     assert.ok(manifest && manifest.type === "custom");
     assert.equal(manifest.name, "openrouter");
-    assert.equal(manifest.baseUrl, "https://openrouter.ai/api/v1");
     assert.deepEqual(
       manifest.models.map((model) => [model.modelId, model.name]),
-      [
-        [HOSTED_DEFAULT_MODEL_ID, "qwen3-8-27b-free"],
-        [HOSTED_FREE_FALLBACK_MODEL_ID, "gemma-4-31b-it-free"],
-      ],
+      [[HOSTED_FREE_FALLBACK_MODEL_ID, "gemma-4-31b-it-free"]],
     );
+    const none = aetherProviderManifests({});
+    assert.deepEqual(none.map((m) => m.type === "custom" && m.name), ["omniroute"]);
     const withBuzz = aetherProviderManifests({
       AETHER_HOSTED_OPENROUTER_API_KEY: "hosted-secret",
       AETHER_HOSTED_BUZZ_API_KEY: "buzz-secret",
     });
-    assert.equal(withBuzz[0]?.type === "custom" && withBuzz[0].name, "openrouter");
-    assert.ok(withBuzz.length > 1);
+    assert.equal(withBuzz[0]?.type === "custom" && withBuzz[0].name, "omniroute");
+    assert.equal(withBuzz[1]?.type === "custom" && withBuzz[1].name, "openrouter");
+    assert.ok(withBuzz.length > 2);
     const onlyHosted = aetherProviderManifests({ AETHER_HOSTED_OPENROUTER_API_KEY: "hosted-secret" });
-    assert.equal(onlyHosted.length, 1);
+    assert.equal(onlyHosted.length, 2);
   });
 
   it("retries the default once on any early failure, then stops, with no Buzz backup", () => {
@@ -105,13 +128,10 @@ describe("hosted default model", () => {
     );
   });
 
-  it("has a free hosted fallback with a TrueForge-safe resource name", () => {
+  it("keeps the optional OpenRouter free model out of the default path", () => {
     assert.equal(HOSTED_FREE_FALLBACK_MODEL_ID, "google/gemma-4-31b-it:free");
-    assert.match(HOSTED_FREE_FALLBACK_MODEL_ID, /:free$/);
-    assert.equal(HOSTED_FREE_FALLBACK_MODEL_RESOURCE, "gemma-4-31b-it-free");
     assert.doesNotMatch(HOSTED_FREE_FALLBACK_MODEL_RESOURCE, /[./:]/);
     assert.equal(HOSTED_FREE_FALLBACK_MODEL_FQN, "openrouter/gemma-4-31b-it-free");
-    // The fallback is not a picker choice and not the default.
     assert.equal(isHostedDefaultModel(HOSTED_FREE_FALLBACK_MODEL_FQN), false);
     assert.equal(modelProfile(HOSTED_FREE_FALLBACK_MODEL_FQN).reasoningEffort, undefined);
   });
@@ -120,36 +140,22 @@ describe("hosted default model", () => {
     assert.ok(HOSTED_RETRY_DELAY_MS >= 10_000 && HOSTED_RETRY_DELAY_MS <= 20_000);
   });
 
-  it("fails over to the free model only after a rate-limited delayed retry", () => {
-    const base = { modelId: HOSTED_DEFAULT_MODEL_ID, failedBeforeOutput: true, userAborted: false };
-    const limited = "429 upstream_provider_shared_pool rate limit";
-    assert.equal(shouldFailoverHostedTurn({ ...base, errorText: limited, attempt: 1 }), true);
-    assert.equal(shouldFailoverHostedTurn({ ...base, errorText: limited, attempt: 0 }), false);
-    assert.equal(shouldFailoverHostedTurn({ ...base, errorText: limited, attempt: 2 }), false);
-    assert.equal(shouldFailoverHostedTurn({ ...base, errorText: "boom", attempt: 1 }), false);
-    assert.equal(shouldFailoverHostedTurn({ ...base, errorText: limited, attempt: 1, userAborted: true }), false);
-    assert.equal(shouldFailoverHostedTurn({ ...base, errorText: limited, attempt: 1, failedBeforeOutput: false }), false);
-    // A Buzz or user-keyed model never fails over to the hosted free model.
-    assert.equal(shouldFailoverHostedTurn({ ...base, modelId: "gpt-5.6-luna", errorText: limited, attempt: 1 }), false);
-    assert.equal(shouldFailoverHostedTurn({ ...base, modelId: "openai/gpt-4.1", errorText: limited, attempt: 1 }), false);
-  });
-
   it("gives an honest error that names no provider", () => {
     const copies = [
       hostedTurnErrorCopy("429 rate limit exceeded", HOSTED_DEFAULT_MODEL_ID),
       hostedTurnErrorCopy("The operation was aborted", HOSTED_DEFAULT_MODEL_ID),
       hostedTurnErrorCopy("boom", HOSTED_DEFAULT_MODEL_ID),
     ];
-    assert.match(copies[0], /Qwen3\.8 27B is busy right now/);
+    assert.match(copies[0], /Free auto is busy right now/);
     assert.match(copies[1], /timed out/);
-    for (const copy of copies) assert.doesNotMatch(copy, /buzz|openrouter|trueforge/i);
+    for (const copy of copies) assert.doesNotMatch(copy, /buzz|openrouter|omniroute|trueforge/i);
   });
 
   it("keeps provider names out of the picker and the hosted models route", async () => {
     const picker = readFileSync("src/components/assistant-ui/buzz-model-picker.tsx", "utf8");
     const labels = picker.match(/const GROUP_LABELS[\s\S]*?\n};/)?.[0] ?? "";
     assert.ok(labels, "GROUP_LABELS present");
-    assert.doesNotMatch(labels.replace(/^\s*\w+:/gm, ""), /buzz|openrouter|trueforge/i);
+    assert.doesNotMatch(labels.replace(/^\s*\w+:/gm, ""), /buzz|openrouter|omniroute|trueforge/i);
     assert.match(picker, /\{GROUP_LABELS\[group\]\}/);
     const previous = process.env.AETHER_BUZZ_MODELS_ENABLED;
     delete process.env.AETHER_BUZZ_MODELS_ENABLED;
@@ -158,7 +164,7 @@ describe("hosted default model", () => {
       const body = (await (await GET()).json()) as { defaultModel: string; models: { id: string; label: string }[] };
       assert.equal(body.defaultModel, HOSTED_DEFAULT_MODEL_ID);
       assert.deepEqual(body.models.map((model) => model.id), [HOSTED_DEFAULT_MODEL_ID]);
-      assert.doesNotMatch(JSON.stringify(body), /buzz|openrouter|trueforge/i);
+      assert.doesNotMatch(JSON.stringify(body), /buzz|openrouter|omniroute|trueforge/i);
     } finally {
       if (previous === undefined) delete process.env.AETHER_BUZZ_MODELS_ENABLED;
       else process.env.AETHER_BUZZ_MODELS_ENABLED = previous;
@@ -187,7 +193,7 @@ describe("hosted default model", () => {
       assert.deepEqual(body.failover.expert, []);
       const json = JSON.stringify(body);
       assert.doesNotMatch(json, /gpt-6-astra|claude-fable|gpt-5\.6-luna|gpt-5\.6-sol|deepseek/i);
-      assert.doesNotMatch(json, /buzz|openrouter|trueforge/i);
+      assert.doesNotMatch(json, /buzz|openrouter|omniroute|trueforge/i);
       assert.equal(fetchCalls, 0);
     } finally {
       globalThis.fetch = realFetch;
