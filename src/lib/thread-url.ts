@@ -139,6 +139,14 @@ export function didUrlBecomeNewChat(
   return previousUrlThreadId !== null && urlThreadId === null;
 }
 
+/** True when the path just moved to a different `/c/<id>` (Back/forward, link). */
+export function didUrlThreadIdChange(
+  previousUrlThreadId: string | null,
+  urlThreadId: string | null,
+): boolean {
+  return urlThreadId !== null && previousUrlThreadId !== urlThreadId;
+}
+
 /** Welcome / empty-canvas hold. Live URL only — never a boot-time snapshot. */
 export function shouldHoldEmptyWelcome(input: {
   hasMessages: boolean;
@@ -162,6 +170,12 @@ export function nextUrlSyncLatches(input: {
   applyingUrlThread: string | null;
   /** True when the path just changed from `/c/<id>` to `/`. */
   urlBecameNewChat: boolean;
+  /**
+   * True when the URL's `/c/<id>` just changed. Only then is a mismatch
+   * URL-driven; with an unchanged URL the runtime moved first (sidebar click)
+   * and Active→URL must write the new id instead of holding on the stale one.
+   */
+  urlThreadIdChanged: boolean;
 }): { pendingNewChat: boolean; applyingUrlThread: string | null } {
   let pendingNewChat = input.pendingNewChat || input.urlBecameNewChat;
   let applyingUrlThread = input.applyingUrlThread;
@@ -169,6 +183,7 @@ export function nextUrlSyncLatches(input: {
   if (pendingNewChat) {
     applyingUrlThread = null;
   } else if (
+    input.urlThreadIdChanged &&
     input.urlThreadId &&
     input.urlThreadId !== input.canonicalId
   ) {

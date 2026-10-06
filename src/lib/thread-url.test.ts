@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   NEW_CHAT_PATH,
   didUrlBecomeNewChat,
+  didUrlThreadIdChange,
   parseThreadIdFromPath,
   planActiveThreadToUrl,
   planUrlToThread,
@@ -315,6 +316,7 @@ describe("latches arm from the live URL during render", () => {
       pendingNewChat: false,
       applyingUrlThread: null,
       urlBecameNewChat: true,
+      urlThreadIdChanged: false,
     });
     assert.equal(next.pendingNewChat, true);
     const plan = planActiveThreadToUrl({
@@ -335,6 +337,7 @@ describe("latches arm from the live URL during render", () => {
       pendingNewChat: false,
       applyingUrlThread: null,
       urlBecameNewChat: false,
+      urlThreadIdChanged: false,
     });
     assert.equal(next.pendingNewChat, false);
     const plan = planActiveThreadToUrl({
@@ -355,6 +358,7 @@ describe("latches arm from the live URL during render", () => {
       pendingNewChat: false,
       applyingUrlThread: null,
       urlBecameNewChat: false,
+      urlThreadIdChanged: true,
     });
     assert.equal(next.applyingUrlThread, "thread-b");
     const plan = planActiveThreadToUrl({
@@ -365,6 +369,60 @@ describe("latches arm from the live URL during render", () => {
       applyingUrlThread: next.applyingUrlThread,
     });
     assert.deepEqual(plan, { action: "hold" });
+  });
+
+  it("does not arm a stale URL id when the sidebar moves the runtime first", () => {
+    const next = nextUrlSyncLatches({
+      urlThreadId: "thread-a",
+      canonicalId: "thread-b",
+      itemIsNew: false,
+      pendingNewChat: false,
+      applyingUrlThread: null,
+      urlBecameNewChat: false,
+      urlThreadIdChanged: false,
+    });
+    assert.equal(next.applyingUrlThread, null);
+    const plan = planActiveThreadToUrl({
+      urlThreadId: "thread-a",
+      canonicalId: "thread-b",
+      itemIsNew: false,
+      pendingNewChat: next.pendingNewChat,
+      applyingUrlThread: next.applyingUrlThread,
+    });
+    assert.deepEqual(plan, { action: "write", path: "/c/thread-b" });
+    // PR #172: once Active→URL sets pendingPath, URL→Thread must not bounce.
+    assert.equal(
+      planUrlToThread({
+        pathname: "/c/thread-a",
+        urlThreadId: "thread-a",
+        pendingPath: "/c/thread-b",
+        pendingNewChat: false,
+        itemIsNew: false,
+        canonicalId: "thread-b",
+      }),
+      "ignore",
+    );
+  });
+
+  it("keeps an armed latch while the URL is unchanged and the runtime catches up", () => {
+    const next = nextUrlSyncLatches({
+      urlThreadId: "thread-b",
+      canonicalId: "thread-a",
+      itemIsNew: false,
+      pendingNewChat: false,
+      applyingUrlThread: "thread-b",
+      urlBecameNewChat: false,
+      urlThreadIdChanged: false,
+    });
+    assert.equal(next.applyingUrlThread, "thread-b");
+  });
+
+  it("detects a live change to a different /c/<id>", () => {
+    assert.equal(didUrlThreadIdChange("thread-a", "thread-b"), true);
+    assert.equal(didUrlThreadIdChange(null, "thread-b"), true);
+    assert.equal(didUrlThreadIdChange("thread-a", "thread-a"), false);
+    assert.equal(didUrlThreadIdChange("thread-a", null), false);
+    assert.equal(didUrlThreadIdChange(null, null), false);
   });
 });
 
