@@ -282,7 +282,7 @@ const ToolShell: FC<{
   stayOpen?: boolean;
   /** Kept for callers. Receipts no longer render a second disclosure. */
   surface?: "details" | "inline";
-}> = ({ running, error, children, headerAction, stayOpen }) => {
+}> = ({ running, children, headerAction, stayOpen }) => {
   if (running && !stayOpen) {
     // Live work is the compact activity one-liner. Rendering bodies here
     // grows the thread and jumps the docked composer.
@@ -300,20 +300,13 @@ const ToolShell: FC<{
     );
   }
 
-  // Finished tools belong in the single activity disclosure. An error
-  // line and an Open action stay, without a second collapsed chip.
-  if (!error && !headerAction) return null;
+  // Finished tools belong in the single activity disclosure, including failed
+  // ones. Only an Open action stays in the thread.
+  if (!headerAction) return null;
 
   return (
     <div className="aether-tool-trace">
-      {error ? (
-        <p className="aether-tool-trace__error" role="status">
-          This step failed
-        </p>
-      ) : null}
-      {headerAction ? (
-        <div className="aether-tool-trace__action">{headerAction}</div>
-      ) : null}
+      <div className="aether-tool-trace__action">{headerAction}</div>
     </div>
   );
 };
@@ -669,11 +662,14 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     (isFileTool ? "file" : undefined) ||
     (part.toolName === TOOL_NAMES.generateImage ? "image" : undefined);
   const fileReady = kindHint === "file" && !!bodyTitle && !!(bodyContent || downloadPath);
+  // A soft failure (isError / ok:false, e.g. a flaky Drive connection) still
+  // previews when the call carried its own content. Only the payload decides.
+  const usablePayload = kindHint === "file" ? fileReady : !!bodyContent;
   const complete =
     part.result !== undefined &&
     !!bodyTitle &&
     !confirm.needsConfirmation &&
-    (kindHint === "file" ? fileReady : !!bodyContent);
+    usablePayload;
   const openedRef = useRef(false);
   const lastSyncedLen = useRef(0);
   /** True if this mount saw a live generation — used to open on complete without rehydrate pop. */
