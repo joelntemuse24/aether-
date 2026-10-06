@@ -14,9 +14,9 @@ class SdkError extends Error {
 
 const unknownModel = () =>
   new SdkError(
-    'UnprocessableEntityError\nStatus code: 422\nBody: {"error":{"message":"Unknown model \\"omniroute/auto\\" — not configured on provider"}}',
+    'UnprocessableEntityError\nStatus code: 422\nBody: {"error":{"message":"Unknown model \\"omniroute/free-only\\" — not configured on provider"}}',
     422,
-    { error: { message: 'Unknown model "omniroute/auto" — not configured on provider' } },
+    { error: { message: 'Unknown model "omniroute/free-only" — not configured on provider' } },
   );
 
 describe("isUnknownModelError", () => {
