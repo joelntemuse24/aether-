@@ -9,6 +9,8 @@ const MIME_BY_EXT: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   webp: "image/webp",
+  gif: "image/gif",
+  svg: "image/svg+xml",
   csv: "text/csv",
   txt: "text/plain",
   md: "text/markdown",

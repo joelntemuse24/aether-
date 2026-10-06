@@ -296,7 +296,8 @@ describe("executeAetherTool", () => {
     assert.equal(result.kind, "image");
     assert.equal(result.id, "art-img-1");
     assert.equal(result.persisted, true);
-    assert.equal(result.content, "data:image/png;base64,aaa");
+    assert.equal(result.downloadPath, "/api/artifacts/art-img-1/download");
+    assert.equal(result.content, undefined);
   });
 
   it("still confirms generate_image in Auto because it spends credits", async () => {
@@ -829,5 +830,131 @@ describe("executeAetherTool", () => {
     });
     assert.equal(result.ok, false);
     assert.match(String(result.error), /official API key/i);
+  });
+
+  describe("create_artifact image", () => {
+    const PNG_B64 = "iVBORw0KGgo" + "A".repeat(200);
+    const run = (
+      args: Record<string, unknown>,
+      deps: NonNullable<AetherToolContext["deps"]> = {},
+      over: Partial<AetherToolContext> = {},
+    ) =>
+      executeAetherTool({
+        name: "create_artifact",
+        args: { kind: "image", title: "Bond yields — chart", ...args },
+        ctx: baseCtx({ ...over, deps }),
+      }) as Promise<Record<string, unknown>>;
+
+    it("persists a data URL and returns downloadPath without content", async () => {
+      const dataUrl = `data:image/png;base64,${PNG_B64}`;
+      let saved: { kind: string; content: string } | undefined;
+      const result = await run(
+        { content: dataUrl },
+        {
+          saveArtifact: async (_u, input) => {
+            saved = input;
+            return { id: "img-1" };
+          },
+        },
+      );
+      assert.equal(saved?.kind, "image");
+      assert.equal(saved?.content, dataUrl);
+      assert.equal(result.ok, true);
+      assert.equal(result.kind, "image");
+      assert.equal(result.persisted, true);
+      assert.equal(result.downloadPath, "/api/artifacts/img-1/download");
+      assert.equal(result.content, undefined);
+    });
+
+    it("wraps raw base64 as a data URL before saving", async () => {
+      let saved = "";
+      await run(
+        { content: PNG_B64 },
+        {
+          saveArtifact: async (_u, input) => {
+            saved = input.content;
+            return { id: "img-2" };
+          },
+        },
+      );
+      assert.equal(saved, `data:image/png;base64,${PNG_B64}`);
+    });
+
+    it("reads a sandbox path into a data URL and saves the bytes, not the path", async () => {
+      let saved = "";
+      let readPath = "";
+      const bytes = Buffer.from([137, 80, 78, 71]);
+      const result = await run(
+        { content: "/home/user/chart.png" },
+        {
+          workspaceReadBinary: async (_id, input) => {
+            readPath = input.path;
+            return { ok: true as const, path: input.path, buffer: bytes };
+          },
+          saveArtifact: async (_u, input) => {
+            saved = input.content;
+            return { id: "img-3" };
+          },
+        },
+      );
+      assert.equal(readPath, "/home/user/chart.png");
+      assert.equal(saved, `data:image/png;base64,${bytes.toString("base64")}`);
+      assert.equal(result.downloadPath, "/api/artifacts/img-3/download");
+      assert.equal(result.mime, "image/png");
+    });
+
+    it("keeps content for a guest sandbox-path image", async () => {
+      const result = await run(
+        { content: "chart.png" },
+        {
+          workspaceReadBinary: async (_id, input) => ({
+            ok: true as const,
+            path: input.path,
+            buffer: Buffer.from([1, 2, 3]),
+          }),
+        },
+        { userId: null },
+      );
+      assert.equal(result.persisted, false);
+      assert.match(String(result.content), /^data:image\/png;base64,/);
+      assert.equal(result.downloadPath, undefined);
+    });
+
+    it("fails clearly and saves nothing when the path cannot be read", async () => {
+      let saves = 0;
+      const result = await run(
+        { content: "/home/user/missing.png" },
+        {
+          workspaceReadBinary: async () => ({ ok: false as const, error: "File not found." }),
+          saveArtifact: async () => {
+            saves += 1;
+            return { id: "x" };
+          },
+        },
+      );
+      assert.equal(result.ok, false);
+      assert.match(String(result.error), /missing\.png/);
+      assert.equal(saves, 0);
+    });
+
+    it("keeps an https URL as content", async () => {
+      const result = await run(
+        { content: "https://example.com/chart.png" },
+        { saveArtifact: async () => ({ id: "img-4" }) },
+      );
+      assert.equal(result.ok, true);
+      assert.equal(result.content, "https://example.com/chart.png");
+      assert.equal(result.downloadPath, undefined);
+    });
+
+    it("leaves html artifacts on the existing content echo", async () => {
+      const result = (await executeAetherTool({
+        name: "create_artifact",
+        args: { kind: "html", title: "Page", content: "<h1>Hi</h1>" },
+        ctx: baseCtx({ deps: { saveArtifact: async () => ({ id: "h1" }) } }),
+      })) as Record<string, unknown>;
+      assert.equal(result.content, "<h1>Hi</h1>");
+      assert.equal(result.downloadPath, undefined);
+    });
   });
 });

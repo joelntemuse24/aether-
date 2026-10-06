@@ -18,6 +18,7 @@ import {
 } from "@/lib/tools";
 import { filePreviewKind } from "@/lib/artifacts/file-card";
 import { normalizeArtifactKind } from "@/lib/artifacts/kinds";
+import { isPaintableImageContent } from "@/lib/artifacts/image-src";
 import { safeStringifyToolResult } from "@/lib/tool-part";
 
 /** Structural view of an assistant-ui enriched tool-call part. */
@@ -58,6 +59,8 @@ type ConfirmExecution = {
   language?: string;
   id?: string;
   persisted?: boolean;
+  downloadPath?: string;
+  mime?: string;
 };
 
 /** HITL confirm / Cancel. Talks only to /api/harness/confirm. */
@@ -638,7 +641,7 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
       })
     | undefined;
   const confirm = confirmationFromResult(result);
-  const bodyContent =
+  const rawBodyContent =
     (typeof input?.content === "string" && input.content) ||
     (typeof result?.content === "string" ? result.content : undefined) ||
     extractPartialJsonString(part.argsText, "content");
@@ -661,10 +664,28 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
     part.argsText?.match(/"kind"\s*:\s*"(\w+)"/)?.[1] ||
     (isFileTool ? "file" : undefined) ||
     (part.toolName === TOOL_NAMES.generateImage ? "image" : undefined);
+  const isImageKind = kindHint === "image";
+  // Image args often carry a sandbox path or huge base64 the server already
+  // normalized and saved. Prefer paintable content; with a downloadPath the
+  // panel loads the saved bytes instead of the thread copy.
+  const bodyContent = isImageKind
+    ? downloadPath
+      ? isPaintableImageContent(result?.content)
+        ? result?.content
+        : undefined
+      : [input?.content, result?.content, rawBodyContent].find(
+          (c): c is string => typeof c === "string" && isPaintableImageContent(c),
+        )
+    : rawBodyContent;
   const fileReady = kindHint === "file" && !!bodyTitle && !!(bodyContent || downloadPath);
+  const imageReady = isImageKind && !!bodyTitle && !!(bodyContent || downloadPath);
   // A soft failure (isError / ok:false, e.g. a flaky Drive connection) still
   // previews when the call carried its own content. Only the payload decides.
-  const usablePayload = kindHint === "file" ? fileReady : !!bodyContent;
+  const usablePayload = isImageKind
+    ? imageReady
+    : kindHint === "file"
+      ? fileReady
+      : !!bodyContent;
   const complete =
     part.result !== undefined &&
     !!bodyTitle &&
@@ -817,10 +838,13 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
               : undefined)
           }
           previewSrc={
-            previewKind === "png" &&
-            typeof streamingContent === "string" &&
-            streamingContent.startsWith("data:image/")
-              ? streamingContent
+            previewKind === "png"
+              ? typeof streamingContent === "string" &&
+                streamingContent.startsWith("data:image/")
+                ? streamingContent
+                : isImageKind
+                  ? downloadPath
+                  : undefined
               : undefined
           }
           running={running}
@@ -867,6 +891,7 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
                   openArtifact({
                     ...artifact,
                     persisted: !!result?.persisted,
+                    downloadPath,
                   })
               : undefined
           }
@@ -877,12 +902,14 @@ const CreateArtifactToolCall: FC<{ part: ToolPartLike }> = ({ part }) => {
         active={confirm.needsConfirmation}
         payload={replayPayloadForPart(part, confirm.payload)}
         onApprovedExecution={(execution) => {
-          if (!execution?.title || !execution.content) return;
+          if (!execution?.title || !(execution.content || execution.downloadPath)) return;
           const payload = toArtifact(execution.id || part.toolCallId, {
             kind: (execution.kind as ArtifactKind) || "document",
             title: execution.title,
             language: execution.language,
             content: execution.content,
+            downloadPath: execution.downloadPath,
+            mime: execution.mime,
           });
           const next = { ...payload, persisted: !!execution.persisted };
           openArtifact(next);

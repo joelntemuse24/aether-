@@ -62,6 +62,9 @@ import {
   parseDataUrl,
 } from "@/lib/office/file-artifact";
 import { fileToolResult } from "@/lib/artifacts/file-result";
+import { imageToolResult } from "@/lib/artifacts/image-result";
+import { normalizeImageContent } from "@/lib/artifacts/image-normalize";
+import { normalizeArtifactKind } from "@/lib/artifacts/kinds";
 import { generateImageForUser } from "@/lib/connectors/image";
 import {
   gmailSearchForUser,
@@ -699,6 +702,28 @@ export async function executeAetherTool(input: {
     if (!title || !content) {
       return { ok: false, error: "title and content are required." };
     }
+    if (normalizeArtifactKind(kind) === "image") {
+      const image = await normalizeImageContent({
+        content,
+        language: str(args.language) || undefined,
+        identity: { userId: ctx.userId, conversationId: ctx.conversationId },
+        read: ctx.deps?.workspaceReadBinary ?? workspaceReadBinary,
+      });
+      if (!image.ok) return { ok: false, error: image.error };
+      const saved = await persistArtifact(ctx, {
+        kind: "image",
+        title,
+        language: str(args.language) || undefined,
+        content: image.content,
+        producedBy: [name],
+      });
+      return imageToolResult({
+        title,
+        content: image.content,
+        mime: image.mime,
+        saved,
+      });
+    }
     const saved = await persistArtifact(ctx, {
       kind,
       title,
@@ -1069,15 +1094,12 @@ export async function executeAetherTool(input: {
       content: generated.content,
       producedBy: [name],
     });
-    return {
-      ok: true,
-      kind: "image",
+    return imageToolResult({
       title: generated.title,
       content: generated.content,
       mime: generated.mime,
-      id: saved.id,
-      persisted: saved.persisted,
-    };
+      saved,
+    });
   }
 
   if (name === TOOL_NAMES.githubListIssues) {

@@ -14,6 +14,13 @@ export function bytesFromArtifactContent(
   return { buffer: Buffer.from(trimmed, "utf8"), mime: "application/octet-stream" };
 }
 
+function imageExtension(mime: string): string {
+  const sub = mime.slice("image/".length).toLowerCase();
+  if (sub === "jpeg") return "jpg";
+  if (sub.startsWith("svg")) return "svg";
+  return /^[a-z0-9]+$/.test(sub) ? sub : "png";
+}
+
 export function downloadFilename(input: {
   title?: string;
   language?: string;
@@ -31,7 +38,9 @@ export function downloadFilename(input: {
         ? "docx"
         : mime.includes("pdf")
           ? "pdf"
-          : "bin";
+          : mime.startsWith("image/")
+            ? imageExtension(mime)
+            : "bin";
   return language ? `${title}.${language}` : `${title}.${ext}`;
 }
 
@@ -41,9 +50,11 @@ export function fileDownloadHeaders(
   bytes: number,
 ): Record<string, string> {
   const safe = filename.replace(/[\r\n"]/g, "_");
+  // Images paint in <img src>; the panel's download link sets a filename itself.
+  const disposition = /^image\//i.test(mime) ? "inline" : "attachment";
   return {
     "Content-Type": mime || "application/octet-stream",
-    "Content-Disposition": `attachment; filename="${safe}"`,
+    "Content-Disposition": `${disposition}; filename="${safe}"`,
     "Content-Length": String(bytes),
     "Cache-Control": "private, max-age=0, must-revalidate",
   };
