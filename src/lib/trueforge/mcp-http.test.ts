@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { AETHER_MCP_DEFERRED, AETHER_MCP_DIRECT, handleTrueForgeMcpRpc, toolResultJson, withToolDeadline } from "./mcp-http";
+import { AETHER_MCP_DEFERRED, AETHER_MCP_DIRECT, connectorGateError, handleTrueForgeMcpRpc, toolResultJson, withToolDeadline } from "./mcp-http";
 import {
   aetherMcpServers,
   aetherPublicOrigin,
@@ -264,6 +264,22 @@ describe("TrueForge MCP tools", { concurrency: 1 }, () => {
     const source = readFileSync(new URL("./mcp-http.ts", import.meta.url), "utf8");
     assert.match(source, /withToolDeadline\(runTool/);
     assert.equal(source.includes(".slice(0, 24_000)"), false);
+  });
+
+  it("scopes the Drive reconnect gate to drive_* tools", () => {
+    const flaky = { hasDrive: true, hasGitHub: false, driveAccessToken: undefined };
+    assert.equal(connectorGateError("create_artifact", flaky), null);
+    assert.equal(connectorGateError("memory_search", flaky), null);
+    assert.equal(connectorGateError("memory_write", flaky), null);
+    assert.match(connectorGateError("drive_search", flaky) ?? "", /connect=drive/);
+    assert.match(connectorGateError("drive_read", flaky) ?? "", /connect=drive/);
+    assert.equal(
+      connectorGateError("drive_search", { ...flaky, driveAccessToken: "ok" }),
+      null,
+    );
+    const gh = { hasDrive: false, hasGitHub: true, githubAccessToken: undefined };
+    assert.match(connectorGateError("github_read_file", gh) ?? "", /connect=github/);
+    assert.equal(connectorGateError("create_artifact", gh), null);
   });
 
   it("resolves connector tokens at call time and does not seal them", async () => {
