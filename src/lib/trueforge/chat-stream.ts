@@ -28,6 +28,11 @@ import {
   HOSTED_DEFAULT_MODEL_LABEL,
   isHostedDefaultModel,
 } from "@/lib/hosted/default-model";
+import {
+  extractResolvedModel,
+  resolvedModelFromEvent,
+  resolvedModelMetadata,
+} from "@/lib/hosted/resolved-model";
 
 /** Pause before the hosted default's single retry. The shared upstream pool needs seconds to free up. */
 export const HOSTED_RETRY_DELAY_MS = 15_000;
@@ -134,8 +139,18 @@ export async function driveTrueForgeTurn(input: {
   }) => Promise<{ id?: string; persisted: boolean }>;
   /** True when this process stopped the turn before the platform time limit. */
   cutoff?: () => boolean;
+  /** Upstream model OmniRoute reported for this turn (`x-omniroute-model`), when known. */
+  resolvedModel?: string | null;
 }): Promise<{ failedBeforeOutput: boolean; wroteError: boolean; errorText: string }> {
   const state = createTrueForgeUiState();
+  // Free auto only. The id rides on the assistant message metadata and stays out of the visible UI.
+  let lastResolved: string | null = null;
+  const noteResolvedModel = (id: string | null) => {
+    if (!id || id === lastResolved || !isHostedDefaultModel(input.modelId ?? "")) return;
+    lastResolved = id;
+    input.write({ type: "message-metadata", messageMetadata: resolvedModelMetadata(id) });
+  };
+  noteResolvedModel(input.resolvedModel ?? null);
   let sawContent = false;
   let sawText = false;
   let failed = false;
@@ -196,6 +211,7 @@ export async function driveTrueForgeTurn(input: {
   };
   try {
     for await (const event of input.events) {
+      noteResolvedModel(resolvedModelFromEvent(event));
       if (event.type === "turn.created") {
         const id = event.turnId ?? event.turn_id;
         if (typeof id === "string" && id) turnId = id;
@@ -322,7 +338,7 @@ async function runTurn(input: {
 }> {
   let created: { previousTurnId: string | null } | null = null;
   try {
-    const turn = await trueforgeClient().sessions.createTurnStream(
+    const pending = trueforgeClient().sessions.createTurnStream(
       input.sessionId,
       {
         input: [{ type: "user.message", content: input.content }],
@@ -330,6 +346,18 @@ async function runTurn(input: {
       },
       { abortSignal: input.abortSignal },
     );
+    // The sidecar's own response headers. They carry `x-omniroute-model` only once a
+    // sidecar patch forwards OmniRoute's header (or `body.model`) through to this
+    // response or onto turn events (`resolvedModelFromEvent`). Until then this stays null.
+    let turn: Awaited<typeof pending>;
+    let resolvedModel: string | null = null;
+    if (typeof pending.withRawResponse === "function") {
+      const raw = await pending.withRawResponse();
+      turn = raw.data;
+      resolvedModel = extractResolvedModel({ headers: raw.rawResponse?.headers });
+    } else {
+      turn = await pending;
+    }
     async function* tagged() {
       for await (const event of turn as AsyncIterable<TurnEvent>) {
         if (event.type === "turn.created") {
@@ -346,6 +374,7 @@ async function runTurn(input: {
       loadSandboxFile: input.loadSandboxFile,
       persistSandboxFile: input.persistSandboxFile,
       cutoff: input.cutoff,
+      resolvedModel,
     });
     return { ...outcome, retryFrom: retryPreviousTurnId(created) };
   } catch (error) {
