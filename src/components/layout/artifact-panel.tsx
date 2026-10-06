@@ -45,6 +45,9 @@ import {
 import { provenanceLabels } from "@/lib/artifacts/provenance";
 import {
   filePreviewMode,
+  isXlsxFilename,
+  parseXlsxTable,
+  type XlsxTable,
   parseCsvTable,
   textFromArtifactContent,
 } from "@/lib/artifacts/table-preview";
@@ -464,6 +467,8 @@ export function ArtifactPanel() {
     if (mode === "image") return [];
     if (isFileArtifactKind(kind)) {
       if (filePreviewMode(artifact.language) !== "table") return [];
+      // Workbooks parse asynchronously; the pane falls back to Download if unreadable.
+      if (isXlsxFilename(artifact.language)) return ["table"];
       const text = textFromArtifactContent(artifact.code);
       const table = text ? parseCsvTable(text) : null;
       return table?.rows.length ? ["table"] : [];
@@ -481,6 +486,26 @@ export function ArtifactPanel() {
     }
     return PREVIEWABLE_CODE_LANGS.has(lang) ? ["preview", "code"] : ["code"];
   }, [artifact, kind, lang, mode]);
+
+  // Workbook preview: parse the first sheet off the render path.
+  const xlsxSource =
+    artifact && isFileArtifactKind(kind) && isXlsxFilename(artifact.language)
+      ? artifact.code
+      : null;
+  const [xlsxState, setXlsxState] = useState<{
+    source: string;
+    table: XlsxTable | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!xlsxSource) return;
+    let cancelled = false;
+    void parseXlsxTable(xlsxSource).then((table) => {
+      if (!cancelled) setXlsxState({ source: xlsxSource, table });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [xlsxSource]);
 
   // Reset local state when the artifact changes.
   useEffect(() => {
@@ -701,8 +726,13 @@ export function ArtifactPanel() {
 
   const parsed = kind === "data" || kind === "csv" ? parseData(viewingContent) : null;
   const csvFromKind = kind === "csv" ? parseCsv(viewingContent) : null;
+  const xlsxTable =
+    xlsxSource && xlsxState?.source === xlsxSource ? xlsxState.table : null;
+  const xlsxLoading = !!xlsxSource && xlsxState?.source !== xlsxSource;
   const csvTable =
-    isFileArtifactKind(kind) && filePreviewMode(artifact.language) === "table"
+    isFileArtifactKind(kind) && xlsxSource
+      ? xlsxTable
+      : isFileArtifactKind(kind) && filePreviewMode(artifact.language) === "table"
       ? (() => {
           const text = textFromArtifactContent(viewingContent);
           return text ? parseCsvTable(text) : null;
@@ -948,10 +978,23 @@ export function ArtifactPanel() {
         )}
         {isFileArtifactKind(kind) && hasCsvPreview && tab === "table" && csvTable && !showDiff && (
           <div className="flex h-full flex-col">
-            <DataTable rows={csvTable.rows} columns={csvTable.columns} />
+            <div className="min-h-0 flex-1">
+              <DataTable rows={csvTable.rows} columns={csvTable.columns} />
+            </div>
+            {xlsxTable?.truncated && (
+              <p className="border-t border-[var(--border)] px-3 py-1.5 text-[11px] text-[var(--muted)]">
+                Showing the first {xlsxTable.rows.length} rows of{" "}
+                {xlsxTable.sheetName || "the first sheet"}. Download for the full workbook.
+              </p>
+            )}
           </div>
         )}
-        {isFileArtifactKind(kind) && !hasCsvPreview && !showDiff && (
+        {isFileArtifactKind(kind) && xlsxLoading && !showDiff && (
+          <div className="flex h-full items-center justify-center bg-[var(--elevated)] text-[12px] text-[var(--muted)]">
+            Loading preview…
+          </div>
+        )}
+        {isFileArtifactKind(kind) && !hasCsvPreview && !xlsxLoading && !showDiff && (
           <div className="flex h-full flex-col items-center justify-center gap-4 bg-[var(--elevated)] px-6 text-center">
             <FileIcon className="size-10 text-[var(--accent)]" />
             <div>
