@@ -6,6 +6,7 @@ import { useAui, useAuiState } from "@assistant-ui/react";
 import {
   NEW_CHAT_PATH,
   didUrlBecomeNewChat,
+  didUrlThreadIdChange,
   nextUrlSyncLatches,
   parseThreadIdFromPath,
   planActiveThreadToUrl,
@@ -88,6 +89,10 @@ export function ThreadUrlSync() {
     prevUrlThreadId.current,
     urlThreadId,
   );
+  const urlThreadIdChanged = didUrlThreadIdChange(
+    prevUrlThreadId.current,
+    urlThreadId,
+  );
   prevUrlThreadId.current = urlThreadId;
 
   const latches = nextUrlSyncLatches({
@@ -97,6 +102,7 @@ export function ThreadUrlSync() {
     pendingNewChat: pendingNewChat.current,
     applyingUrlThread: applyingUrlThread.current,
     urlBecameNewChat,
+    urlThreadIdChanged,
   });
   pendingNewChat.current = latches.pendingNewChat;
   applyingUrlThread.current = latches.applyingUrlThread;
