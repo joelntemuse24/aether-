@@ -106,6 +106,11 @@ export function planUrlToThread(input: {
 }): UrlToThreadAction {
   if (input.urlThreadId) {
     if (input.pendingPath === input.pathname) return "ignore";
+    // Sidebar switch: the runtime already moved to B and Active→URL is
+    // replacing `/c/A` with `/c/B`. Re-applying the stale URL bounces back to A.
+    if (input.pendingPath && input.pendingPath !== input.pathname) {
+      return "ignore";
+    }
     if (input.canonicalId && input.canonicalId === input.urlThreadId) {
       return "ignore";
     }
