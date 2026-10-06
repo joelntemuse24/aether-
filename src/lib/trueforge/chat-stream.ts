@@ -22,7 +22,6 @@ import {
   HOSTED_DEFAULT_MODEL_FQN,
   HOSTED_DEFAULT_MODEL_ID,
   HOSTED_DEFAULT_MODEL_LABEL,
-  HOSTED_FREE_FALLBACK_MODEL_FQN,
   isHostedDefaultModel,
 } from "@/lib/hosted/default-model";
 
@@ -30,23 +29,6 @@ import {
 export const HOSTED_RETRY_DELAY_MS = 15_000;
 
 const RATE_LIMIT_RE = /\b429\b|rate.?limit|too many requests/i;
-
-/** True when the hosted default is still rate limited after its delayed retry. */
-export function shouldFailoverHostedTurn(input: {
-  modelId: string;
-  failedBeforeOutput: boolean;
-  errorText: string;
-  userAborted: boolean;
-  attempt: number;
-}): boolean {
-  return (
-    isHostedDefaultModel(input.modelId) &&
-    !input.userAborted &&
-    input.failedBeforeOutput &&
-    input.attempt === 1 &&
-    RATE_LIMIT_RE.test(input.errorText)
-  );
-}
 
 /** Sidecar model name for a hosted model id. */
 export function hostedModelFqn(modelId: string): string {
@@ -541,18 +523,6 @@ export async function streamTrueForgeHostedChat(input: {
           userAborted: false,
           attempt,
         };
-        if (shouldFailoverHostedTurn(next)) {
-          await cancelSidecarTurn(session.id);
-          // Same session and tools, free hosted model. Later sends start on the default again.
-          await trueforgeSessionId({
-            conversationId,
-            owner: input.owner,
-            modelName: HOSTED_FREE_FALLBACK_MODEL_FQN,
-            instructions,
-            toolContext: input.toolContext,
-          });
-          continue;
-        }
         if (!shouldRetryHostedTurn(next)) break;
         await cancelSidecarTurn(session.id);
         if (isHostedDefaultModel(modelId)) await new Promise((resolve) => setTimeout(resolve, HOSTED_RETRY_DELAY_MS));

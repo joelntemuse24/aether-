@@ -9,6 +9,7 @@ describe("TrueForge provider seed", () => {
       { AETHER_HOSTED_BUZZ_API_KEY: "buzz-secret" },
       ["gpt-5.6-luna", "claude-haiku-4-5-20251001", "claude-sonnet-5"],
     );
+    assert.equal(manifests[0]?.type === "custom" && manifests[0].name, "omniroute");
     const sent: string[][] = [];
     const seeded = await upsertAetherProviders(manifests, async (manifest) => {
       sent.push(manifest.models.map((model) => model.modelId));
@@ -16,14 +17,14 @@ describe("TrueForge provider seed", () => {
         throw new Error("expected array to have >=1 items … reasoning_efforts");
       }
     });
-    assert.deepEqual(seeded, ["buzz", "anthropic"]);
+    assert.deepEqual(seeded, ["omniroute", "buzz", "anthropic"]);
     assert.equal(sent.some((ids) => ids.includes("claude-haiku-4-5-20251001") && ids.includes("claude-sonnet-5")), false);
     assert.equal(sent.some((ids) => ids.length === 1 && ids[0] === "claude-sonnet-5"), true);
   });
 
   describe("ensureDefaultModelSeeded", () => {
     const quiet = { info() {}, warn() {}, error() {} };
-    const fqn = "openrouter/qwen3-8-27b-free";
+    const fqn = "omniroute/auto";
 
     it("does not re-seed when the model is listed", async () => {
       let reseeds = 0;

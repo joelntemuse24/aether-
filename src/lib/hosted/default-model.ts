@@ -1,34 +1,29 @@
 /**
  * Hosted default chat model for everyone (guests and signed-in).
- * Runs on the sidecar through a hosted OpenRouter provider keyed by
- * AETHER_HOSTED_OPENROUTER_API_KEY (server env only, never a user key).
- * Buzz models stay wired but are hidden unless AETHER_BUZZ_MODELS_ENABLED=1.
+ * Runs through TrueForge via a custom OpenAI-compatible OmniRoute provider on
+ * the Contabo loopback, keyed by optional AETHER_HOSTED_OMNIROUTE_API_KEY
+ * (server env only). OmniRoute `auto` does the quota-aware free-provider
+ * fallback itself. Buzz models stay wired but are hidden unless
+ * AETHER_BUZZ_MODELS_ENABLED=1.
  */
 
-export const HOSTED_DEFAULT_MODEL_ID = "qwen/qwen3.8-27b:free";
-export const HOSTED_DEFAULT_MODEL_LABEL = "Qwen3.8 27B";
-/** Sidecar provider name for the hosted OpenRouter models. */
-export const HOSTED_OPENROUTER_PROVIDER = "openrouter";
+export const HOSTED_DEFAULT_MODEL_ID = "auto";
+export const HOSTED_DEFAULT_MODEL_LABEL = "Free auto";
+/** Sidecar provider name for the hosted default. Never shown in the UI. */
+export const HOSTED_OMNIROUTE_PROVIDER = "omniroute";
 /** TrueForge resource names cannot contain dots, slashes, or colons. */
-export const HOSTED_DEFAULT_MODEL_RESOURCE = "qwen3-8-27b-free";
-export const HOSTED_DEFAULT_MODEL_FQN = `${HOSTED_OPENROUTER_PROVIDER}/${HOSTED_DEFAULT_MODEL_RESOURCE}`;
-/**
- * Free hosted fallback for a rate-limited default. Same hosted provider and
- * key, tools supported, never a paid or user-keyed model.
- */
+export const HOSTED_DEFAULT_MODEL_RESOURCE = "auto";
+export const HOSTED_DEFAULT_MODEL_FQN = `${HOSTED_OMNIROUTE_PROVIDER}/${HOSTED_DEFAULT_MODEL_RESOURCE}`;
+export const HOSTED_DEFAULT_CONTEXT_LENGTH = 262_144;
+export const HOSTED_DEFAULT_MAX_OUTPUT_TOKENS = 32_768;
+
+/** Optional legacy free model on the hosted OpenRouter provider. Not a failover target. */
+export const HOSTED_OPENROUTER_PROVIDER = "openrouter";
 export const HOSTED_FREE_FALLBACK_MODEL_ID = "google/gemma-4-31b-it:free";
 export const HOSTED_FREE_FALLBACK_MODEL_RESOURCE = "gemma-4-31b-it-free";
 export const HOSTED_FREE_FALLBACK_MODEL_FQN = `${HOSTED_OPENROUTER_PROVIDER}/${HOSTED_FREE_FALLBACK_MODEL_RESOURCE}`;
 export const HOSTED_FREE_FALLBACK_CONTEXT_LENGTH = 262_144;
 export const HOSTED_FREE_FALLBACK_MAX_OUTPUT_TOKENS = 32_768;
-export const HOSTED_DEFAULT_CONTEXT_LENGTH = 262_144;
-export const HOSTED_DEFAULT_MAX_OUTPUT_TOKENS = 32_768;
-/**
- * Sent as `reasoning_effort` on every hosted default turn. Without it Qwen
- * thinks for 8k+ tokens (about 4 minutes) on a long question and the turn is
- * cut off before any answer text. `low` answers the same question in under a minute.
- */
-export const HOSTED_DEFAULT_REASONING_EFFORT = "low" as const;
 
 /** Picker group for the hosted default. */
 export const HOSTED_DEFAULT_GROUP = "Default" as const;

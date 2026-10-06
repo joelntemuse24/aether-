@@ -4,7 +4,6 @@ import { listBuzzChatModels } from "@/lib/buzz/models";
 import { HOSTED_DEFAULT_MODEL_FQN } from "@/lib/hosted/default-model";
 import {
   aetherProviderManifests,
-  hostedOpenRouterManifest,
   type AetherProviderManifest,
 } from "./providers";
 
@@ -101,19 +100,17 @@ async function seedFromEnv(client: TrueForge): Promise<string[]> {
 
 /**
  * Upsert Buzz GPT and Claude models. Missing keys are skipped. A bad model does not stop the sidecar.
- * When the hosted key is set, verify the hosted default model is listed and re-seed if it is not.
+ * Verify the hosted default model is listed and re-seed if it is not.
  */
 export async function seedAetherModelProviders(origin: string): Promise<string[]> {
   const client = new TrueForge({ baseUrl: origin, auth: false });
   let seeded = await seedFromEnv(client);
-  if (hostedOpenRouterManifest(process.env)) {
-    await ensureDefaultModelSeeded({
-      fqn: HOSTED_DEFAULT_MODEL_FQN,
-      listModelNames: async () => ((await client.models.list()).data ?? []).map((m) => m.name),
-      reseed: async () => {
-        seeded = await seedFromEnv(client);
-      },
-    });
-  }
+  await ensureDefaultModelSeeded({
+    fqn: HOSTED_DEFAULT_MODEL_FQN,
+    listModelNames: async () => ((await client.models.list()).data ?? []).map((m) => m.name),
+    reseed: async () => {
+      seeded = await seedFromEnv(client);
+    },
+  });
   return seeded;
 }

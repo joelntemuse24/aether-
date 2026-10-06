@@ -262,7 +262,7 @@ describe("TrueForge live stream", () => {
     assert.equal(settled?.toolCallId, "call_1");
     assert.match(
       String(writes.find((chunk) => chunk.type === "error")?.errorText),
-      /Qwen3\.8 27B is busy right now/,
+      /Free auto is busy right now/,
     );
   });
 

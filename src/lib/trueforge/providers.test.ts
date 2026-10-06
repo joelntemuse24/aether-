@@ -11,6 +11,10 @@ import {
   preferAetherExpertModel,
 } from "./providers";
 
+/** Manifests without the always-seeded hosted default, so Buzz assertions stay positional. */
+const withoutOmniRoute = (manifests: ReturnType<typeof aetherProviderManifests>) =>
+  manifests.filter((manifest) => !(manifest.type === "custom" && manifest.name === "omniroute"));
+
 describe("aether TrueForge providers", () => {
   it("appends /v1 when the Buzz dashboard host is copied without it", () => {
     assert.equal(normalizeBuzzBaseUrl("https://api.buzzai.cc"), DEFAULT_BUZZ_BASE_URL);
@@ -19,13 +23,13 @@ describe("aether TrueForge providers", () => {
   });
 
   it("seeds GPT on the OpenAI-compatible host and Claude on the Anthropic host", () => {
-    const manifests = aetherProviderManifests(
+    const manifests = withoutOmniRoute(aetherProviderManifests(
       {
         AETHER_HOSTED_BUZZ_API_KEY: "buzz-secret",
         OPENROUTER_API_KEY: "or-secret",
       },
       ["gpt-5.6-luna", "claude-sonnet-5", "gpt-image-1"],
-    );
+    ));
     assert.equal(manifests[0]?.type, "custom");
     assert.equal(manifests[0]?.type === "custom" ? manifests[0].name : "", "buzz");
     assert.equal(manifests[0]?.models[0]?.modelId, "gpt-5.6-luna");
@@ -38,33 +42,33 @@ describe("aether TrueForge providers", () => {
   });
 
   it("accepts the legacy Claude env aliases for the Buzz key", () => {
-    const manifests = aetherProviderManifests({
+    const manifests = withoutOmniRoute(aetherProviderManifests({
       AETHER_HOSTED_CLAUDE_API_KEY: "legacy",
       AETHER_HOSTED_CLAUDE_BASE_URL: "https://api.buzzai.cc",
-    });
+    }));
     assert.equal(manifests[0]?.type === "custom" ? manifests[0].name : "", "buzz");
     assert.equal(manifests[0]?.baseUrl, DEFAULT_BUZZ_BASE_URL);
     assert.equal(manifests.some((manifest) => manifest.type === "anthropic"), true);
   });
 
   it("keeps a custom Buzz base URL", () => {
-    const manifests = aetherProviderManifests({
+    const manifests = withoutOmniRoute(aetherProviderManifests({
       AETHER_HOSTED_BUZZ_API_KEY: "buzz-secret",
       AETHER_HOSTED_BUZZ_BASE_URL: "https://buzz.example/v1/",
-    });
+    }));
     assert.equal(manifests[0]?.baseUrl, "https://buzz.example/v1");
   });
 
   it("skips a key that is actually a URL", () => {
     assert.deepEqual(
-      aetherProviderManifests({ OPENROUTER_API_KEY: "https://openrouter.ai/api/v1" }),
+      withoutOmniRoute(aetherProviderManifests({ OPENROUTER_API_KEY: "https://openrouter.ai/api/v1" })),
       [],
     );
   });
 
   it("skips a provider whose key is absent", () => {
     assert.deepEqual(
-      aetherProviderManifests({ OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1" }),
+      withoutOmniRoute(aetherProviderManifests({ OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1" })),
       [],
     );
   });
@@ -96,17 +100,19 @@ describe("aether TrueForge providers", () => {
     assert.equal(opus.reasoningEffort, undefined);
     const fable = modelProfile("claude-fable-5");
     assert.equal(fable.maxOutputTokens, 128_000);
-    const qwen = modelProfile("openrouter/qwen3-8-27b-free");
-    assert.equal(qwen.reasoningEfforts.includes("low"), true);
-    const hosted = aetherProviderManifests({ AETHER_HOSTED_OPENROUTER_API_KEY: "or-secret" });
-    assert.equal(hosted[0]?.models[0]?.properties.reasoningEfforts?.includes("low"), true);
+    const auto = modelProfile("omniroute/auto");
+    assert.equal(auto.contextLength, 262_144);
+    assert.deepEqual(auto.reasoningEfforts, []);
+    assert.equal(auto.reasoningEffort, undefined);
+    const hosted = aetherProviderManifests({});
+    assert.equal(hosted[0]?.models[0]?.properties.reasoningEfforts, undefined);
     const unknown = modelProfile("mystery-model");
     assert.equal(unknown.maxOutputTokens, 64_000);
     assert.equal(unknown.reasoningEffort, undefined);
-    const manifests = aetherProviderManifests(
+    const manifests = withoutOmniRoute(aetherProviderManifests(
       { AETHER_HOSTED_BUZZ_API_KEY: "buzz-secret" },
       ["gpt-6-astra", "claude-haiku-4-5-20251001"],
-    );
+    ));
     assert.equal(manifests[0]?.models[0]?.properties.maxOutputTokens, 128_000);
     assert.equal(manifests[0]?.models[0]?.properties.reasoningEfforts?.includes("none"), false);
     assert.equal(manifests[1]?.models[0]?.properties.maxOutputTokens, 64_000);
@@ -118,7 +124,7 @@ describe("aether TrueForge providers", () => {
       { AETHER_HOSTED_BUZZ_API_KEY: "buzz-secret" },
       KNOWN_BUZZ_CHAT_MODELS,
     );
-    assert.equal(manifests.length, 2);
+    assert.equal(manifests.length, 3);
     const walk = (value: unknown) => {
       if (Array.isArray(value)) {
         assert.ok(value.length > 0);
