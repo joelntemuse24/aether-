@@ -804,6 +804,13 @@ export function collectWebSearchHits(
   }));
 }
 
+/** The sources pill belongs after a finished answer, never above live work. */
+export function shouldShowMessageSourceCards(
+  statusType: string | undefined,
+): boolean {
+  return statusType !== "running";
+}
+
 export function sourcePagesLabel(count: number): string {
   const n = Math.max(0, Math.floor(count));
   return n === 1 ? "1 page" : `${n} pages`;
