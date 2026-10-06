@@ -42,6 +42,7 @@ import {
   parseCsv,
   previewMode,
 } from "@/lib/artifacts/kinds";
+import { artifactHref, imageFileExtension } from "@/lib/artifacts/image-src";
 import { provenanceLabels } from "@/lib/artifacts/provenance";
 import {
   filePreviewMode,
@@ -604,14 +605,13 @@ export function ArtifactPanel() {
           ? artifact.language?.includes(".")
             ? artifact.language
             : `${slugify(artifact.title)}${artifact.language ? `.${artifact.language}` : ""}`
-          : `${slugify(artifact.title)}`;
-      const href =
-        isFileArtifactKind(kind)
-          ? artifact.downloadPath ||
-            (artifact.persisted && artifact.id
-              ? `/api/artifacts/${encodeURIComponent(artifact.id)}/download`
-              : content)
-          : content;
+          : `${slugify(artifact.title)}.${imageFileExtension(artifact.mime, content)}`;
+      const href = artifactHref({
+        id: artifact.id,
+        persisted: artifact.persisted,
+        downloadPath: artifact.downloadPath,
+        content,
+      });
       if (!href) {
         window.dispatchEvent(
           new CustomEvent("aether:notice", {
@@ -970,7 +970,14 @@ export function ArtifactPanel() {
           <div className="flex h-full items-center justify-center overflow-auto bg-[var(--elevated)] p-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={content}
+              src={
+                artifactHref({
+                  id: artifact.id,
+                  persisted: artifact.persisted,
+                  downloadPath: artifact.downloadPath,
+                  content,
+                }) ?? undefined
+              }
               alt={artifact.title}
               className="max-h-full max-w-full object-contain"
             />
