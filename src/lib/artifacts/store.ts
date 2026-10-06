@@ -1,6 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getDb, isCloudDbConfigured } from "@/lib/db";
 import { artifacts } from "@/lib/db/schema";
+import { fitArtifactContent } from "./content-budget";
 import { mergeProvenance, type ArtifactProvenance } from "./provenance";
 import { bumpArtifactVersions, type ArtifactVersion } from "./versions";
 
@@ -51,12 +52,7 @@ export async function saveArtifact(
   const kind = input.kind;
   const title = input.title.slice(0, 200);
   const language = input.language ?? null;
-  const maxChars = kind === "file" ? 4_000_000 : 500_000;
-  if (kind === "file" && input.content.length > maxChars) {
-    throw new Error("File is too large to save.");
-  }
-  const content =
-    kind === "file" ? input.content : input.content.slice(0, maxChars);
+  const content = fitArtifactContent(kind, input.content);
   const projectId = input.projectId ?? null;
   const conversationId = input.conversationId ?? null;
 

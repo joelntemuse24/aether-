@@ -127,6 +127,11 @@ export function isFileArtifactKind(kind: string): boolean {
   return k === "file" || k === "pptx" || k === "xlsx" || k === "docx" || k === "pdf";
 }
 
+/** Image and office-file kinds: bytes live in a data URL served by the download route. */
+export function isBinaryArtifactKind(kind: string): boolean {
+  return normalizeArtifactKind(kind) === "image" || isFileArtifactKind(kind);
+}
+
 export type ArtifactPreviewMode = "live" | "document" | "table" | "image" | "file" | "code";
 
 export function previewMode(kind: string, language?: string): ArtifactPreviewMode {
