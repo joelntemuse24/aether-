@@ -20,6 +20,8 @@ import {
   upsertLocalArtifact,
   type LocalArtifact,
 } from "@/lib/artifacts/local";
+import { artifactDownloadPath } from "@/lib/artifacts/file-result";
+import { isBinaryArtifactKind } from "@/lib/artifacts/kinds";
 import { useAuiState } from "@assistant-ui/react";
 import { useSession } from "@/providers/session-provider";
 
@@ -233,26 +235,31 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       // Local first (works offline / no cloud).
       const local = getLocalArtifact(id);
-      if (local) {
+      const openLocal = (row: NonNullable<typeof local>) => {
         openArtifact({
-          id: local.id,
-          title: local.title,
-          kind: (local.kind as ArtifactKind) || "document",
-          language: local.language,
-          code: local.content,
+          id: row.id,
+          title: row.title,
+          kind: (row.kind as ArtifactKind) || "document",
+          language: row.language,
+          code: row.content,
           local: true,
           persisted: false,
-          versions: local.versions,
-          provenance: local.provenance,
+          versions: row.versions,
+          provenance: row.provenance,
         });
         return true;
-      }
+      };
+      // Signed-in binary artifacts reopen from the cloud download route; a
+      // browser copy of a data URL can be stale or cut short.
+      const preferCloud =
+        !!local && isBinaryArtifactKind(local.kind) && status === "authenticated";
+      if (local && !preferCloud) return openLocal(local);
       try {
         const res = await fetch(
           `/api/artifacts?id=${encodeURIComponent(id)}`,
           { cache: "no-store" },
         );
-        if (!res.ok) return false;
+        if (!res.ok) return local ? openLocal(local) : false;
         const body = (await res.json()) as {
           artifact?: {
             id: string;
@@ -265,7 +272,8 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
           };
         };
         const a = body.artifact;
-        if (!a) return false;
+        if (!a) return local ? openLocal(local) : false;
+        const binary = isBinaryArtifactKind(a.kind);
         openArtifact({
           id: a.id,
           title: a.title,
@@ -273,25 +281,29 @@ export function ArtifactProvider({ children }: { children: ReactNode }) {
           language: a.language,
           code: a.content,
           persisted: true,
+          downloadPath: binary ? artifactDownloadPath(a.id) : undefined,
           versions: a.versions,
           provenance: a.provenance,
         });
-        // Mirror to local for offline reopen.
-        upsertLocalArtifact({
-          id: a.id,
-          kind: a.kind,
-          title: a.title,
-          language: a.language,
-          content: a.content,
-          versions: a.versions,
-          provenance: a.provenance,
-        });
+        // Mirror to local for offline reopen. Skip image/file data URLs: they
+        // are large and the download route serves them.
+        if (!binary) {
+          upsertLocalArtifact({
+            id: a.id,
+            kind: a.kind,
+            title: a.title,
+            language: a.language,
+            content: a.content,
+            versions: a.versions,
+            provenance: a.provenance,
+          });
+        }
         return true;
       } catch {
-        return false;
+        return local ? openLocal(local) : false;
       }
     },
-    [openArtifact],
+    [openArtifact, status],
   );
 
   const persistArtifactContent = useCallback(
