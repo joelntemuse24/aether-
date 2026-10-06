@@ -2,17 +2,17 @@
  * Hosted default chat model for everyone (guests and signed-in).
  * Runs through TrueForge via a custom OpenAI-compatible OmniRoute provider on
  * the Contabo loopback, keyed by optional AETHER_HOSTED_OMNIROUTE_API_KEY
- * (server env only). OmniRoute `auto` does the quota-aware free-provider
- * fallback itself. Buzz models stay wired but are hidden unless
- * AETHER_BUZZ_MODELS_ENABLED=1.
+ * (server env only). Contabo OmniRoute must have combo `free-only` (cost-0
+ * free-provider priority); the combo id is the upstream model id. Buzz models
+ * stay wired but are hidden unless AETHER_BUZZ_MODELS_ENABLED=1.
  */
 
-export const HOSTED_DEFAULT_MODEL_ID = "auto";
+export const HOSTED_DEFAULT_MODEL_ID = "free-only";
 export const HOSTED_DEFAULT_MODEL_LABEL = "Free auto";
 /** Sidecar provider name for the hosted default. Never shown in the UI. */
 export const HOSTED_OMNIROUTE_PROVIDER = "omniroute";
 /** TrueForge resource names cannot contain dots, slashes, or colons. */
-export const HOSTED_DEFAULT_MODEL_RESOURCE = "auto";
+export const HOSTED_DEFAULT_MODEL_RESOURCE = "free-only";
 export const HOSTED_DEFAULT_MODEL_FQN = `${HOSTED_OMNIROUTE_PROVIDER}/${HOSTED_DEFAULT_MODEL_RESOURCE}`;
 export const HOSTED_DEFAULT_CONTEXT_LENGTH = 262_144;
 export const HOSTED_DEFAULT_MAX_OUTPUT_TOKENS = 32_768;
