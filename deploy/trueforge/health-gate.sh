@@ -22,7 +22,7 @@ After a hosted cutover reload, operators can run deploy/trueforge/hosted-health-
 Pass when restart_time rises by at most 1 and then stays stable, the URL
 returns 200, and GET AETHER_SIDECAR_MODELS_URL (default
 http://127.0.0.1:8790/api/v1/models) lists AETHER_SIDECAR_REQUIRED_MODEL
-(default openrouter/qwen3-8-27b-free; set it to an empty string to skip). The
+(default omniroute/auto; set it to an empty string to skip). The
 sidecar answers capabilities before it finishes seeding model providers, so the
 model listing proves the default model is configured. On failure, git reset --hard <prev> on master and reload aether.
 EOF
@@ -60,7 +60,7 @@ fi
 
 HEALTH_URL="${AETHER_SIDECAR_HEALTH_URL:-http://127.0.0.1:8790/api/v1/capabilities}"
 MODELS_URL="${AETHER_SIDECAR_MODELS_URL:-http://127.0.0.1:8790/api/v1/models}"
-REQUIRED_MODEL="${AETHER_SIDECAR_REQUIRED_MODEL-openrouter/qwen3-8-27b-free}"
+REQUIRED_MODEL="${AETHER_SIDECAR_REQUIRED_MODEL-omniroute/auto}"
 GATE_SECONDS="${AETHER_HEALTH_GATE_SECONDS:-60}"
 GATE_INTERVAL="${AETHER_HEALTH_GATE_INTERVAL:-5}"
 
