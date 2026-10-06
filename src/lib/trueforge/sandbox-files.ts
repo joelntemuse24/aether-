@@ -291,6 +291,39 @@ export function redactSandboxValue(value: unknown, refs: SandboxFileRef[]): unkn
   return value;
 }
 
+
+/** Dedupe sandbox refs in publish order (stable toolCallIds). */
+export function uniqueSandboxRefs(refs: SandboxFileRef[]): SandboxFileRef[] {
+  const seen = new Set<string>();
+  const out: SandboxFileRef[] = [];
+  for (const ref of refs) {
+    if (seen.has(ref.path)) continue;
+    seen.add(ref.path);
+    out.push(ref);
+  }
+  return out;
+}
+
+/** Emit tool-input before bytes load so the card mounts while the thread is live. */
+export function sandboxFileAnnounceChunks(refs: SandboxFileRef[]): UiChunk[] {
+  return uniqueSandboxRefs(refs).map((ref, index) => {
+    const filename = sandboxFileName(ref.path);
+    const title = ref.label || filename;
+    const panel = isPanelSandboxPath(ref.path);
+    return {
+      type: "tool-input-available" as const,
+      toolCallId: `sandbox-file-${index + 1}`,
+      toolName: "create_artifact",
+      providerExecuted: true,
+      input: {
+        title,
+        kind: panel ? sandboxPanelKind(ref.path) : "file",
+        language: filename,
+      },
+    };
+  });
+}
+
 export function sandboxFileCardChunks(result: FileToolResult, index: number): UiChunk[] {
   const toolCallId = `sandbox-file-${index + 1}`;
   return [
@@ -323,13 +356,14 @@ export async function sandboxFileCards(input: {
     mime: string;
     dataUrl: string;
   }) => Promise<{ id?: string; persisted: boolean }>;
+  /** When true, only emit tool-output (inputs already sent via announce). */
+  announced?: boolean;
 }): Promise<UiChunk[]> {
   const chunks: UiChunk[] = [];
-  const seen = new Set<string>();
-  let index = 0;
-  for (const ref of input.refs) {
-    if (seen.has(ref.path)) continue;
-    seen.add(ref.path);
+  const refs = uniqueSandboxRefs(input.refs);
+  let successIndex = 0;
+  for (let index = 0; index < refs.length; index++) {
+    const ref = refs[index]!;
     let bytes: Uint8Array | Buffer | null = null;
     for (const candidate of downloadCandidates(ref.path)) {
       try {
@@ -339,23 +373,40 @@ export async function sandboxFileCards(input: {
       }
       if (bytes && bytes.byteLength > 0) break;
     }
-    if (!bytes || bytes.byteLength === 0 || bytes.byteLength > SANDBOX_FILE_BYTE_CAP) continue;
     const filename = sandboxFileName(ref.path);
-    const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
     const title = ref.label || filename;
-    if (isPanelSandboxPath(ref.path)) {
-      chunks.push(
-        ...sandboxPanelArtifactChunks(
-          {
+    if (!bytes || bytes.byteLength === 0 || bytes.byteLength > SANDBOX_FILE_BYTE_CAP) {
+      // Announced inputs must settle or the card spins forever.
+      if (input.announced) {
+        chunks.push({
+          type: "tool-output-available",
+          toolCallId: `sandbox-file-${index + 1}`,
+          providerExecuted: true,
+          output: {
+            ok: false,
+            kind: isPanelSandboxPath(ref.path) ? sandboxPanelKind(ref.path) : "file",
             title,
             filename,
-            kind: sandboxPanelKind(ref.path),
-            content: buffer.toString("utf8"),
+            error: "File unavailable",
           },
-          index,
-        ),
+        });
+      }
+      continue;
+    }
+    const idIndex = input.announced ? index : successIndex;
+    const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+    if (isPanelSandboxPath(ref.path)) {
+      const panelChunks = sandboxPanelArtifactChunks(
+        {
+          title,
+          filename,
+          kind: sandboxPanelKind(ref.path),
+          content: buffer.toString("utf8"),
+        },
+        idIndex,
       );
-      index += 1;
+      chunks.push(...(input.announced ? panelChunks.filter((c) => c.type !== "tool-input-available") : panelChunks));
+      successIndex += 1;
       continue;
     }
     const mime = mimeForFilename(filename);
@@ -363,20 +414,19 @@ export async function sandboxFileCards(input: {
     const saved = input.persist
       ? await input.persist({ title, filename, mime, dataUrl })
       : { persisted: false };
-    chunks.push(
-      ...sandboxFileCardChunks(
-        fileToolResult({
-          title,
-          filename,
-          mime,
-          bytes: buffer.byteLength,
-          dataUrl,
-          saved,
-        }),
-        index,
-      ),
+    const fileChunks = sandboxFileCardChunks(
+      fileToolResult({
+        title,
+        filename,
+        mime,
+        bytes: buffer.byteLength,
+        dataUrl,
+        saved,
+      }),
+      idIndex,
     );
-    index += 1;
+    chunks.push(...(input.announced ? fileChunks.filter((c) => c.type !== "tool-input-available") : fileChunks));
+    successIndex += 1;
   }
   return chunks;
 }
