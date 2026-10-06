@@ -21,11 +21,11 @@ TrueForge defaults to `STANDALONE=true` with SQLite. Hosted Postgres + Redis act
 
 ## Keys
 
-Hosted Buzz keys live on Vercel and on the VM sidecar env. The hosted default model's OpenRouter key is `AETHER_HOSTED_OPENROUTER_API_KEY` in the VM sidecar env; it is the only OpenRouter key seeded into sidecar provider settings. User BYOK keys stay in the browser `localStorage` (`aether:` prefix). They are not written to Neon, Trigger env, or sidecar provider settings.
+Hosted Buzz keys live on Vercel and on the VM sidecar env. The hosted default is Free auto (`auto` → `omniroute/auto`) on a loopback OmniRoute provider: `AETHER_HOSTED_OMNIROUTE_BASE_URL` (default `http://127.0.0.1:20128/v1`) and optional `AETHER_HOSTED_OMNIROUTE_API_KEY` (empty uses the dummy `local`) in the VM sidecar env. `AETHER_HOSTED_OPENROUTER_API_KEY` in the VM sidecar env optionally seeds one legacy free model; it is the only OpenRouter key seeded into sidecar provider settings. User BYOK keys stay in the browser `localStorage` (`aether:` prefix). They are not written to Neon, Trigger env, or sidecar provider settings.
 
 | Rule | Status | Check |
 | --- | --- | --- |
-| Do not seed a user OpenRouter key into TrueForge provider settings. Only `AETHER_HOSTED_OPENROUTER_API_KEY` seeds the hosted default (Qwen3.8 27B). Buzz models stay hidden unless `AETHER_BUZZ_MODELS_ENABLED=1`, and the hosted default is not backed up with a user key. | deterministic | `src/lib/openrouter/models.test.ts`, `src/lib/hosted/default-model.test.ts` |
+| Do not seed a user OpenRouter key into TrueForge provider settings. The hosted default is Free auto via OmniRoute; only `AETHER_HOSTED_OPENROUTER_API_KEY` seeds OpenRouter. Buzz models stay hidden unless `AETHER_BUZZ_MODELS_ENABLED=1`, and the hosted default is not backed up with a user key. | deterministic | `src/lib/openrouter/models.test.ts`, `src/lib/hosted/default-model.test.ts` |
 | `AETHER_TRUEFORGE_TOKEN` is the bearer secret shared with the VM. `AETHER_TOOL_CONTEXT_KEY` encrypts tool context and is Vercel-only. Do not put the context key on the VM. | agent | `docs/trueforge-harness.md`, `src/lib/trueforge/tool-context.ts` |
 | Do not log API keys, access tokens, or refresh tokens. | deterministic | `src/lib/trueforge/harness-rules.test.ts` |
 | Do not return raw `error.message` from API responses. Log a redacted detail and send a fixed sentence. | deterministic | `src/lib/trueforge/harness-rules.test.ts` |
