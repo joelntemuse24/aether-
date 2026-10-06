@@ -8,6 +8,11 @@ import {
   HOSTED_DEFAULT_MODEL_LABEL,
   hostedDefaultPickerModel,
 } from "@/lib/hosted/default-model";
+import {
+  isDebugModelsEnabled,
+  readLastResolvedModel,
+  RESOLVED_MODEL_EVENT,
+} from "@/lib/hosted/resolved-model";
 import { OPENROUTER_CURATED_MODELS } from "@/lib/openrouter/models";
 import { loadSettings } from "@/lib/settings";
 import { cn } from "@/lib/utils";
@@ -16,6 +21,9 @@ type PickerGroup = "Default" | "OpenAI" | "Anthropic" | "OpenRouter";
 type PickerModel = { id: string; label: string; group: PickerGroup };
 
 /** Group headings shown in the picker. Provider names stay internal. */
+/** Hold time that counts as a long-press on the Free auto button. */
+const LONG_PRESS_MS = 450;
+
 const GROUP_LABELS: Record<PickerGroup, string> = {
   Default: "Included",
   OpenAI: "OpenAI",
@@ -59,6 +67,23 @@ export function BuzzModelPicker() {
   const [active, setActive] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
+  // Joel-only: the real model behind Free auto. Never part of the visible label.
+  const [resolved, setResolved] = useState<string | null>(null);
+  const [debugModels, setDebugModels] = useState(false);
+  const [revealResolved, setRevealResolved] = useState(false);
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressClick = useRef(false);
+
+  useEffect(() => {
+    setDebugModels(isDebugModelsEnabled());
+    setResolved(readLastResolvedModel());
+    const onResolved = (event: Event) => {
+      const id = (event as CustomEvent<{ id?: string }>).detail?.id;
+      setResolved(id || readLastResolvedModel());
+    };
+    window.addEventListener(RESOLVED_MODEL_EVENT, onResolved);
+    return () => window.removeEventListener(RESOLVED_MODEL_EVENT, onResolved);
+  }, []);
 
   useEffect(() => {
     setSelected(readStoredModel());
@@ -130,6 +155,28 @@ export function BuzzModelPicker() {
   // A stored id that is no longer listed (e.g. a hidden model) shows as the default.
   const effectiveSelected = current?.id ?? selected;
   const groups = ["Default", "OpenAI", "Anthropic", "OpenRouter"] as const;
+  const isFreeAuto = effectiveSelected === HOSTED_DEFAULT_MODEL_ID;
+  const resolvedLine = !isFreeAuto
+    ? null
+    : revealResolved
+      ? `Resolved: ${resolved ?? "not known yet"}`
+      : debugModels && resolved
+        ? `Resolved: ${resolved}`
+        : null;
+
+  const clearPress = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+    pressTimer.current = null;
+  };
+  // Touch long-press can fire both the timer and a contextmenu event; count it once.
+  const lastToggleAt = useRef(0);
+  const toggleReveal = () => {
+    const now = Date.now();
+    if (now - lastToggleAt.current < 300) return;
+    lastToggleAt.current = now;
+    setOpen(false);
+    setRevealResolved((value) => !value);
+  };
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (!open && (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ")) {
@@ -167,14 +214,53 @@ export function BuzzModelPicker() {
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
-        onClick={() => {
+        onClick={(event) => {
+          if (suppressClick.current) {
+            suppressClick.current = false;
+            return;
+          }
+          // Alt-click on Free auto reveals the resolved model instead of opening the list.
+          if (event.altKey && isFreeAuto) {
+            event.preventDefault();
+            toggleReveal();
+            return;
+          }
           setActive(Math.max(0, ordered.findIndex((model) => model.id === effectiveSelected)));
           setOpen((value) => !value);
         }}
+        onContextMenu={(event) => {
+          if (!isFreeAuto) return;
+          event.preventDefault();
+          toggleReveal();
+        }}
+        onPointerDown={(event) => {
+          clearPress();
+          if (!isFreeAuto || event.pointerType === "mouse") return;
+          pressTimer.current = setTimeout(() => {
+            pressTimer.current = null;
+            toggleReveal();
+            // Swallow the click that follows the release.
+            suppressClick.current = true;
+            setTimeout(() => {
+              suppressClick.current = false;
+            }, 800);
+          }, LONG_PRESS_MS);
+        }}
+        onPointerUp={clearPress}
+        onPointerLeave={clearPress}
+        onPointerCancel={clearPress}
       >
         <span className="truncate">{label}</span>
         <ChevronDownIcon className="size-3 shrink-0 text-[var(--muted)]" />
       </button>
+      {resolvedLine && !open && (
+        <div
+          role="status"
+          className="pointer-events-none absolute bottom-full right-0 mb-1 max-w-[16rem] truncate whitespace-nowrap px-1 text-right text-[10px] text-[var(--muted)]"
+        >
+          {resolvedLine}
+        </div>
+      )}
       {open && (
         <div
           id={listId}
